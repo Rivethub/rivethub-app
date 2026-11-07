@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { createClient } from "@rivethub/client";
 import { App } from "./app";
 import { createSampleClient } from "./dev/sample-client";
 import "./styles.css";
@@ -7,8 +8,10 @@ import { applyStoredTheme } from "./theme";
 
 applyStoredTheme();
 
-// Swapped for the live @rivethub/client at merge. Nothing else imports src/dev.
-const client = createSampleClient({ latencyMs: 60 });
+const sampleOnly = new URLSearchParams(window.location.search).has("sample");
+const client = sampleOnly
+  ? createSampleClient({ latencyMs: 60 })
+  : createClient({ baseUrl: window.location.origin, fetch: window.fetch.bind(window) });
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

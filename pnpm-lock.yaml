@@ -39,6 +39,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@rivethub/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@rivethub/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
