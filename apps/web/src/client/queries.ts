@@ -1,0 +1,124 @@
+import type {
+  Capability,
+  EntityId,
+  EntityType,
+  FactId,
+  HarnessId,
+  IsoTime,
+  ReviewDecision,
+  ReviewItemId,
+  SessionId,
+  SessionQuery,
+  SubjectRef,
+  TopicId,
+  Visibility,
+} from "@rivethub/contracts";
+import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useClient, type AppClient } from "./context";
+
+export const keys = {
+  capabilities: ["capabilities"],
+  today: (date?: string) => ["today", date ?? "now"],
+  review: ["review"],
+  topicTree: ["topics"],
+  topic: (id: TopicId) => ["topic", id],
+  topicHistory: (id: TopicId) => ["topic", id, "history"],
+  entities: (type?: EntityType) => ["entities", type ?? "all"],
+  entity: (id: EntityId, asOf?: IsoTime) => ["entity", id, asOf ?? "now"],
+  sessions: (q: SessionQuery) => ["sessions", q],
+  session: (id: SessionId) => ["session", id],
+  transcript: (id: SessionId) => ["session", id, "transcript"],
+  summaryTree: (id: SessionId) => ["session", id, "summary"],
+  search: (text: string) => ["search", text],
+  harnesses: ["harnesses"],
+  modelJobs: ["modelJobs"],
+  hubs: ["hubs"],
+  account: ["account"],
+  pins: ["pins"],
+  counts: ["counts"],
+  crash: ["crash"],
+} satisfies Record<string, QueryKey | ((...a: never[]) => QueryKey)>;
+
+function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true) {
+  const client = useClient();
+  return useQuery({ queryKey: key, queryFn: () => fn(client), enabled });
+}
+
+export const useCapabilities = () => q(keys.capabilities, (c) => c.capabilities());
+export const useToday = (date?: string) => q(keys.today(date), (c) => c.today(date));
+export const useReviewQueue = () => q(keys.review, (c) => c.reviewQueue());
+export const useTopicTree = () => q(keys.topicTree, (c) => c.topicTree());
+export const useTopic = (id: TopicId) => q(keys.topic(id), (c) => c.topic(id));
+export const useEntities = (type?: EntityType) => q(keys.entities(type), (c) => c.entities(type));
+export const useEntity = (id: EntityId, asOf?: IsoTime) => q(keys.entity(id, asOf), (c) => c.entity(id, asOf));
+export const useSessions = (query: SessionQuery) => q(keys.sessions(query), (c) => c.sessions(query));
+export const useSession = (id: SessionId) => q(keys.session(id), (c) => c.session(id));
+export const useTranscript = (id: SessionId, enabled = true) => q(keys.transcript(id), (c) => c.transcript(id), enabled);
+export const useSummaryTree = (id: SessionId, enabled = true) => q(keys.summaryTree(id), (c) => c.summaryTree(id), enabled);
+export const useSearch = (text: string) => q(keys.search(text), (c) => c.search(text));
+export const useHarnesses = () => q(keys.harnesses, (c) => c.harnesses());
+export const useModelJobs = () => q(keys.modelJobs, (c) => c.modelJobs());
+export const useHubs = () => q(keys.hubs, (c) => c.hubs());
+export const useAccount = () => q(keys.account, (c) => c.account());
+
+/** Extras resolve to `null` when the client does not implement them. */
+export function useTopicHistory(id: TopicId) {
+  return q(keys.topicHistory(id), (c) => (c.topicHistory ? c.topicHistory(id) : Promise.resolve(null)));
+}
+export const usePins = () => q(keys.pins, (c) => (c.pins ? c.pins() : Promise.resolve(null)));
+export const useLibraryCounts = () => q(keys.counts, (c) => (c.libraryCounts ? c.libraryCounts() : Promise.resolve(null)));
+export const useLastCrashReport = () => q(keys.crash, (c) => (c.lastCrashReport ? c.lastCrashReport() : Promise.resolve(null)));
+
+export function useIsSample(cap: Capability): boolean {
+  return useCapabilities().data?.[cap] === "sample";
+}
+
+/** A write followed by invalidating every query it can change. */
+function useWrite<A, R>(fn: (c: AppClient, arg: A) => Promise<R>, invalidate: (arg: A) => QueryKey[]) {
+  const client = useClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (arg: A) => fn(client, arg),
+    onSettled: (_d, _e, arg) => Promise.all(invalidate(arg).map((queryKey) => qc.invalidateQueries({ queryKey }))),
+  });
+}
+
+const memoryWide: QueryKey[] = [["today"], keys.review, ["topic"], ["entity"], ["session"], ["sessions"], keys.topicTree, keys.counts];
+
+export const useDecide = () =>
+  useWrite((c, a: { id: ReviewItemId; decision: ReviewDecision }) => c.decide(a.id, a.decision), () => memoryWide);
+export const useUpdateTopic = () =>
+  useWrite(
+    (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
+    (a) => [keys.topic(a.id), keys.topicTree],
+  );
+export const useAddDecision = () =>
+  useWrite((c, a: { id: TopicId; text: string }) => c.addDecision(a.id, a.text), (a) => [keys.topic(a.id), keys.topicHistory(a.id), ["today"]]);
+export const usePlaceSession = () =>
+  useWrite((c, a: { session: SessionId; topic: TopicId | null }) => c.placeSession(a.session, a.topic), () => memoryWide);
+export const useSetFact = () =>
+  useWrite(
+    (c, a: { entity: EntityId; fact: { id?: FactId; key: string; value: string; pinned: boolean } }) => c.setFact(a.entity, a.fact),
+    (a) => [["entity", a.entity], ["today"]],
+  );
+export const useRenameSession = () =>
+  useWrite((c, a: { id: SessionId; title: string }) => c.renameSession(a.id, a.title), (a) => [keys.session(a.id), ["sessions"]]);
+export const useSetVisibility = () =>
+  useWrite((c, a: { id: SessionId; visibility: Visibility }) => c.setVisibility(a.id, a.visibility), (a) => [keys.session(a.id), ["sessions"]]);
+export const useKeep = () =>
+  useWrite((c, a: { id: SessionId; keep: boolean }) => c.keep(a.id, a.keep), (a) => [keys.session(a.id), ["sessions"]]);
+export const useTrash = () => useWrite((c, ids: SessionId[]) => c.trash(ids), () => memoryWide);
+export const useTag = () =>
+  useWrite(
+    (c, a: { id: SessionId; key: string; value: string; op: "add" | "remove" | "accept" | "reject" }) => c.tag(a.id, a.key, a.value, a.op),
+    (a) => [keys.session(a.id)],
+  );
+export const useConnectHarness = () =>
+  useWrite((c, a: { id: HarnessId; part: "capture" | "recall" }) => c.connectHarness(a.id, a.part), () => [keys.harnesses]);
+export const useUpdateAccount = () =>
+  useWrite((c, patch: Parameters<AppClient["updateAccount"]>[0]) => c.updateAccount(patch), () => [keys.account]);
+export const useSetPinned = () =>
+  useWrite(
+    (c, a: { ref: SubjectRef; pinned: boolean }) => (c.setPinned ? c.setPinned(a.ref, a.pinned) : Promise.resolve()),
+    () => [keys.pins],
+  );
