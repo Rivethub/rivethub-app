@@ -22,8 +22,9 @@ export function harnessOf(id: string): string {
   return colon === -1 ? id : id.slice(0, colon);
 }
 
-export function visibilityFromWire(text: string | undefined): Visibility {
-  return text === undefined || text === "private" ? { kind: "private" } : { kind: "space", space: text };
+export function visibilityFromWire(wire: string | Visibility | undefined): Visibility {
+  if (wire !== undefined && typeof wire === "object") return wire.kind === "space" ? { kind: "space", space: wire.space } : { kind: "private" };
+  return wire === undefined || wire === "private" ? { kind: "private" } : { kind: "space", space: wire };
 }
 
 export function visibilityToWire(visibility: Visibility): string {

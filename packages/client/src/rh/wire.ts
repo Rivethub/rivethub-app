@@ -189,7 +189,7 @@ export const catalogRow = z.object({
   endedAt: nullish(timeSchema),
   messageCount: z.number(),
   topic: nullish(z.object({ id: z.string(), path: z.array(z.string()) })),
-  visibility: z.string(),
+  visibility: z.union([z.string(), z.object({ kind: z.literal("private") }), z.object({ kind: z.literal("space"), space: z.string() })]),
   kept: z.boolean(),
   trashed: z.boolean(),
   memoryState: z.enum(["capturing", "queued", "summarized", "flagged"]),
