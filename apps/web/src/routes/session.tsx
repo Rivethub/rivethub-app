@@ -323,7 +323,7 @@ function TranscriptView({ id, range, phone }: { id: SessionId; range: [number, n
         if (group.kind === "steps" && !group.turns.some(inRange)) {
           return (
             <details key={group.turns[0]!.index} className="text-[13px] text-muted-foreground">
-              <summary className="cursor-pointer">› {group.turns.length} steps</summary>
+              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">› {group.turns.length} steps</summary>
               <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 pl-3">
                 {group.turns.flatMap((t) => t.parts).map((p, i) => <li key={i}>{p.kind === "tool" ? p.summary : ""}</li>)}
               </ul>

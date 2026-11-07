@@ -292,7 +292,8 @@ function ReviewPhone() {
   const [editing, setEditing] = useState(false);
   const [dx, setDx] = useState(0);
   const drag = useRef<{ x: number; id: number } | null>(null);
-  const position = model.total - model.visible.length + 1;
+  const [done, setDone] = useState(0);
+  const seen = done + model.total;
 
   useEffect(() => {
     setChoice(item?.options?.[0]?.value);
@@ -304,7 +305,9 @@ function ReviewPhone() {
     return it.group === "conflict" && choice ? { kind: "choose", value: choice } : primaryDecision(it);
   }
   function go(decision: ReviewDecision) {
-    if (item) decide.mutate({ id: item.id, decision });
+    if (!item) return;
+    if (decision.kind !== "later") setDone((d) => d + 1);
+    decide.mutate({ id: item.id, decision });
   }
 
   const label = item?.group === "conflict" ? `Take ${item.options?.find((o) => o.value === choice)?.label ?? ""}` : item ? primaryAction(item) : "";
@@ -314,11 +317,11 @@ function ReviewPhone() {
       <header className="flex flex-col gap-2.5 px-4 pt-4 pb-2.5">
         <div className="flex items-center gap-2.5">
           <h1 className="m-0 text-[22px] font-semibold">Review</h1>
-          <span className="flex-1 text-[13px] text-muted-foreground">{model.total ? `${Math.min(position, model.total)} of ${model.total}` : ""}</span>
+          <span className="flex-1 text-[13px] text-muted-foreground">{model.total ? `${done + 1} of ${seen}` : ""}</span>
           <HubChip />
         </div>
-        <div className="h-1 rounded-sm bg-card" role="progressbar" aria-label="Reviewed" aria-valuemin={0} aria-valuemax={model.total} aria-valuenow={position - 1}>
-          <div className="h-1 rounded-sm bg-primary" style={{ width: `${model.total ? Math.max(4, ((position - 1) / model.total) * 100) : 0}%` }} />
+        <div className="h-1 rounded-sm bg-card" role="progressbar" aria-label="Reviewed" aria-valuemin={0} aria-valuemax={seen} aria-valuenow={done}>
+          <div className="h-1 rounded-sm bg-primary" style={{ width: `${seen ? Math.max(4, ((done + 1) / seen) * 100) : 0}%` }} />
         </div>
         <FilterChips model={model} phone />
         <SampleBadge capability="review" />
