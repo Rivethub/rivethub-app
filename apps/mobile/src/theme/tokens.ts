@@ -1,0 +1,110 @@
+export const THEMES = [
+  { id: "everforest", label: "Everforest", hint: "Warm green on charcoal. The default." },
+  { id: "t3-dark", label: "T3 dark", hint: "Black with blue accents, like T3 Code." },
+  { id: "t3-light", label: "T3 light", hint: "Light grey with blue accents." },
+] as const;
+
+export type ThemeId = (typeof THEMES)[number]["id"];
+
+export interface Palette {
+  background: string;
+  sidebar: string;
+  card: string;
+  raised: string;
+  foreground: string;
+  muted: string;
+  border: string;
+  input: string;
+  accent: string;
+  selected: string;
+  primary: string;
+  primaryForeground: string;
+  success: string;
+  warning: string;
+  error: string;
+  info: string;
+  message: string;
+  code: string;
+  scheme: "dark" | "light";
+}
+
+/** Same semantic colors as the web app. oklch tokens are hex so React Native can paint them. */
+export const PALETTES: Record<ThemeId, Palette> = {
+  everforest: {
+    background: "#2d353b",
+    sidebar: "#232a2e",
+    card: "#343f44",
+    raised: "#3d484d",
+    foreground: "#d3c6aa",
+    muted: "#9da9a0",
+    border: "#3d484d",
+    input: "#475258",
+    accent: "#2f3a3f",
+    selected: "#324244",
+    primary: "#a7c080",
+    primaryForeground: "#232a2e",
+    success: "#a7c080",
+    warning: "#dbbc7f",
+    error: "#e67e80",
+    info: "#7fbbb3",
+    message: "#466662",
+    code: "#272e33",
+    scheme: "dark",
+  },
+  "t3-dark": {
+    background: "#000000",
+    sidebar: "#111111",
+    card: "#111111",
+    raised: "#1a1a1a",
+    foreground: "#f5f5f5",
+    muted: "#a3a3a3",
+    border: "rgba(255, 255, 255, 0.08)",
+    input: "rgba(255, 255, 255, 0.11)",
+    accent: "rgba(255, 255, 255, 0.04)",
+    selected: "rgba(255, 255, 255, 0.07)",
+    primary: "#346bf1",
+    primaryForeground: "#ffffff",
+    success: "#00d492",
+    warning: "#ffb900",
+    error: "#ff6467",
+    info: "#51a2ff",
+    message: "#1e1e1e",
+    code: "rgba(255, 255, 255, 0.05)",
+    scheme: "dark",
+  },
+  "t3-light": {
+    background: "#fcfcfc",
+    sidebar: "#fafafa",
+    card: "#ffffff",
+    raised: "#f4f4f5",
+    foreground: "#18181b",
+    muted: "#71717b",
+    border: "#e4e4e7",
+    input: "#d4d4d8",
+    accent: "#f4f4f5",
+    selected: "#ffffff",
+    primary: "#1b4ed8",
+    primaryForeground: "#ffffff",
+    success: "#007a55",
+    warning: "#bb4d00",
+    error: "#e7000b",
+    info: "#155dfc",
+    message: "#ebebed",
+    code: "#f4f4f5",
+    scheme: "light",
+  },
+};
+
+export function alpha(color: string, amount: number): string {
+  const match = /^#([\da-f]{6})$/i.exec(color);
+  if (!match?.[1]) return color;
+  const hex = match[1];
+  const red = Number.parseInt(hex.slice(0, 2), 16);
+  const green = Number.parseInt(hex.slice(2, 4), 16);
+  const blue = Number.parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${amount})`;
+}
+
+export function isTheme(value: unknown): value is ThemeId {
+  return THEMES.some((theme) => theme.id === value);
+}
