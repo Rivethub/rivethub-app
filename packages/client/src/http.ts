@@ -6,6 +6,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface HttpOptions {
   baseUrl: string;
   fetch?: FetchLike;
+  timeoutMs?: number;
 }
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -18,6 +19,11 @@ export interface Http {
 }
 
 const MISSING_ROUTE_BODY = "not found";
+const PROBE_TIMEOUT_MS = 2_500;
+
+function isTimeout(cause: unknown): boolean {
+  return cause instanceof DOMException && (cause.name === "TimeoutError" || cause.name === "AbortError");
+}
 
 function query(params: Record<string, string | number | undefined> | undefined): string {
   if (!params) return "";
@@ -47,8 +53,8 @@ export function createHttp(options: HttpOptions): Http {
   const base = options.baseUrl.replace(/\/+$/, "");
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
 
-  async function request(method: Method, path: string, body?: unknown): Promise<Response> {
-    const init: RequestInit = { method, headers: { accept: "application/json" } };
+  async function request(method: Method, path: string, body?: unknown, timeoutMs: number = options.timeoutMs ?? 30_000): Promise<Response> {
+    const init: RequestInit = { method, headers: { accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
       init.headers = { accept: "application/json", "content-type": "application/json" };
@@ -97,11 +103,11 @@ export function createHttp(options: HttpOptions): Http {
     },
     async answers(path) {
       try {
-        await request("GET", path);
+        await request("GET", path, undefined, PROBE_TIMEOUT_MS);
         return true;
       } catch (error) {
         if (error instanceof HttpError) return true;
-        return false;
+        return error instanceof NetworkError && isTimeout(error.cause);
       }
     },
   };
