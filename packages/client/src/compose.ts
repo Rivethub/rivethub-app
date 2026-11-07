@@ -15,6 +15,8 @@ import { createSampleClient } from "./sample/client.js";
 export interface ClientOptions {
   baseUrl: string;
   fetch?: FetchLike;
+  /** How long one request may take before it is aborted. Defaults to 30 seconds. Capability probes stay at 2.5 seconds. */
+  timeoutMs?: number;
 }
 
 const CAPABILITIES: Capability[] = [

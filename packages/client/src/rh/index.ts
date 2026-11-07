@@ -23,6 +23,8 @@ export interface RhClient {
 export interface RhOptions {
   baseUrl: string;
   fetch?: FetchLike;
+  /** How long one request may take before it is aborted. Defaults to 30 seconds. Capability probes stay at 2.5 seconds. */
+  timeoutMs?: number;
 }
 
 /** Routes of which one must answer for a capability to count as live. A 404 with the runtime's "not found" body means the route is absent. */
