@@ -199,7 +199,7 @@ function ConnectDialog({ harness, part, onClose }: { harness: HarnessStatus; par
       ) : (
         <>
           <p className="m-0 leading-[1.5] text-muted-foreground">
-            rh adds its {part === "capture" ? "hook" : "MCP entry"} to <code className="font-mono text-[12px]">{harness.path ?? harness.capture.detail}</code> only if it is missing, and keeps a backup of the file first. This is the change it will make.
+            rh adds its {part === "capture" ? "hook" : "MCP entry"} to {targetFile(preview.data?.diff) ? <code className="font-mono text-[12px]">{targetFile(preview.data?.diff)}</code> : `${harness.name}'s config`} only if it is missing, and keeps a backup of the file first. This is the change it will make.
           </p>
           {preview.data ? <DiffView diff={unchanged ? "Nothing to change. It is already set up." : preview.data.diff} /> : <Loading />}
           <span className="flex justify-end gap-2">
@@ -475,4 +475,9 @@ function Server() {
       <p className="m-0 text-[13px] text-muted-foreground">Connecting this app to a new hub needs rh's hub pairing, which is not available yet.</p>
     </>
   );
+}
+
+function targetFile(diff: string | undefined): string | undefined {
+  const line = diff?.split("\n").find((l) => l.startsWith("+++ "));
+  return line?.replace(/^\+\+\+ (b\/)?/, "").trim() || undefined;
 }
