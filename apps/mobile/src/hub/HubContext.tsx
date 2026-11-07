@@ -95,8 +95,8 @@ export function HubProvider({ children }: { children: ReactNode }) {
     track.quickFailures = 0;
     notices.clear();
     if (!current) notices.setStanding(NO_HUB_NOTICE);
-    queryClient.clear();
-  }, [ready, hubKey, current, notices, track]);
+    queryClient.removeQueries({ predicate: (query) => query.queryKey[1] !== client.scope });
+  }, [ready, hubKey, current, client, notices, track]);
 
   const addHub = useCallback(
     async (input: { url: string; name: string; token?: string }) => {

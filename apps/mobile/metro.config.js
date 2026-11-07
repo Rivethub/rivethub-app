@@ -10,6 +10,18 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-config.resolver.disableHierarchicalLookup = true;
+
+const resolveDefault = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const resolve = resolveDefault ?? context.resolveRequest;
+  if (moduleName.startsWith(".") && moduleName.endsWith(".js")) {
+    try {
+      return resolve(context, moduleName.slice(0, -3), platform);
+    } catch {
+      return resolve(context, moduleName, platform);
+    }
+  }
+  return resolve(context, moduleName, platform);
+};
 
 module.exports = config;

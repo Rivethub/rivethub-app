@@ -1,12 +1,14 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
+import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
+import { splitInjected } from "@rivethub/client";
 import * as Clipboard from "expo-clipboard";
 import { useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeep, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
-import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, Screen, Segment, Sheet, TextField } from "../ui/chrome";
+import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
 import { changeLabel, clock, errorText, shortDate } from "../ui/format";
 import { IconFile, IconKeep, IconShare, IconTrash } from "../ui/icons";
 
@@ -15,6 +17,7 @@ type Pane = "transcript" | "summary";
 
 export function SessionScreen({ route, navigation }: Props) {
   const { palette } = useTheme();
+  const insets = useSafeAreaInsets();
   const id = route.params.id as SessionId;
   const session = useSession(route.params.id);
   const detail = session.data;
@@ -65,15 +68,16 @@ export function SessionScreen({ route, navigation }: Props) {
         <View style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 24 }}>
             <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 26, fontWeight: "600" }}>{detail.title}</Text>
-            <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
-              <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
-              {detail.changed.length === 0 ? <Text style={{ color: palette.muted }}>No facts changed.</Text> : null}
-              {detail.changed.map((change, index) => (
-                <Text key={`${change.at}:${index}`} style={{ color: palette.foreground }}>
-                  {changeLabel(change.kind)} · {change.text}
-                </Text>
-              ))}
-            </View>
+            {detail.changed.length > 0 ? (
+              <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
+                <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
+                {detail.changed.map((change, index) => (
+                  <Text key={`${change.at}:${index}`} style={{ color: palette.foreground }}>
+                    {changeLabel(change.kind)} · {change.text}
+                  </Text>
+                ))}
+              </View>
+            ) : null}
             <Segment
               value={pane}
               onChange={(next) => setPane(next as Pane)}
@@ -86,6 +90,7 @@ export function SessionScreen({ route, navigation }: Props) {
             {pane === "summary" ? (
               <Summary
                 id={detail.id}
+                state={detail.memoryState}
                 onLeaf={(next) => {
                   setRange(next);
                   setPane("transcript");
@@ -93,7 +98,7 @@ export function SessionScreen({ route, navigation }: Props) {
               />
             ) : null}
           </ScrollView>
-          <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.sidebar }}>
+          <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.sidebar, paddingBottom: insets.bottom }}>
             <Action label="File" onPress={() => setFiling(true)} icon={<IconFile color={palette.foreground} />} />
             <Action
               label={detail.visibility.kind === "space" ? detail.visibility.space : "Share"}
@@ -150,28 +155,83 @@ function Transcript({ id, range, onClear }: { id: SessionId; range: [number, num
   );
 }
 
+const LONG_TURN = 1200;
+
+type Shown = { key: string; kind: "said" | "tool"; text: string };
+
 function Bubble({ turn }: { turn: TranscriptTurn }) {
   const { palette } = useTheme();
+  const [contextOpen, setContextOpen] = useState(false);
+  const [full, setFull] = useState(false);
   const mine = turn.role === "user";
+  const injected: { tag: string; text: string }[] = [];
+  const said: Shown[] = [];
+  turn.parts.forEach((part, index) => {
+    if (part.kind !== "text") {
+      said.push({ key: `${index}`, kind: "tool", text: `${part.name}: ${part.summary}` });
+      return;
+    }
+    splitInjected(part.text).forEach((piece, at) => {
+      if (piece.kind === "injected") injected.push(piece);
+      else said.push({ key: `${index}:${at}`, kind: "said", text: piece.text });
+    });
+  });
+  const length = said.reduce((total, piece) => total + (piece.kind === "said" ? piece.text.length : 0), 0);
+  const clipped = !full && length > LONG_TURN;
+  const context = injected.length ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ expanded: contextOpen }}
+      onPress={() => setContextOpen((open) => !open)}
+      style={{ minHeight: 44, justifyContent: "center", gap: 6 }}
+    >
+      <Text style={{ color: palette.muted, fontSize: 12 }}>
+        {contextOpen ? "▾" : "▸"} Harness context · {injected.map((piece) => piece.tag.replaceAll("_", " ")).join(", ")}
+      </Text>
+      {contextOpen
+        ? injected.map((piece, index) => (
+            <Text key={index} style={{ color: palette.muted, fontSize: 12, lineHeight: 17, fontFamily: "monospace" }}>
+              {piece.text}
+            </Text>
+          ))
+        : null}
+    </Pressable>
+  ) : null;
+  if (said.length === 0) return context ? <View style={{ alignSelf: "stretch", paddingHorizontal: 4 }}>{context}</View> : null;
   return (
     <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "92%", borderRadius: 14, backgroundColor: mine ? palette.message : palette.card, padding: 12, gap: 6 }}>
       <Text style={{ color: palette.muted, fontSize: 11 }}>{mine ? "You" : "Assistant"} · {clock(turn.at)}</Text>
-      {turn.parts.map((part, index) =>
-        part.kind === "text" ? (
-          <Text key={index} style={{ color: palette.foreground, fontSize: 15, lineHeight: 21 }}>{part.text}</Text>
-        ) : (
-          <Text key={index} style={{ color: palette.muted, fontSize: 13 }}>{part.name}: {part.summary}</Text>
-        ),
-      )}
+      {context}
+      <View style={{ gap: 6, maxHeight: clipped ? 320 : undefined, overflow: "hidden" }}>
+        {said.map((piece) =>
+          piece.kind === "said" ? (
+            <RichText key={piece.key} text={piece.text} style={{ color: palette.foreground, fontSize: 15, lineHeight: 21 }} />
+          ) : (
+            <Text key={piece.key} style={{ color: palette.muted, fontSize: 13 }}>{piece.text}</Text>
+          ),
+        )}
+      </View>
+      {length > LONG_TURN ? (
+        <Pressable accessibilityRole="button" onPress={() => setFull((open) => !open)} style={{ minHeight: 44, justifyContent: "center" }}>
+          <Text style={{ color: palette.info }}>{full ? "Show less" : "Show all"}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
 
-function Summary({ id, onLeaf }: { id: SessionId; onLeaf: (range: [number, number]) => void }) {
+const NO_SUMMARY: Record<SessionDetail["memoryState"], string> = {
+  capturing: "Still capturing. The summary is written after the session goes quiet.",
+  queued: "Queued for summarizing. Check back after the memory worker catches up.",
+  flagged: "Summarizing this session was flagged, so there is no summary yet.",
+  summarized: "The summary did not load.",
+};
+
+function Summary({ id, state, onLeaf }: { id: SessionId; state: SessionDetail["memoryState"]; onLeaf: (range: [number, number]) => void }) {
   const { palette } = useTheme();
   const tree = useSummaryTree(id);
   const root = tree.data;
-  if (!root) return <Loading label={tree.isError ? "The summary did not load." : "Loading summary…"} />;
+  if (!root) return <Loading label={tree.isError ? NO_SUMMARY[state] : "Loading summary…"} />;
   return (
     <View style={{ gap: 12 }}>
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>

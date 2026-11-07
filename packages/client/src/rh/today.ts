@@ -14,7 +14,9 @@ export function todayApi(http: Http) {
         summary: digest.summary,
         needsYou: digest.needsYou.map(mapReviewItem),
         reviewCount: digest.reviewCount,
-        entries: digest.entries.map((entry) => ({ session: mapCatalogRow(entry.session), changes: entry.changes.map(mapChange) })),
+        entries: digest.entries
+          .map((entry) => ({ session: mapCatalogRow(entry.session), changes: entry.changes.map(mapChange) }))
+          .sort((left, right) => Date.parse(right.session.startedAt) - Date.parse(left.session.startedAt)),
         activityByDay: digest.activityByDay,
         recentlyUpdated: digest.recentlyUpdated.map(mapSubject),
         freshness: digest.freshness,

@@ -8,10 +8,16 @@ const PAGE_SIZE = 50;
 
 type RowFields = Omit<wire.CatalogRow, "visibility" | "parentId" | "childCount"> & Partial<Pick<wire.CatalogRow, "parentId" | "childCount">>;
 
+/** rh falls back to the harness's own session id when nothing titled the session. */
+function displayTitle(title: string, id: string): string {
+  const native = id.slice(id.indexOf(":") + 1);
+  return title.trim() === "" || title === id || title === native ? "Untitled session" : title;
+}
+
 export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRow {
   return strip<SessionSummaryRow>({
     id: sessionId(row.id),
-    title: row.title,
+    title: displayTitle(row.title, row.id),
     harness: row.harness,
     startedAt: row.startedAt,
     endedAt: row.endedAt,

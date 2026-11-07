@@ -6,8 +6,8 @@ import { openSubject } from "../nav/go";
 import { acceptDecision, decisionForSwipe, reviewDecisionFor } from "../review/decision";
 import { alpha } from "../theme/tokens";
 import { useTheme } from "../theme/Theme";
-import { DataBanner, GhostButton, HubChip, KindTag, PrimaryButton, Screen } from "../ui/chrome";
-import { errorText, groupColor, groupLabel, shortDate } from "../ui/format";
+import { DataBanner, GhostButton, HubChip, KindTag, PrimaryButton, RichText, Screen } from "../ui/chrome";
+import { count, errorText, groupColor, groupLabel, shortDate } from "../ui/format";
 
 const FILTERS: { id: ReviewItem["group"] | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -96,7 +96,7 @@ export function ReviewScreen() {
     [pan],
   );
 
-  const rotate = pan.interpolate({ inputRange: [-180, 0, 180], outputRange: ["-6deg", "-1.5deg", "6deg"], extrapolate: "clamp" });
+  const rotate = pan.interpolate({ inputRange: [-180, 0, 180], outputRange: ["-6deg", "0deg", "6deg"], extrapolate: "clamp" });
   const counts = countGroups(queue.filter((entry) => !skipped.has(entry.id)));
 
   return (
@@ -155,7 +155,7 @@ export function ReviewScreen() {
               <GhostButton label="Later" onPress={() => commit({ kind: "later" })} />
             </View>
             <View style={{ flex: 1 }}>
-              <GhostButton label="Edit" onPress={() => setEditing((value) => !value)} />
+              <GhostButton label={editing ? "Cancel" : "Edit"} onPress={() => setEditing((value) => !value)} />
             </View>
             <View style={{ flex: 1.4 }}>
               <PrimaryButton
@@ -199,7 +199,7 @@ function ReviewCard({
           <Text style={{ color: palette.info, fontWeight: "600" }}>{item.subject.title}</Text>
         </Pressable>
       </View>
-      <Text style={{ color: palette.foreground, fontSize: 18, fontWeight: "600", lineHeight: 24 }}>{item.text}</Text>
+      <RichText text={item.text} style={{ color: palette.foreground, fontSize: 18, fontWeight: "600", lineHeight: 24 }} />
       {item.before || item.after ? (
         <Text style={{ color: palette.muted, fontSize: 14 }}>{[item.before, item.after].filter(Boolean).join(" → ")}</Text>
       ) : null}
@@ -219,7 +219,7 @@ function ReviewCard({
         );
       })}
       <Pressable accessibilityRole="button" onPress={onToggleEvidence} style={{ minHeight: 44, justifyContent: "center", borderTopWidth: 1, borderTopColor: palette.border }}>
-        <Text style={{ color: palette.muted, fontSize: 14 }}>{evidenceOpen ? "▾" : "▸"} Why? {item.evidence.length} sessions</Text>
+        <Text style={{ color: palette.muted, fontSize: 14 }}>{evidenceOpen ? "▾" : "▸"} Why? {count(item.evidence.length, "session")}</Text>
       </Pressable>
       {evidenceOpen
         ? item.evidence.map((quote, index) => (

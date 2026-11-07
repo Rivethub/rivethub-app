@@ -19,6 +19,14 @@ export function shortDate(iso: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+export function when(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  if (dayKey(iso) === dayKey(now.toISOString())) return clock(iso);
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString(undefined, sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function dayKey(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso.slice(0, 10);
@@ -74,4 +82,8 @@ export function hostOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+export function count(n: number, word: string): string {
+  return `${n} ${n === 1 ? word : `${word}s`}`;
 }

@@ -5,17 +5,23 @@ import { sessionId, topicId } from "./util.js";
 
 const SNIPPET = 200;
 const clip = (text: string) => {
-  const flat = text.replace(/\s+/g, " ").trim();
+  const flat = text
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/\*\*|__|`/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
   return flat.length > SNIPPET ? `${flat.slice(0, SNIPPET - 3)}...` : flat;
 };
 
 export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof wire.memorySearch.parse>): SearchResults {
   const goTo: SearchHit[] = topics.map((topic) => ({
     subject: { kind: "topic", id: topicId(topic.id), title: topic.name },
-    snippet: topic.aliases.length > 0 ? `Also known as ${topic.aliases.slice(0, 3).join(", ")}` : `${topic.sessionCount} sessions`,
+    snippet: topic.aliases.length > 0 ? `Also known as ${topic.aliases.slice(0, 3).join(", ")}` : `${topic.sessionCount} ${topic.sessionCount === 1 ? "session" : "sessions"}`,
   }));
+  const seen = new Set<string>();
   for (const hit of memory.results) {
-    if (hit.sessionId === undefined) continue;
+    if (hit.sessionId === undefined || seen.has(hit.sessionId)) continue;
+    seen.add(hit.sessionId);
     const snippet = clip(hit.content);
     goTo.push({
       subject: { kind: "session", id: sessionId(hit.sessionId), title: hit.title ?? snippet.slice(0, 60) },

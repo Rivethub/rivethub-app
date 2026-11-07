@@ -4,7 +4,7 @@ import { openReview, openSubject } from "../nav/go";
 import { alpha } from "../theme/tokens";
 import { useTheme } from "../theme/Theme";
 import { DataBanner, HubChip, KindTag, Screen } from "../ui/chrome";
-import { changeColor, changeLabel, clock, longDate } from "../ui/format";
+import { changeColor, changeLabel, clock, groupColor, groupLabel, longDate } from "../ui/format";
 
 export function TodayScreen() {
   const { palette } = useTheme();
@@ -33,7 +33,7 @@ export function TodayScreen() {
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {digest.needsYou.map((item) => {
-                  const color = groupColorSafe(item.group, palette);
+                  const color = groupColor(item.group, palette);
                   return (
                     <Pressable
                       key={item.id}
@@ -50,8 +50,8 @@ export function TodayScreen() {
                       }}
                     >
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <KindTag label={item.group === "new-entity" ? "New" : item.group === "conflict" ? "Conflict" : item.group === "fact" ? "Fact" : item.group} color={color} />
-                        <Text style={{ color: palette.foreground, fontWeight: "600", fontSize: 14 }}>{item.subject.title}</Text>
+                        <KindTag label={groupLabel(item.group)} color={color} />
+                        <Text style={{ flexShrink: 1, color: palette.foreground, fontWeight: "600", fontSize: 14 }} numberOfLines={2}>{item.subject.title}</Text>
                       </View>
                       <Text style={{ color: palette.foreground, fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
                     </Pressable>
@@ -82,11 +82,4 @@ export function TodayScreen() {
       </ScrollView>
     </Screen>
   );
-}
-
-function groupColorSafe(group: string, palette: ReturnType<typeof useTheme>["palette"]): string {
-  if (group === "conflict") return palette.warning;
-  if (group === "new-entity") return palette.primary;
-  if (group === "fact") return palette.info;
-  return palette.muted;
 }

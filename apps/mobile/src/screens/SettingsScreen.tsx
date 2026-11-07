@@ -69,7 +69,7 @@ function Connections() {
   const unhealthy = jobs.data.filter((job) => job.health !== "healthy");
   const issues = [
     ...stale.map((harness) => `${harness.name} stopped sending sessions`),
-    ...unhealthy.map((job) => `the ${ROLE_NAME[job.role].toLowerCase()} is ${job.health}`),
+    ...unhealthy.map((job) => `${ROLE_NAME[job.role]} is ${job.health}`),
   ];
   return (
     <View style={{ gap: 16 }}>
@@ -77,7 +77,11 @@ function Connections() {
       {issues.length > 0 ? (
         <View style={{ borderRadius: 12, borderWidth: 1, borderColor: alpha(palette.warning, 0.4), backgroundColor: alpha(palette.warning, 0.12), padding: 12, gap: 6 }}>
           <Text style={{ color: palette.foreground, fontWeight: "600" }}>{issues.length} thing{issues.length === 1 ? "" : "s"} to fix.</Text>
-          <Text style={{ color: palette.foreground, lineHeight: 20 }}>{issues.join(". ")}.</Text>
+          {issues.map((issue) => (
+            <Text key={issue} style={{ color: palette.foreground, lineHeight: 20 }}>
+              • {issue}
+            </Text>
+          ))}
         </View>
       ) : null}
       <Text style={{ color: palette.muted, fontSize: 13 }}>Connections are read-only on the phone.</Text>
@@ -119,12 +123,14 @@ function JobRow({ job }: { job: ModelJob }) {
   const { palette } = useTheme();
   const color = job.health === "healthy" ? palette.success : job.health === "slow" ? palette.warning : palette.error;
   const label = job.health === "healthy" ? "OK" : job.health === "slow" ? "Slow" : "Failing";
-  const model = job.inheritsDefault ? "Default" : (job.model ?? job.provider ?? "Unset");
+  const model = job.model ?? job.provider ?? "Unset";
+  const source = job.inheritsDefault && job.role !== "default" ? `${model} (default)` : model;
   return (
-    <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: palette.border }}>
-      <View style={{ flex: 1 }}>
+    <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}>
+      <View style={{ flex: 1, gap: 2 }}>
         <Text style={{ color: palette.foreground }}>{ROLE_NAME[job.role]}</Text>
-        <Text style={{ color: palette.muted, fontSize: 12 }}>{model}</Text>
+        <Text style={{ color: palette.muted, fontSize: 12 }}>{source}</Text>
+        {job.role !== "default" && job.detail ? <Text style={{ color: job.health === "healthy" ? palette.muted : color, fontSize: 12 }}>{job.detail}</Text> : null}
       </View>
       <Text style={{ color, fontSize: 13 }}>{label}</Text>
     </View>

@@ -3,6 +3,7 @@ import type {
   FactId,
   IsoTime,
   ReviewDecision,
+  ReviewItem,
   ReviewItemId,
   SessionId,
   SessionQuery,
@@ -145,8 +146,24 @@ function useWrite<A>(fn: (client: ReturnType<typeof useHub>["client"], arg: A) =
   });
 }
 
-export const useDecide = () =>
-  useWrite((client, arg: { id: ReviewItemId; decision: ReviewDecision }) => client.decide(arg.id, arg.decision));
+export function useDecide() {
+  const { client } = useHub();
+  const queryClient = useQueryClient();
+  const key = ["review", client.scope];
+  return useMutation({
+    mutationFn: (arg: { id: ReviewItemId; decision: ReviewDecision }) => client.decide(arg.id, arg.decision),
+    onMutate: async (arg) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const before = queryClient.getQueryData<ReviewItem[]>(key);
+      queryClient.setQueryData<ReviewItem[]>(key, (queue) => queue?.filter((item) => item.id !== arg.id));
+      return { before };
+    },
+    onError: (_error, _arg, context) => {
+      if (context?.before) queryClient.setQueryData(key, context.before);
+    },
+    onSettled: () => queryClient.invalidateQueries(),
+  });
+}
 
 export const useSetFact = () =>
   useWrite(

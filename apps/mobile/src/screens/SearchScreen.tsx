@@ -1,3 +1,4 @@
+import type { SubjectRef } from "@rivethub/contracts";
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSearch } from "../data/queries";
@@ -5,6 +6,8 @@ import { openReview, openSubject } from "../nav/go";
 import { navigationRef } from "../nav/ref";
 import { useTheme } from "../theme/Theme";
 import { DataBanner, Screen } from "../ui/chrome";
+
+const KIND_LABEL: Record<SubjectRef["kind"], string> = { topic: "Topic", entity: "Entity", session: "Session" };
 
 export function SearchScreen() {
   const { palette } = useTheme();
@@ -55,26 +58,22 @@ export function SearchScreen() {
                   onPress={() => openSubject(hit.subject)}
                   style={rowStyle(palette.border)}
                 >
-                  <Text style={{ color: palette.muted, fontSize: 12 }}>{hit.subject.kind}</Text>
+                  <Text style={{ color: palette.muted, fontSize: 12 }}>{KIND_LABEL[hit.subject.kind]}</Text>
                   <Text style={{ color: palette.foreground, fontSize: 16 }}>{hit.subject.title}</Text>
-                  {hit.snippet ? <Text style={{ color: palette.muted, fontSize: 13 }}>{hit.snippet}</Text> : null}
+                  {hit.snippet ? <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }} numberOfLines={3}>{hit.snippet}</Text> : null}
                 </Pressable>
               ))}
             </Group>
+            {results.actions.length > 0 ? (
             <Group label="DO">
-              {results.actions.length === 0 ? <Empty /> : results.actions.map((action) => (
+              {results.actions.map((action) => (
                 <Pressable key={action.id} accessibilityRole="button" onPress={() => runAction(action.id)} style={rowStyle(palette.border)}>
                   <Text style={{ color: palette.foreground, fontSize: 16 }}>{action.label}</Text>
                   {action.hint ? <Text style={{ color: palette.muted, fontSize: 13 }}>{action.hint}</Text> : null}
                 </Pressable>
               ))}
             </Group>
-            <Group label="ASK">
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                <Text style={{ color: palette.foreground, fontSize: 15, lineHeight: 22 }}>Written answers are not in this build.</Text>
-                <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18, marginTop: 4 }}>Search opens topics, entities, and sessions.</Text>
-              </View>
-            </Group>
+            ) : null}
           </>
         ) : (
           <Text style={{ color: palette.muted, paddingHorizontal: 16, paddingTop: 8 }}>Type to search this hub.</Text>
@@ -100,7 +99,7 @@ function Empty() {
 }
 
 function rowStyle(border: string) {
-  return { minHeight: 56, justifyContent: "center" as const, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: border, gap: 2 };
+  return { minHeight: 56, justifyContent: "center" as const, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: border, gap: 2 };
 }
 
 function runAction(id: string): void {

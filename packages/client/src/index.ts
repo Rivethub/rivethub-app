@@ -10,3 +10,4 @@ export {
   NotFoundError,
   RouteMissingError,
 } from "./errors.js";
+export { splitInjected, type TurnText } from "./injected.js";

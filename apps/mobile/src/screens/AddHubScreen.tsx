@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useHub } from "../hub/HubContext";
 import { parseHubInput } from "../hub/pair";
 import type { RootParams } from "../nav/types";
@@ -98,7 +98,12 @@ export function AddHubScreen({ navigation }: Props) {
                     <Text style={{ color: palette.foreground }}>{hub.name}</Text>
                     <Text style={{ color: palette.muted, fontSize: 12 }}>{hostOf(hub.url)}</Text>
                   </View>
-                  <Pressable accessibilityRole="button" onPress={() => void removeHub(hub.id)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
+                  <Pressable accessibilityRole="button" onPress={() =>
+                      Alert.alert(`Forget ${hub.name}?`, "The phone drops this hub and its token. Pair again to get it back.", [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Forget", style: "destructive", onPress: () => void removeHub(hub.id) },
+                      ])
+                    } style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
                     <Text style={{ color: palette.error }}>Forget</Text>
                   </Pressable>
                 </View>

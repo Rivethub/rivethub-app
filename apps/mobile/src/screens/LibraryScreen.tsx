@@ -6,7 +6,7 @@ import { useHub } from "../hub/HubContext";
 import { openSubject } from "../nav/go";
 import { useTheme } from "../theme/Theme";
 import { DataBanner, HubChip, Screen, Segment } from "../ui/chrome";
-import { clock, dayKey, entityTypeLabel, longDate } from "../ui/format";
+import { clock, count, dayKey, entityTypeLabel, longDate } from "../ui/format";
 
 type SegmentId = "topics" | "entities" | "sessions";
 type SessionView = NonNullable<SessionQuery["view"]>;
@@ -89,7 +89,7 @@ function Topics({ tree }: { tree: TopicNode[] }) {
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => openSubject({ kind: "topic", id: node.id, title: node.name })} style={{ flex: 1, minHeight: 48, justifyContent: "center" }}>
               <Text style={{ color: palette.foreground, fontWeight: depth === 0 ? "600" : "400" }}>{node.name}</Text>
-              <Text style={{ color: palette.muted, fontSize: 12 }}>{node.sessionCount} sessions · {node.status}</Text>
+              <Text style={{ color: palette.muted, fontSize: 12 }}>{count(node.sessionCount, "session")} · {node.status}</Text>
             </Pressable>
             <Text style={{ color: palette.muted }}>›</Text>
           </View>
@@ -109,7 +109,7 @@ function Entities() {
         <Pressable key={entity.id} accessibilityRole="button" onPress={() => openSubject({ kind: "entity", id: entity.id, title: entity.title })} style={{ minHeight: 56, flexDirection: "row", alignItems: "center", paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.border }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: palette.foreground, fontWeight: "500" }}>{entity.title}</Text>
-            <Text style={{ color: palette.muted, fontSize: 12 }}>{entityTypeLabel(entity.type)} · {entity.sessionCount} sessions</Text>
+            <Text style={{ color: palette.muted, fontSize: 12 }}>{entity.sessionCount > 0 ? `${entityTypeLabel(entity.type)} · ${count(entity.sessionCount, "session")}` : entityTypeLabel(entity.type)}</Text>
           </View>
           <Text style={{ color: palette.muted }}>›</Text>
         </Pressable>

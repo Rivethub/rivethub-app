@@ -7,8 +7,8 @@ import { isPinned } from "../hub/pins";
 import { openSubject } from "../nav/go";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
-import { BackButton, DataBanner, Loading, Screen } from "../ui/chrome";
-import { clock, shortDate } from "../ui/format";
+import { BackButton, DataBanner, Loading, RichText, Screen } from "../ui/chrome";
+import { shortDate, when } from "../ui/format";
 
 type Props = NativeStackScreenProps<RootParams, "Topic">;
 
@@ -52,8 +52,8 @@ export function TopicScreen({ route, navigation }: Props) {
           {article.path.length > 1 ? (
             <Text style={{ color: palette.muted, fontSize: 13 }}>{article.path.map((part) => part.name).join(" › ")}</Text>
           ) : null}
-          {article.lead ? <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 24 }}>{article.lead}</Text> : null}
-          {article.current ? <Text style={{ color: palette.foreground, fontSize: 15, lineHeight: 22 }}>{article.current}</Text> : null}
+          {article.lead ? <RichText text={article.lead} style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+          {article.current ? <RichText text={article.current} style={{ color: palette.foreground, fontSize: 15, lineHeight: 22 }} /> : null}
           <Section title="Decisions">
             {article.decisions.length === 0 ? <Muted>No decisions yet.</Muted> : article.decisions.map((decision) => (
               <View key={decision.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}>
@@ -70,7 +70,7 @@ export function TopicScreen({ route, navigation }: Props) {
                 onPress={() => openSubject({ kind: "session", id: session.id, title: session.title })}
                 style={{ minHeight: 56, justifyContent: "center", borderBottomWidth: 1, borderBottomColor: palette.border }}
               >
-                <Text style={{ color: palette.muted, fontSize: 12 }}>{session.harness} · {clock(session.startedAt)}</Text>
+                <Text style={{ color: palette.muted, fontSize: 12 }}>{session.harness} · {when(session.startedAt)}</Text>
                 <Text style={{ color: palette.foreground }}>{session.title}</Text>
               </Pressable>
             ))}
