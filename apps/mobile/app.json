@@ -23,7 +23,8 @@
           "cameraPermission": "RivetHub uses the camera to scan a hub pairing code."
         }
       ],
-      "./plugins/withUserCa.js"
+      "./plugins/withUserCa.js",
+      "./plugins/withReleaseSigning.js"
     ]
   }
 }
