@@ -1,0 +1,25 @@
+{
+  "name": "@rivethub/cloud",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "release:add": "tsx src/cli/release-add.ts"
+  },
+  "dependencies": {
+    "@rivethub/contracts": "workspace:*",
+    "pg": "8.23.1",
+    "tsx": "4.23.15",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/pg": "8.23.1",
+    "vitest": "5.1.0"
+  }
+}
