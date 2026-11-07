@@ -5,7 +5,8 @@ import type { Pool } from "pg";
 const dir = fileURLToPath(new URL("../../migrations/", import.meta.url));
 const LOCK_KEY = 7_104_001;
 
-export async function migrate(pool: Pool): Promise<string[]> {
+/** `telemetrySalt` lets 002 re-key telemetry rows that predate hashing. A fresh database needs none. */
+export async function migrate(pool: Pool, telemetrySalt = ""): Promise<string[]> {
   const files = (await readdir(dir)).filter((f) => f.endsWith(".sql")).sort();
   const client = await pool.connect();
   const applied: string[] = [];
@@ -22,6 +23,7 @@ export async function migrate(pool: Pool): Promise<string[]> {
       const sql = await readFile(dir + file, "utf8");
       try {
         await client.query("BEGIN");
+        await client.query("SELECT set_config('rivethub.telemetry_salt', $1, true)", [telemetrySalt]);
         await client.query(sql);
         await client.query("INSERT INTO schema_migrations (name) VALUES ($1)", [file]);
         await client.query("COMMIT");

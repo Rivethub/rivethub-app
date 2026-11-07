@@ -19,7 +19,6 @@ export interface NewSignIn {
   id: string;
   secretHash: string;
   email: string;
-  installId: string;
   expiresAt: Date;
 }
 
@@ -31,8 +30,10 @@ export type SignInOutcome =
 export interface Session {
   userId: string;
   email: string;
-  installId: string;
 }
+
+/** Telemetry as stored: the raw installId never reaches the store. */
+export type Stored<T extends { installId: string }> = Omit<T, "installId"> & { installHash: string };
 
 export interface Store {
   createSignIn(request: NewSignIn): Promise<void>;
@@ -44,12 +45,14 @@ export interface Store {
   revokeToken(tokenHash: string): Promise<void>;
   /** Removes the user, their tokens and any sign-in requests for their email. */
   deleteUser(userId: string): Promise<void>;
-  addCrash(report: CrashReport, receivedAt: Date): Promise<void>;
+  addCrash(report: Stored<CrashReport>, receivedAt: Date): Promise<void>;
   /** One row per install and day. A later report for the same day replaces the earlier one. */
-  addUsage(report: UsageReport, receivedAt: Date): Promise<void>;
+  addUsage(report: Stored<UsageReport>, receivedAt: Date): Promise<void>;
   addRelease(release: Release, createdAt: Date): Promise<void>;
   listReleases(channel: Channel, os: Release["os"]): Promise<Release[]>;
   purgeExpired(now: Date): Promise<void>;
+  /** Deletes crash and usage rows received before the cutoff. */
+  purgeTelemetry(cutoff: Date): Promise<void>;
   counts(): Promise<{ users: number; crashes: number; usage: number }>;
   close(): Promise<void>;
 }

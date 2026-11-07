@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CrashReport, UsageReport } from "@rivethub/contracts";
-import type { Channel, NewSignIn, Release, Session, SignInOutcome, Store } from "./types.js";
+import type { Channel, NewSignIn, Release, Session, SignInOutcome, Store, Stored } from "./types.js";
 
 interface SignInRow extends NewSignIn {
   verified: boolean;
@@ -15,8 +15,8 @@ export class MemoryStore implements Store {
   private readonly users = new Map<string, string>();
   private readonly signIns = new Map<string, SignInRow>();
   private readonly tokens = new Map<string, TokenRow>();
-  private readonly crashes: CrashReport[] = [];
-  private readonly usage = new Map<string, UsageReport>();
+  private readonly crashes: { report: Stored<CrashReport>; receivedAt: Date }[] = [];
+  private readonly usage = new Map<string, { report: Stored<UsageReport>; receivedAt: Date }>();
   private readonly releases: Release[] = [];
 
   async createSignIn(request: NewSignIn): Promise<void> {
@@ -40,13 +40,13 @@ export class MemoryStore implements Store {
       userId = randomUUID();
       this.users.set(userId, row.email);
     }
-    this.tokens.set(tokenHash, { tokenHash, userId, email: row.email, installId: row.installId });
+    this.tokens.set(tokenHash, { tokenHash, userId, email: row.email });
     return { kind: "signedIn", email: row.email };
   }
 
   async findSession(tokenHash: string): Promise<Session | null> {
     const row = this.tokens.get(tokenHash);
-    return row ? { userId: row.userId, email: row.email, installId: row.installId } : null;
+    return row ? { userId: row.userId, email: row.email } : null;
   }
 
   async revokeToken(tokenHash: string): Promise<void> {
@@ -60,12 +60,12 @@ export class MemoryStore implements Store {
     for (const [id, s] of this.signIns) if (s.email === email) this.signIns.delete(id);
   }
 
-  async addCrash(report: CrashReport, _receivedAt: Date): Promise<void> {
-    this.crashes.push(report);
+  async addCrash(report: Stored<CrashReport>, receivedAt: Date): Promise<void> {
+    this.crashes.push({ report, receivedAt });
   }
 
-  async addUsage(report: UsageReport, _receivedAt: Date): Promise<void> {
-    this.usage.set(`${report.installId}/${report.day}`, report);
+  async addUsage(report: Stored<UsageReport>, receivedAt: Date): Promise<void> {
+    this.usage.set(`${report.installHash}/${report.day}`, { report, receivedAt });
   }
 
   async addRelease(release: Release, _createdAt: Date): Promise<void> {
@@ -84,11 +84,28 @@ export class MemoryStore implements Store {
     for (const [id, s] of this.signIns) if (s.expiresAt <= now) this.signIns.delete(id);
   }
 
+  async purgeTelemetry(cutoff: Date): Promise<void> {
+    for (let i = this.crashes.length - 1; i >= 0; i--) if (this.crashes[i]!.receivedAt < cutoff) this.crashes.splice(i, 1);
+    for (const [key, u] of this.usage) if (u.receivedAt < cutoff) this.usage.delete(key);
+  }
+
   async counts(): Promise<{ users: number; crashes: number; usage: number }> {
     return { users: this.users.size, crashes: this.crashes.length, usage: this.usage.size };
   }
 
   async close(): Promise<void> {}
+
+  /** Test helper: every stored row of every kind, as JSON. */
+  dump(): string {
+    return JSON.stringify({
+      users: [...this.users],
+      signIns: [...this.signIns.values()],
+      tokens: [...this.tokens.values()],
+      crashes: this.crashes,
+      usage: [...this.usage.values()],
+      releases: this.releases,
+    });
+  }
 
   /** Test helper: emails still held in sign-in requests. */
   signInEmails(): string[] {

@@ -2,7 +2,7 @@ import { crashReport, usageReport } from "@rivethub/contracts";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { Config } from "./config.js";
-import { randomToken, sha256Hex } from "./crypto.js";
+import { installHash, randomToken, sha256Hex } from "./crypto.js";
 import { logError, logRequest } from "./log.js";
 import type { Mailer } from "./mail.js";
 import { defaultLimits, type LimitResult, type Limits } from "./ratelimit.js";
@@ -12,12 +12,13 @@ import { channels, type Store } from "./store/types.js";
 
 export const BODY_LIMIT_BYTES = 32 * 1024;
 export const SIGN_IN_TTL_MS = 15 * 60_000;
+const VERIFY_BODY_LIMIT_BYTES = 1024;
 export const POLL_INTERVAL_MS = 2_000;
 
 export interface AppDeps {
   store: Store;
   mailer: Mailer;
-  config: Pick<Config, "publicUrl" | "trustProxy">;
+  config: Pick<Config, "publicUrl" | "trustProxy" | "telemetrySalt">;
   limits?: Limits;
   now?: () => number;
 }
@@ -45,6 +46,10 @@ const startBody = z.object({
   email: z.string().trim().toLowerCase().max(254).email(),
   installId: z.string().uuid(),
 });
+const verifyForm = z.object({
+  r: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
+  s: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+});
 const pollBody = z.object({ requestId: z.string().min(1).max(64) });
 const updatesQuery = z.object({
   channel: z.enum(channels),
@@ -61,8 +66,8 @@ function send(res: ServerResponse, status: number, body: unknown, headers: Recor
   res.end(payload);
 }
 
-function sendHtml(res: ServerResponse, status: number, title: string, message: string): void {
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#111;color:#eee}main{text-align:center;padding:1rem}h1{font-size:1.4rem}</style></head><body><main><h1>${title}</h1><p>${message}</p></main></body></html>`;
+function sendHtml(res: ServerResponse, status: number, title: string, message: string, extra = ""): void {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#111;color:#eee}main{text-align:center;padding:1rem}h1{font-size:1.4rem}button{font:inherit;padding:.6rem 1.2rem;border-radius:.4rem;border:0;background:#eee;color:#111;cursor:pointer}</style></head><body><main><h1>${title}</h1><p>${message}</p>${extra}</main></body></html>`;
   res.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "content-length": Buffer.byteLength(html),
@@ -76,19 +81,24 @@ function enforce(result: LimitResult): void {
   }
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+async function readRaw(req: IncomingMessage, limit: number): Promise<string> {
   const declared = Number(req.headers["content-length"] ?? 0);
-  if (declared > BODY_LIMIT_BYTES) throw new HttpError(413, { error: "body too large" }, { connection: "close" });
+  if (declared > limit) throw new HttpError(413, { error: "body too large" }, { connection: "close" });
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req as AsyncIterable<Buffer>) {
     size += chunk.length;
-    if (size > BODY_LIMIT_BYTES) throw new HttpError(413, { error: "body too large" }, { connection: "close" });
+    if (size > limit) throw new HttpError(413, { error: "body too large" }, { connection: "close" });
     chunks.push(chunk);
   }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function readJson(req: IncomingMessage): Promise<unknown> {
   try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
+    return JSON.parse(await readRaw(req, BODY_LIMIT_BYTES));
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
     throw new HttpError(422, { error: "invalid body" });
   }
 }
@@ -131,7 +141,7 @@ export function createApp(deps: AppDeps): RequestListener {
     "/v1/auth/start": {
       POST: async ({ req, res, ip }) => {
         enforce(limits.authIp.hit(ip, now()));
-        const { email, installId } = parseBody(startBody, await readJson(req));
+        const { email } = parseBody(startBody, await readJson(req));
         enforce(limits.authEmail.hit(email, now()));
         const id = randomToken(16);
         const secret = randomToken(32);
@@ -139,7 +149,6 @@ export function createApp(deps: AppDeps): RequestListener {
           id,
           secretHash: sha256Hex(secret),
           email,
-          installId,
           expiresAt: new Date(now() + SIGN_IN_TTL_MS),
         });
         const link = `${config.publicUrl}/verify?r=${id}&s=${secret}`;
@@ -155,11 +164,25 @@ export function createApp(deps: AppDeps): RequestListener {
 
     "/verify": {
       GET: async ({ res, url }) => {
-        const r = url.searchParams.get("r") ?? "";
-        const s = url.searchParams.get("s") ?? "";
-        const ok = r.length > 0 && r.length <= 64 && s.length > 0 && s.length <= 128
-          ? await store.verifySignIn(r, sha256Hex(s), new Date(now()))
-          : false;
+        const parsed = verifyForm.safeParse({ r: url.searchParams.get("r"), s: url.searchParams.get("s") });
+        if (!parsed.success) return sendHtml(res, 410, "This link is not valid.", "Go back to RivetHub and ask for a new one.");
+        const { r, s } = parsed.data;
+        sendHtml(
+          res,
+          200,
+          "Confirm sign-in",
+          "Only confirm if you just asked to sign in to RivetHub.",
+          `<form method="post" action="/verify"><input type="hidden" name="r" value="${r}"><input type="hidden" name="s" value="${s}"><button type="submit">Confirm sign-in</button></form>`,
+        );
+      },
+      POST: async ({ req, res }) => {
+        if (!/^application\/x-www-form-urlencoded\b/i.test(req.headers["content-type"] ?? "")) {
+          throw new HttpError(415, { error: "unsupported media type" });
+        }
+        const form = new URLSearchParams(await readRaw(req, VERIFY_BODY_LIMIT_BYTES));
+        const parsed = verifyForm.safeParse({ r: form.get("r"), s: form.get("s") });
+        if (!parsed.success) throw new HttpError(400, { error: "invalid body" });
+        const ok = await store.verifySignIn(parsed.data.r, sha256Hex(parsed.data.s), new Date(now()));
         if (ok) sendHtml(res, 200, "You're signed in.", "Go back to RivetHub.");
         else sendHtml(res, 410, "This link has expired.", "Go back to RivetHub and ask for a new one.");
       },
@@ -202,7 +225,8 @@ export function createApp(deps: AppDeps): RequestListener {
         enforce(limits.telemetryIp.hit(ip, now()));
         const report = parseBody(crashReport, await readJson(req));
         enforce(limits.telemetryInstall.hit(`crash|${report.installId}|${ip}`, now()));
-        await store.addCrash(report, new Date(now()));
+        const { installId: _id, ...rest } = report;
+        await store.addCrash({ ...rest, installHash: installHash(config.telemetrySalt, report.installId) }, new Date(now()));
         res.writeHead(202).end();
       },
     },
@@ -212,7 +236,8 @@ export function createApp(deps: AppDeps): RequestListener {
         enforce(limits.telemetryIp.hit(ip, now()));
         const report = parseBody(usageReport, await readJson(req));
         enforce(limits.telemetryInstall.hit(`usage|${report.installId}|${ip}`, now()));
-        await store.addUsage(report, new Date(now()));
+        const { installId: _id, ...rest } = report;
+        await store.addUsage({ ...rest, installHash: installHash(config.telemetrySalt, report.installId) }, new Date(now()));
         res.writeHead(202).end();
       },
     },

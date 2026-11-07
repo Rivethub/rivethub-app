@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CrashReport, UsageReport } from "@rivethub/contracts";
 import pg from "pg";
-import type { Channel, NewSignIn, Release, Session, SignInOutcome, Store } from "./types.js";
+import type { Channel, NewSignIn, Release, Session, SignInOutcome, Store, Stored } from "./types.js";
 
 export class PostgresStore implements Store {
   constructor(readonly pool: pg.Pool) {}
@@ -12,8 +12,8 @@ export class PostgresStore implements Store {
 
   async createSignIn(r: NewSignIn): Promise<void> {
     await this.pool.query(
-      "INSERT INTO sign_in_requests (id, secret_hash, email, install_id, expires_at) VALUES ($1, $2, $3, $4, $5)",
-      [r.id, r.secretHash, r.email, r.installId, r.expiresAt],
+      "INSERT INTO sign_in_requests (id, secret_hash, email, expires_at) VALUES ($1, $2, $3, $4)",
+      [r.id, r.secretHash, r.email, r.expiresAt],
     );
   }
 
@@ -30,10 +30,10 @@ export class PostgresStore implements Store {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const claimed = await client.query<{ email: string; install_id: string }>(
+      const claimed = await client.query<{ email: string }>(
         `UPDATE sign_in_requests SET consumed_at = $2
          WHERE id = $1 AND verified_at IS NOT NULL AND consumed_at IS NULL AND expires_at > $2
-         RETURNING email, install_id`,
+         RETURNING email`,
         [id, now],
       );
       const row = claimed.rows[0];
@@ -51,8 +51,8 @@ export class PostgresStore implements Store {
         [randomUUID(), row.email, now],
       );
       await client.query(
-        "INSERT INTO install_tokens (token_hash, user_id, install_id, created_at) VALUES ($1, $2, $3, $4)",
-        [tokenHash, user.rows[0]!.id, row.install_id, now],
+        "INSERT INTO install_tokens (token_hash, user_id, created_at) VALUES ($1, $2, $3)",
+        [tokenHash, user.rows[0]!.id, now],
       );
       await client.query("COMMIT");
       return { kind: "signedIn", email: row.email };
@@ -65,13 +65,13 @@ export class PostgresStore implements Store {
   }
 
   async findSession(tokenHash: string): Promise<Session | null> {
-    const res = await this.pool.query<{ user_id: string; email: string; install_id: string }>(
-      `SELECT t.user_id, u.email, t.install_id FROM install_tokens t JOIN users u ON u.id = t.user_id
+    const res = await this.pool.query<{ user_id: string; email: string }>(
+      `SELECT t.user_id, u.email FROM install_tokens t JOIN users u ON u.id = t.user_id
        WHERE t.token_hash = $1`,
       [tokenHash],
     );
     const row = res.rows[0];
-    return row ? { userId: row.user_id, email: row.email, installId: row.install_id } : null;
+    return row ? { userId: row.user_id, email: row.email } : null;
   }
 
   async revokeToken(tokenHash: string): Promise<void> {
@@ -94,20 +94,20 @@ export class PostgresStore implements Store {
     }
   }
 
-  async addCrash(r: CrashReport, receivedAt: Date): Promise<void> {
+  async addCrash(r: Stored<CrashReport>, receivedAt: Date): Promise<void> {
     await this.pool.query(
-      `INSERT INTO crash_reports (received_at, install_id, rh, os, job, kind, location, frames, occurred_at)
+      `INSERT INTO crash_reports (received_at, install_hash, rh, os, job, kind, location, frames, occurred_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [receivedAt, r.installId, r.rh, r.os, r.job, r.kind, r.where, JSON.stringify(r.frames), r.at],
+      [receivedAt, r.installHash, r.rh, r.os, r.job, r.kind, r.where, JSON.stringify(r.frames), r.at],
     );
   }
 
-  async addUsage(r: UsageReport, receivedAt: Date): Promise<void> {
+  async addUsage(r: Stored<UsageReport>, receivedAt: Date): Promise<void> {
     await this.pool.query(
-      `INSERT INTO usage_reports (install_id, day, received_at, rh, os, counts) VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (install_id, day) DO UPDATE
+      `INSERT INTO usage_reports (install_hash, day, received_at, rh, os, counts) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (install_hash, day) DO UPDATE
        SET received_at = EXCLUDED.received_at, rh = EXCLUDED.rh, os = EXCLUDED.os, counts = EXCLUDED.counts`,
-      [r.installId, r.day, receivedAt, r.rh, r.os, JSON.stringify(r.counts)],
+      [r.installHash, r.day, receivedAt, r.rh, r.os, JSON.stringify(r.counts)],
     );
   }
 
@@ -147,6 +147,11 @@ export class PostgresStore implements Store {
 
   async purgeExpired(now: Date): Promise<void> {
     await this.pool.query("DELETE FROM sign_in_requests WHERE expires_at <= $1", [now]);
+  }
+
+  async purgeTelemetry(cutoff: Date): Promise<void> {
+    await this.pool.query("DELETE FROM crash_reports WHERE received_at < $1", [cutoff]);
+    await this.pool.query("DELETE FROM usage_reports WHERE received_at < $1", [cutoff]);
   }
 
   async counts(): Promise<{ users: number; crashes: number; usage: number }> {

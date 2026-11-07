@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POLL_INTERVAL_MS, SIGN_IN_TTL_MS } from "../src/app.js";
+import { MemoryStore } from "../src/store/memory.js";
 import { RateLimiter } from "../src/ratelimit.js";
 import { INSTALL_ID, PUBLIC_URL, relaxedLimits, startHarness } from "./harness.js";
 
@@ -24,7 +25,12 @@ describe("sign-in flow", () => {
     const pending = await h.call("POST", "/v1/auth/poll", { body: { requestId } });
     expect(pending.status).toBe(202);
 
-    const verified = await h.call("GET", `/verify${link.search}`);
+    const page = await h.call("GET", `/verify${link.search}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Confirm sign-in");
+    expect((await h.call("POST", "/v1/auth/poll", { body: { requestId } })).status).toBe(202);
+
+    const verified = await h.confirm(h.links[0]!.link);
     expect(verified.status).toBe(200);
     expect(await verified.text()).toContain("You're signed in.");
 
@@ -39,7 +45,7 @@ describe("sign-in flow", () => {
     const del = await h.call("DELETE", "/v1/account", { token: installToken });
     expect(del.status).toBe(200);
     expect((await h.call("GET", "/v1/account", { token: installToken })).status).toBe(401);
-    expect(h.store.signInEmails()).not.toContain("ada@example.com");
+    expect((h.store as MemoryStore).signInEmails()).not.toContain("ada@example.com");
     expect(await h.store.counts()).toMatchObject({ users: 0 });
   });
 
@@ -56,7 +62,7 @@ describe("sign-in flow", () => {
     const h = await startHarness();
     await start(h, "a@example.com");
     const link = new URL(h.links[0]!.link);
-    const wrong = await h.call("GET", `/verify?r=${link.searchParams.get("r")}&s=nope`);
+    const wrong = await h.confirm(`${PUBLIC_URL}/verify?r=${link.searchParams.get("r")}&s=nope`);
     expect(wrong.status).toBe(410);
     expect((await start(h, "not-an-email")).status).toBe(422);
     expect((await h.call("POST", "/v1/auth/start", { body: { email: "a@example.com", installId: "x" } })).status).toBe(422);
@@ -65,9 +71,8 @@ describe("sign-in flow", () => {
   it("makes the magic link single use", async () => {
     const h = await startHarness();
     await start(h, "a@example.com");
-    const q = new URL(h.links[0]!.link).search;
-    expect((await h.call("GET", `/verify${q}`)).status).toBe(200);
-    expect((await h.call("GET", `/verify${q}`)).status).toBe(410);
+    expect((await h.confirm(h.links[0]!.link)).status).toBe(200);
+    expect((await h.confirm(h.links[0]!.link)).status).toBe(410);
   });
 
   it("hands out the install token once", async () => {
@@ -81,16 +86,15 @@ describe("sign-in flow", () => {
     const h = await startHarness();
     const res = await start(h, "a@example.com");
     const { requestId } = (await res.json()) as { requestId: string };
-    const q = new URL(h.links[0]!.link).search;
     h.clock.now += SIGN_IN_TTL_MS + 1;
-    expect((await h.call("GET", `/verify${q}`)).status).toBe(410);
+    expect((await h.confirm(h.links[0]!.link)).status).toBe(410);
     expect((await h.call("POST", "/v1/auth/poll", { body: { requestId } })).status).toBe(410);
   });
 
   it("expires a verified request that is never polled", async () => {
     const h = await startHarness();
     const { requestId } = (await (await start(h, "a@example.com")).json()) as { requestId: string };
-    await h.call("GET", `/verify${new URL(h.links[0]!.link).search}`);
+    await h.confirm(h.links[0]!.link);
     h.clock.now += SIGN_IN_TTL_MS + 1;
     expect((await h.call("POST", "/v1/auth/poll", { body: { requestId } })).status).toBe(410);
   });
@@ -100,7 +104,7 @@ describe("sign-in flow", () => {
     expect((await h.call("POST", "/v1/auth/poll", { body: { requestId: "nope" } })).status).toBe(410);
   });
 
-  it("keeps one user across sign-ins and binds each token to its install", async () => {
+  it("keeps one user across sign-ins and issues a separate token each time", async () => {
     const h = await startHarness();
     const first = await h.signIn("a@example.com");
     const second = await h.signIn("a@example.com", "7a1c3c2e-8a3e-4b1b-9d0a-1d6c1f4d9a22");
@@ -134,6 +138,67 @@ describe("sign-in flow", () => {
     const res = await start(h, "a@example.com");
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "could not send email" });
+  });
+});
+
+describe("verify page", () => {
+  it("never changes state on GET, however often a scanner opens the link", async () => {
+    const h = await startHarness();
+    const { requestId } = (await (await start(h, "a@example.com")).json()) as { requestId: string };
+    const link = new URL(h.links[0]!.link);
+    for (let i = 0; i < 3; i++) {
+      const page = await h.call("GET", `/verify${link.search}`);
+      expect(page.status).toBe(200);
+      const html = await page.text();
+      expect(html).toContain('<form method="post" action="/verify">');
+      expect(html).toContain('name="s"');
+      expect(html).not.toContain("<script");
+    }
+    expect((await h.call("POST", "/v1/auth/poll", { body: { requestId } })).status).toBe(202);
+    expect((await h.confirm(h.links[0]!.link)).status).toBe(200);
+    expect((await h.call("POST", "/v1/auth/poll", { body: { requestId } })).status).toBe(200);
+  });
+
+  it("allows the form to post to itself and nothing else", async () => {
+    const h = await startHarness();
+    const csp = (await h.call("GET", "/verify")).headers.get("content-security-policy");
+    expect(csp).toContain("form-action 'self'");
+    expect(csp).toContain("default-src 'none'");
+  });
+
+  it("rejects a GET with a missing or malformed capability without echoing it", async () => {
+    const h = await startHarness();
+    expect((await h.call("GET", "/verify")).status).toBe(410);
+    const evil = encodeURIComponent('"><script>alert(1)</script>');
+    const res = await h.call("GET", `/verify?r=${evil}&s=x`);
+    expect(res.status).toBe(410);
+    expect(await res.text()).not.toContain("<script>alert");
+  });
+
+  it("rejects a POST with a missing field, a bad character or the wrong content type", async () => {
+    const h = await startHarness();
+    await start(h, "a@example.com");
+    const q = new URL(h.links[0]!.link).searchParams;
+    const post = (body: string, type = "application/x-www-form-urlencoded") =>
+      fetch(h.base + "/verify", { method: "POST", headers: { "content-type": type }, body });
+    expect((await post("")).status).toBe(400);
+    expect((await post(`r=${q.get("r")}`)).status).toBe(400);
+    expect((await post(`r=${q.get("r")}&s=a%22b`)).status).toBe(400);
+    expect((await post(`r=${q.get("r")}&s=${q.get("s")}`, "application/json")).status).toBe(415);
+    expect((await post(`r=${q.get("r")}&s=${"a".repeat(2000)}`)).status).toBe(413);
+    expect((await post(`r=${q.get("r")}&s=${q.get("s")}`)).status).toBe(200);
+  });
+
+  it("does not take the secret from the POST query string", async () => {
+    const h = await startHarness();
+    await start(h, "a@example.com");
+    const link = new URL(h.links[0]!.link);
+    const res = await fetch(h.base + `/verify${link.search}`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "",
+    });
+    expect(res.status).toBe(400);
   });
 });
 

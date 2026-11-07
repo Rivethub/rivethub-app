@@ -3,19 +3,25 @@ import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logError } from "./log.js";
 import { devMailer, resendMailer } from "./mail.js";
+import { purge } from "./purge.js";
 import { migrate } from "./store/migrate.js";
 import { PostgresStore } from "./store/postgres.js";
 
 async function main(): Promise<void> {
   process.on("unhandledRejection", logError);
   const config = loadConfig();
+  if (config.telemetrySaltGenerated) {
+    process.stderr.write(
+      JSON.stringify({ ts: new Date().toISOString(), warning: "TELEMETRY_SALT unset, using a per-process salt (dev only)" }) + "\n",
+    );
+  }
   const store = PostgresStore.connect(config.databaseUrl);
-  const applied = await migrate(store.pool);
+  const applied = await migrate(store.pool, config.telemetrySalt);
   const mailer = config.resendApiKey ? resendMailer(config.resendApiKey, config.emailFrom) : devMailer();
 
   const server = createServer(createApp({ store, mailer, config }));
-  const purge = setInterval(() => void store.purgeExpired(new Date()).catch(logError), 10 * 60_000);
-  purge.unref();
+  const purgeTimer = setInterval(() => void purge(store, new Date(), config.telemetryRetentionDays).catch(logError), 10 * 60_000);
+  purgeTimer.unref();
 
   server.listen(config.port, config.host, () => {
     const mode = config.resendApiKey ? "resend" : "dev (magic links are logged, no email sent)";

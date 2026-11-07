@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { installHash } from "../src/crypto.js";
 import { migrate } from "../src/store/migrate.js";
 import { MemoryStore } from "../src/store/memory.js";
 import { PostgresStore } from "../src/store/postgres.js";
 import type { Release, Store } from "../src/store/types.js";
+import { INSTALL_ID, SALT, startHarness } from "./harness.js";
 
 const now = new Date("2026-01-01T00:00:00Z");
 const later = (ms: number) => new Date(now.getTime() + ms);
@@ -29,7 +32,7 @@ function contract(name: string, make: () => Promise<Store>) {
     });
 
     const signIn = (id: string, email: string, ttl = 60_000) =>
-      store.createSignIn({ id, secretHash: `h-${id}`, email, installId: randomUUID(), expiresAt: later(ttl) });
+      store.createSignIn({ id, secretHash: `h-${id}`, email, expiresAt: later(ttl) });
 
     it("verifies once, only with the right secret, before expiry", async () => {
       await signIn("r1", "a@x.co");
@@ -86,10 +89,10 @@ function contract(name: string, make: () => Promise<Store>) {
 
     it("stores crashes and one usage row per install and day", async () => {
       const before = await store.counts();
-      const installId = randomUUID();
+      const installHash = randomUUID();
       const crash = {
         schema: 1 as const,
-        installId,
+        installHash,
         rh: "1.0.0",
         os: "linux-x86_64" as const,
         job: "cli" as const,
@@ -99,9 +102,24 @@ function contract(name: string, make: () => Promise<Store>) {
         at: "2026-01-01T00:00:00.000Z",
       };
       await store.addCrash(crash, now);
-      const usage = { schema: 1 as const, installId, rh: "1.0.0", os: "linux-x86_64" as const, day: "2026-01-01", counts: { searches: 1 } };
+      const usage = { schema: 1 as const, installHash, rh: "1.0.0", os: "linux-x86_64" as const, day: "2026-01-01", counts: { searches: 1 } };
       await store.addUsage(usage, now);
       await store.addUsage({ ...usage, counts: { searches: 2 } }, now);
+      const after = await store.counts();
+      expect(after.crashes - before.crashes).toBe(1);
+      expect(after.usage - before.usage).toBe(1);
+    });
+
+    it("purges telemetry received before the cutoff only", async () => {
+      const installHash = randomUUID();
+      const base = { schema: 1 as const, installHash, rh: "1.0.0", os: "linux-x86_64" as const };
+      const crash = { ...base, job: "cli" as const, kind: "panic" as const, where: "a::b:1", frames: ["a::b:1"], at: "2026-01-01T00:00:00.000Z" };
+      const before = await store.counts();
+      await store.addCrash(crash, later(-10_000));
+      await store.addUsage({ ...base, day: "2025-12-31", counts: { searches: 1 } }, later(-10_000));
+      await store.addCrash(crash, later(10_000));
+      await store.addUsage({ ...base, day: "2026-01-01", counts: { searches: 1 } }, later(10_000));
+      await store.purgeTelemetry(now);
       const after = await store.counts();
       expect(after.crashes - before.crashes).toBe(1);
       expect(after.usage - before.usage).toBe(1);
@@ -130,4 +148,68 @@ describe.skipIf(!databaseUrl)("postgres setup", () => {
     await pool.end();
   });
 });
+describe.skipIf(!databaseUrl)("postgres migration 002", () => {
+  it("re-keys legacy telemetry, drops raw install ids and is safe to run twice", async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
+    await pool.query(await readFile(new URL("../migrations/001_init.sql", import.meta.url), "utf8"));
+    await pool.query("CREATE TABLE schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())");
+    await pool.query("INSERT INTO schema_migrations (name) VALUES ('001_init.sql')");
+    const id = "3F1C3C2E-8A3E-4B1B-9D0A-1D6C1F4D9A11";
+    const userId = randomUUID();
+    await pool.query("INSERT INTO users VALUES ($1, 'a@x.co', now())", [userId]);
+    await pool.query("INSERT INTO install_tokens VALUES ('t', $1, $2, now())", [userId, id]);
+    await pool.query("INSERT INTO sign_in_requests (id, secret_hash, email, install_id, expires_at) VALUES ('r', 'h', 'a@x.co', $1, now())", [id]);
+    await pool.query(
+      "INSERT INTO crash_reports (received_at, install_id, rh, os, job, kind, location, frames, occurred_at) VALUES (now(), $1, '1', 'linux-x86_64', 'cli', 'panic', 'a:1', '[]', now())",
+      [id],
+    );
+    await pool.query("INSERT INTO usage_reports VALUES ($1, '2026-01-01', now(), '1', 'linux-x86_64', '{}')", [id]);
+
+    await expect(migrate(pool)).rejects.toThrow(/TELEMETRY_SALT/);
+    expect(await migrate(pool, SALT)).toEqual(["002_unlinkable_telemetry.sql"]);
+    expect(await migrate(pool, SALT)).toEqual([]);
+
+    const expected = installHash(SALT, id);
+    expect((await pool.query("SELECT install_hash FROM crash_reports")).rows).toEqual([{ install_hash: expected }]);
+    expect((await pool.query("SELECT install_hash FROM usage_reports")).rows).toEqual([{ install_hash: expected }]);
+    const dump = await allRows(pool);
+    expect(dump.toLowerCase()).not.toContain(id.toLowerCase());
+    await pool.end();
+  });
+});
+
+describe.skipIf(!databaseUrl)("postgres privacy", () => {
+  it("keeps the raw installId out of every column after sign-in and a crash report", async () => {
+    const pool = new pg.Pool({ connectionString: databaseUrl });
+    await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
+    await migrate(pool);
+    const store = new PostgresStore(pool);
+    const h = await startHarness(undefined, store);
+    const { token } = await h.signIn("a@example.com", INSTALL_ID);
+    expect((await h.call("GET", "/v1/account", { token })).status).toBe(200);
+    const crash = {
+      schema: 1, installId: INSTALL_ID, rh: "0.7.2", os: "linux-x86_64", job: "gateway", kind: "panic",
+      where: "a::b:1", frames: ["a::b:1"], at: "2026-01-01T00:00:00.000Z",
+    };
+    expect((await h.call("POST", "/v1/telemetry/crash", { body: crash })).status).toBe(202);
+    const { frames: _f, where: _w, job: _j, kind: _k, at: _a, ...rest } = crash;
+    expect((await h.call("POST", "/v1/telemetry/usage", { body: { ...rest, day: "2026-01-01", counts: { searches: 1 } } })).status).toBe(202);
+    const dump = await allRows(pool);
+    expect(dump.toLowerCase()).not.toContain(INSTALL_ID);
+    expect(dump).toContain(installHash(SALT, INSTALL_ID));
+    expect(await store.counts()).toMatchObject({ users: 1, crashes: 1, usage: 1 });
+    await pool.end();
+  });
+});
+
+async function allRows(pool: pg.Pool): Promise<string> {
+  const tables = await pool.query<{ tablename: string }>("SELECT tablename FROM pg_tables WHERE schemaname = 'public'");
+  const out: unknown[] = [];
+  for (const { tablename } of tables.rows) {
+    out.push((await pool.query(`SELECT row_to_json(t) AS r FROM "${tablename}" t`)).rows);
+  }
+  return JSON.stringify(out);
+}
+
 if (databaseUrl) contract("postgres", async () => PostgresStore.connect(databaseUrl));

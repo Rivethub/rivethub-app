@@ -10,16 +10,16 @@ It is plain `node:http`, Postgres through `pg`, and Resend for email. There is n
 
 ## Sign-in flow
 
-1. The client calls `POST /v1/auth/start` with `{email, installId}`. The service stores a hash of a random secret, valid for 15 minutes and usable once. It emails a link `PUBLIC_URL/verify?r=<id>&s=<secret>` and returns `{requestId, pollIntervalMs}`. The answer is the same whether or not the email has an account.
-2. The user opens the link. `GET /verify` marks the request verified and shows "You're signed in. Go back to RivetHub." No script runs on the page.
-3. Meanwhile the client polls `POST /v1/auth/poll` with `{requestId}`. It gets 202 while pending, 410 when expired or already used, and 200 `{installToken, email}` once verified. The token is returned once, stored only as a hash, bound to the install and the user. The user row is created on first sign-in.
+1. The client calls `POST /v1/auth/start` with `{email}`. A legacy `installId` is still accepted and ignored, never stored. The service stores a hash of a random secret, valid for 15 minutes and usable once. It emails a link `PUBLIC_URL/verify?r=<id>&s=<secret>` and returns `{requestId, pollIntervalMs}`. The answer is the same whether or not the email has an account.
+2. The user opens the link. `GET /verify` changes nothing. It renders a page with a "Confirm sign-in" button, a plain form with no script. The button sends `POST /verify` with `r` and `s` as `application/x-www-form-urlencoded`. That marks the request verified and shows "You're signed in. Go back to RivetHub." A missing or malformed field returns 400, a wrong content type 415, and a wrong secret, expired or already used request 410. There are no cookies, so there is no ambient authority to forge. The secret `s` in the body is the capability. The CSP allows `form-action 'self'` for this page only.
+3. Meanwhile the client polls `POST /v1/auth/poll` with `{requestId}`. It gets 202 while pending, 410 when expired or already used, and 200 `{installToken, email}` once verified. The token is returned once, stored only as a hash, bound to the user only. It records no install id. The user row is created on first sign-in.
 4. The client sends `Authorization: Bearer <installToken>` on `GET /v1/account`, `DELETE /v1/account` (removes the user, every token and any stored email), `POST /v1/auth/signout` (revokes this token) and `GET /v1/updates/latest`.
 
-Mail scanners that open links before the user does will verify the request early. That is harmless on its own, because the token still goes only to whoever holds the `requestId`.
+Mail scanners that open the link before the user only fetch the confirm page. They do not submit the form, so they cannot verify the request.
 
 ## Telemetry
 
-`POST /v1/telemetry/crash` and `POST /v1/telemetry/usage` need no auth. The body cap is 32 KB (413). Invalid JSON or any schema failure returns 422 with a fixed message. Valid reports return 202. Rate limits are in memory, per `installId` plus IP, with a coarse per-IP limit ahead of parsing. IP addresses are never stored or logged. Request logs hold method, path, status and duration only.
+`POST /v1/telemetry/crash` and `POST /v1/telemetry/usage` need no auth. The body cap is 32 KB (413). Invalid JSON or any schema failure returns 422 with a fixed message. Valid reports return 202. Rate limits are in memory, per `installId` plus IP, with a coarse per-IP limit ahead of parsing. IP addresses are never stored or logged. Rows store `install_hash = HMAC-SHA256(TELEMETRY_SALT, lowercase installId)` as hex and never the raw id. No table holds both an installId and a user, so a database reader cannot join a crash or usage row to an account. The raw id is used in memory only for rate limiting. `TELEMETRY_SALT` (16 or more characters) is required when `NODE_ENV=production` or `RESEND_API_KEY` is set. In dev the service generates one per process and logs a warning, so hashes change on restart. Changing the salt in production splits each install into a new identity. Crash and usage rows older than `TELEMETRY_RETENTION_DAYS` (default 90) are deleted by the purge that runs every 10 minutes. Migration 002 re-keys rows written before hashing, so run it with the production salt set or it refuses to touch existing rows. Request logs hold method, path, status and duration only.
 
 ## Updates
 
@@ -44,7 +44,7 @@ pnpm --filter @rivethub/cloud start
 
 `.env.example` lists every variable. The service reads the process environment only, it does not load `.env` itself.
 
-Without `RESEND_API_KEY` the service runs in dev mode. It logs the magic link as a JSON line on stdout and sends no email. Migrations in `migrations/*.sql` apply at start and are safe to run again.
+Without `RESEND_API_KEY` the service runs in dev mode. It logs the magic link as a JSON line on stdout and sends no email. Migrations in `migrations/*.sql` apply at start and are safe to run again. Migration 002 needs the `pgcrypto` extension.
 
 ## Tests
 
