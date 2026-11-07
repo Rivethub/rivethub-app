@@ -1,4 +1,4 @@
-import type { Capability, CrashReport, IsoTime, MemoryClient, SubjectRef, TopicId, Change } from "@rivethub/contracts";
+import type { Change, CrashReport, IsoTime, MemoryClient, SubjectRef, TopicId } from "@rivethub/contracts";
 import { createContext, useContext, type ReactNode } from "react";
 
 /**
@@ -16,8 +16,6 @@ export interface MemoryClientExtras {
 }
 
 export type AppClient = MemoryClient & MemoryClientExtras;
-
-export type Capabilities = Record<Capability, "live" | "sample">;
 
 const ClientContext = createContext<AppClient | null>(null);
 
