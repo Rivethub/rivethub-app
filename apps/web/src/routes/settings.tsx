@@ -163,11 +163,13 @@ const modelLabel = (j: ModelJob, all: ModelJob[]) => {
 };
 const jobStatus = (j: ModelJob) => `${j.detail}${j.queued ? ` · ${j.queued} waiting` : ""}`;
 
+const header = (line: string) => line.startsWith("---") || line.startsWith("+++");
+
 function DiffView({ diff }: { diff: string }) {
   return (
     <pre className="m-0 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6]">
       {diff.split("\n").map((line, i) => (
-        <span key={i} className="block" style={{ color: line.startsWith("+") ? ok : line.startsWith("-") ? "var(--error)" : undefined }}>{line}</span>
+        <span key={i} className="block" style={{ color: header(line) ? undefined : line.startsWith("+") ? ok : line.startsWith("-") ? "var(--error)" : undefined }}>{line}</span>
       ))}
     </pre>
   );
