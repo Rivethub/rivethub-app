@@ -269,3 +269,5 @@ export interface Account {
   crashReports: boolean;
   usageCounts: boolean;
 }
+
+export type SignInProgress = { status: "pending" } | { status: "signed-in"; account: Account };

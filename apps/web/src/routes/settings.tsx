@@ -1,13 +1,14 @@
 import type { Account, HarnessStatus, ModelJob, ModelRole } from "@rivethub/contracts";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAccount, useConnectHarness, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useUpdateAccount } from "../client/queries";
+import { useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
 import { ago, shortDate, time } from "../lib/format";
 import { useIsPhone } from "../lib/media";
+import { useEmailSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
 import { setTheme, THEMES, useTheme } from "../theme";
 
@@ -361,6 +362,61 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
   );
 }
 
+function AccountCard({ account }: { account: Account }) {
+  const [email, setEmail] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const signIn = useEmailSignIn();
+  const signOut = useSignOut();
+  const deleteAccount = useDeleteAccount();
+  const failure = signIn.state.phase === "failed" ? signIn.state.error : (signOut.error ?? deleteAccount.error);
+  const waiting = signIn.state.phase === "waiting";
+  return (
+    <section aria-label="Account" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-selected font-semibold">{(account.email ?? "?")[0]!.toUpperCase()}</span>
+        <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
+          <span className="font-semibold">{account.email ?? "Not signed in"}</span>
+          <span className="text-[12px] text-muted-foreground">{account.email ? "Signed in with an email link · this hub only" : "Updates come from GitHub releases."}</span>
+        </span>
+        {account.email && (
+          <Button disabled={signOut.isPending} onClick={() => signOut.mutate()}>Sign out</Button>
+        )}
+      </div>
+      {!account.email && (
+        <form
+          className="flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void signIn.start(email.trim());
+          }}
+        >
+          <input type="email" required aria-label="Email" placeholder="you@example.com" value={email} disabled={waiting} onChange={(e) => setEmail(e.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-input bg-background px-2.5 py-2 text-foreground outline-none focus:border-primary" />
+          {waiting ? (
+            <Button onClick={signIn.cancel}>Cancel</Button>
+          ) : (
+            <Button type="submit" variant="primary" size="md" disabled={!/.+@.+\..+/.test(email)}>Send sign-in link</Button>
+          )}
+          {signIn.state.phase === "waiting" && <span role="status" className="basis-full text-[13px] text-muted-foreground">Check {signIn.state.email} for the sign-in link. This page updates when you follow it.</span>}
+        </form>
+      )}
+      {account.email && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          {confirmDelete ? (
+            <>
+              <span className="flex-1 text-[13px]">Delete your RivetHub account? Updates switch back to GitHub. Your memory stays on this hub.</span>
+              <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Delete account</Button>
+              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
+            </>
+          ) : (
+            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
+          )}
+        </div>
+      )}
+      {failure !== undefined && failure !== null && <ErrorNote error={failure} />}
+    </section>
+  );
+}
+
 const selectCls = "rounded-lg border border-input bg-card px-2 py-1 text-[13px] text-foreground";
 
 function AccountSettings() {
@@ -374,13 +430,7 @@ function AccountSettings() {
   return (
     <>
       <SampleBadge capability="account" />
-      <section aria-label="Account" className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4">
-        <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-selected font-semibold">{(a.email ?? "?")[0]!.toUpperCase()}</span>
-        <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
-          <span className="font-semibold">{a.email ?? "Not signed in"}</span>
-          <span className="text-[12px] text-muted-foreground">{a.email ? "Signed in with an email link · this hub only" : "Updates come from GitHub releases."}</span>
-        </span>
-      </section>
+      <AccountCard account={a} />
       <section aria-labelledby="updates-h" className="flex flex-col gap-3">
         <h2 id="updates-h" className="m-0 text-[15px] font-semibold">Updates</h2>
         {a.pendingUpdate && (

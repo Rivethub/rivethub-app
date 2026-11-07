@@ -1,7 +1,7 @@
 import type { TopicArticle, TopicId, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAddDecision, useTopic, useTopicHistory, useTopicTree, useUpdateTopic } from "../client/queries";
+import { useAddDecision, useTopic, useChanges, useTopicTree, useUpdateTopic } from "../client/queries";
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, SidePanel, type Tab } from "../components/article";
 import { EditableText } from "../components/editable";
 import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library";
@@ -53,12 +53,12 @@ export function TopicPage() {
   const { tab = "overview" } = route.useSearch();
   const phone = useIsPhone();
   const topic = useTopic(topicId as TopicId);
-  const history = useTopicHistory(topicId as TopicId);
+  const history = useChanges(topicId as TopicId);
   const t = topic.data;
   const tabs: Tab<TabId>[] = [
     { id: "overview", label: "Overview" },
     { id: "sessions", label: "Sessions", count: t?.sessionCount ?? 0 },
-    { id: "history", label: "History", count: history.data?.length ?? t?.decisions.length ?? 0 },
+    { id: "history", label: "History", count: history.data?.length || t?.decisions.length || 0 },
   ];
   const body = topic.isPending ? <Loading /> : topic.isError ? <ErrorNote error={topic.error} /> : null;
 
@@ -187,10 +187,10 @@ function TopicOverview({ t }: { t: TopicArticle }) {
 }
 
 function TopicHistory({ t }: { t: TopicArticle }) {
-  const history = useTopicHistory(t.id).data;
-  const rows =
-    history?.map((c) => ({ at: c.at, kind: c.kind, text: c.text, source: c.source })) ??
-    t.decisions.map((d) => ({ at: d.at, kind: "decision" as const, text: d.text, source: d.source ? { kind: "session" as const, ...d.source } : undefined }));
+  const history = useChanges(t.id).data;
+  const rows = history?.length
+    ? history.map((c) => ({ at: c.at, kind: c.kind, text: c.text, source: c.source }))
+    : t.decisions.map((d) => ({ at: d.at, kind: "decision" as const, text: d.text, source: d.source ? { kind: "session" as const, ...d.source } : undefined }));
   if (!rows.length) return <p className="font-sans text-muted-foreground">No changes yet.</p>;
   return (
     <ol className="m-0 flex list-none flex-col gap-2.5 p-0 font-sans text-[14px]">

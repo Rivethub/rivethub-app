@@ -65,9 +65,10 @@ export function createClient(options: ClientOptions): MemoryClient {
       >;
     },
 
-    today: sample.today,
-    reviewQueue: sample.reviewQueue,
-    decide: sample.decide,
+    today: choose("today", "today"),
+    changes: choose("today", "changes"),
+    reviewQueue: choose("review", "reviewQueue"),
+    decide: choose("review", "decide"),
 
     topicTree: choose("topics", "topicTree"),
     topic: choose("topics", "topic"),
@@ -126,9 +127,13 @@ export function createClient(options: ClientOptions): MemoryClient {
     connectHarness: choose("harnesses", "connectHarness"),
     modelJobs: choose("models", "modelJobs"),
 
-    hubs: sample.hubs,
-    account: sample.account,
-    updateAccount: sample.updateAccount,
+    hubs: choose("hubs", "hubs"),
+    account: choose("account", "account"),
+    updateAccount: choose("account", "updateAccount"),
+    signIn: choose("account", "signIn"),
+    pollSignIn: choose("account", "pollSignIn"),
+    signOut: choose("account", "signOut"),
+    deleteAccount: choose("account", "deleteAccount"),
   };
   return client;
 }

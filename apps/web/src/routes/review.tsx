@@ -133,6 +133,7 @@ function ReviewDesktop() {
           </span>
         </div>
         <FilterChips model={model} />
+        {decide.isError && <ErrorNote error={decide.error} />}
       </header>
       {model.queue.isPending ? (
         <Loading />
@@ -325,6 +326,7 @@ function ReviewPhone() {
         </div>
         <FilterChips model={model} phone />
         <SampleBadge capability="review" />
+        {decide.isError && <ErrorNote error={decide.error} />}
       </header>
       {model.queue.isPending ? (
         <Loading />

@@ -108,6 +108,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
   const folders = new Map<string, string | null>();
   let queue: ReviewItem[] = data.reviewQueue();
   let account = clone(data.account);
+  let pendingEmail: string | undefined;
   let pins: SubjectRef[] = [
     { kind: "topic", id: "rh-08" as TopicId, title: "rh 0.8 memory cut" },
     { kind: "entity", id: "nas-01" as EntityId, title: "nas-01" },
@@ -465,17 +466,42 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       return wait(undefined);
     },
     libraryCounts: () => wait({ topics: 64, entities: 148, sessions: 1284 }),
-    topicHistory(id) {
-      const a = article(id);
-      const past: Change[] = a.decisions.map((d) => {
-        const c: Change = { kind: "decision", subject: { kind: "topic", id, title: a.name }, text: d.superseded ? `${d.text} (superseded)` : d.text, at: d.at, actor: { kind: "wiki-writer" } };
+    lastCrashReport: () => wait({ report: crash, sentAt: at(1, "03:12") }),
+    async changes(query) {
+      const topic = query.subject && topicById().has(query.subject) ? article(query.subject as TopicId) : undefined;
+      const fromDecisions: Change[] = (topic?.decisions ?? []).map((d) => {
+        const c: Change = { kind: "decision", subject: { kind: "topic", id: topic!.id, title: topic!.name }, text: d.superseded ? `${d.text} (superseded)` : d.text, at: d.at, actor: { kind: "wiki-writer" } };
         if (d.source) c.source = { kind: "session", id: d.source.id, title: d.source.title };
         return c;
       });
-      return wait([...(history.get(id) ?? []), ...past]);
+      const fromEntity: Change[] = (query.subject ? (entities.get(query.subject)?.timeline ?? []) : []).map((t) => {
+        const c: Change = { kind: t.kind, subject: { kind: "entity", id: query.subject as EntityId, title: entities.get(query.subject!)!.title }, text: t.text, at: t.at, actor: { kind: "wiki-writer" } };
+        if (t.source) c.source = { kind: "session", id: t.source.id, title: t.source.title };
+        return c;
+      });
+      const mine = [...(query.subject ? (history.get(query.subject) ?? []) : []), ...fromDecisions, ...fromEntity];
+      return wait(mine.sort((a, b) => b.at.localeCompare(a.at)));
     },
-    lastCrashReport: () => wait({ report: crash, sentAt: at(1, "03:12") }),
-    requestSignIn: () => wait(undefined),
+    async signIn(email) {
+      pendingEmail = email;
+      return wait({ requestId: "sample-request" });
+    },
+    async pollSignIn() {
+      if (pendingEmail === undefined) throw new Error("No sign-in is waiting");
+      account = { ...account, email: pendingEmail, updateSource: "rivethub-cloud" };
+      pendingEmail = undefined;
+      return wait({ status: "signed-in" as const, account });
+    },
+    async signOut() {
+      const { email: _email, ...rest } = account;
+      account = { ...rest, updateSource: "github" };
+      return wait(account);
+    },
+    async deleteAccount() {
+      const { email: _email, ...rest } = account;
+      account = { ...rest, updateSource: "github" };
+      return wait(account);
+    },
   };
   return client;
 }

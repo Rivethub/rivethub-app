@@ -1,10 +1,10 @@
 import type { Account } from "@rivethub/contracts";
 import { Link, Navigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { useClient } from "../client/context";
-import { useCapabilities, useUpdateAccount } from "../client/queries";
+import { useAccount, useCapabilities, useUpdateAccount } from "../client/queries";
 import { Logo } from "../components/shell";
-import { Button, cx, SampleBadge } from "../components/ui";
+import { Button, cx, ErrorNote, SampleBadge } from "../components/ui";
+import { useEmailSignIn } from "../lib/signin";
 import { Connections } from "./settings";
 
 const DONE_KEY = "rivethub.welcomed";
@@ -74,18 +74,24 @@ export function WelcomePage() {
 }
 
 function Choices({ onNext }: { onNext: () => void }) {
-  const client = useClient();
   const update = useUpdateAccount();
-  const [source, setSource] = useState<Account["updateSource"]>(client.requestSignIn ? "rivethub-cloud" : "github");
+  const signedInAs = useAccount().data?.email;
+  const [source, setSource] = useState<Account["updateSource"]>("rivethub-cloud");
   const [email, setEmail] = useState("");
   const [reports, setReports] = useState(true);
-  const needsEmail = source === "rivethub-cloud";
+  const needsEmail = source === "rivethub-cloud" && !signedInAs;
   const canContinue = !needsEmail || /.+@.+\..+/.test(email);
 
-  async function next() {
-    if (needsEmail && client.requestSignIn) await client.requestSignIn(email);
+  function finish() {
     update.mutate({ updateSource: source, crashReports: reports, usageCounts: reports });
     onNext();
+  }
+  const signIn = useEmailSignIn(finish);
+  const waiting = signIn.state.phase === "waiting";
+
+  function next() {
+    if (needsEmail) void signIn.start(email.trim());
+    else finish();
   }
 
   return (
@@ -97,17 +103,18 @@ function Choices({ onNext }: { onNext: () => void }) {
             <span className="text-[13px] text-muted-foreground">Both are free and get every feature.</span>
           </div>
           <label
-            className={cx("flex cursor-pointer gap-3 rounded-[10px] p-3", source === "rivethub-cloud" ? "border-2 border-primary" : "border border-border", !client.requestSignIn && "cursor-not-allowed opacity-60")}
+            className={cx("flex cursor-pointer gap-3 rounded-[10px] p-3", source === "rivethub-cloud" ? "border-2 border-primary" : "border border-border")}
             style={source === "rivethub-cloud" ? { background: "color-mix(in srgb, var(--primary) 8%, transparent)" } : undefined}
           >
-            <input type="radio" name="updates" disabled={!client.requestSignIn} checked={source === "rivethub-cloud"} onChange={() => setSource("rivethub-cloud")} className="mt-[3px] accent-primary" />
+            <input type="radio" name="updates" disabled={waiting} checked={source === "rivethub-cloud"} onChange={() => setSource("rivethub-cloud")} className="mt-[3px] accent-primary" />
             <span className="flex flex-1 flex-col gap-2">
               <span className="font-medium">From the RivetHub server, with an account</span>
               <span className="text-[13px] leading-[1.45] text-muted-foreground">Just an email. We send a sign-in link, no password. You get signed updates as we release them, and Beta if you want it.</span>
-              {source === "rivethub-cloud" && (
+              {source === "rivethub-cloud" && signedInAs && <span className="text-[13px]">Signed in as {signedInAs}.</span>}
+              {needsEmail && (
                 <span className="flex gap-2">
                   <span className="sr-only">Email</span>
-                  <input type="email" aria-label="Email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 py-2 text-foreground outline-none focus:border-primary" />
+                  <input type="email" aria-label="Email" placeholder="you@example.com" value={email} disabled={waiting} onChange={(e) => setEmail(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 py-2 text-foreground outline-none focus:border-primary" />
                 </span>
               )}
             </span>
@@ -145,10 +152,13 @@ function Choices({ onNext }: { onNext: () => void }) {
           <Link to="/settings/$section" params={{ section: "account" }} className="text-[13px]">See an example report</Link>
         </section>
       </div>
+      {signIn.state.phase === "waiting" && <p role="status" className="m-0 text-center text-[13px] text-muted-foreground">Check {signIn.state.email} for the sign-in link. This continues when you follow it.</p>}
+      {signIn.state.phase === "failed" && <ErrorNote error={signIn.state.error} />}
       <div className="flex justify-center gap-2.5">
-        <Button variant="primary" disabled={!canContinue} onClick={() => void next()} className="rounded-[10px] px-[22px] py-2.5 text-[14px] font-semibold">
+        <Button variant="primary" disabled={!canContinue || waiting} onClick={next} className="rounded-[10px] px-[22px] py-2.5 text-[14px] font-semibold">
           {needsEmail ? "Send sign-in link and continue" : "Continue"}
         </Button>
+        {waiting && <Button onClick={signIn.cancel} className="rounded-[10px] px-[22px] py-2.5 text-[14px]">Cancel</Button>}
       </div>
     </>
   );

@@ -1,5 +1,6 @@
 import type {
   Account,
+  Change,
   EntityArticle,
   EntityId,
   EntitySummary,
@@ -17,6 +18,7 @@ import type {
   SessionDetail,
   SessionId,
   SessionSummaryRow,
+  SignInProgress,
   SummaryNode,
   TodayDigest,
   TopicArticle,
@@ -37,6 +39,13 @@ export interface SessionQuery {
   topic?: TopicId;
   view?: "all" | "unfiled" | "kept" | "trash";
   cursor?: string;
+}
+
+/** `subject` is a topic, entity or session id. `from` and `to` bound the change time. */
+export interface ChangeQuery {
+  subject?: TopicId | EntityId | SessionId;
+  from?: IsoTime;
+  to?: IsoTime;
 }
 
 export type Capability =
@@ -60,6 +69,8 @@ export interface MemoryClient {
 
   reviewQueue(): Promise<ReviewItem[]>;
   decide(id: ReviewItemId, decision: ReviewDecision): Promise<void>;
+  /** Newest first. Backs the History tabs. */
+  changes(query: ChangeQuery): Promise<Change[]>;
 
   topicTree(): Promise<TopicNode[]>;
   topic(id: TopicId): Promise<TopicArticle>;
@@ -93,4 +104,10 @@ export interface MemoryClient {
   hubs(): Promise<Hub[]>;
   account(): Promise<Account>;
   updateAccount(patch: Partial<Pick<Account, "channel" | "autoDownload" | "crashReports" | "usageCounts" | "updateSource">>): Promise<void>;
+  /** Starts an email sign-in. `pollSignIn` reports when the link has been followed. */
+  signIn(email: string): Promise<{ requestId: string }>;
+  pollSignIn(): Promise<SignInProgress>;
+  signOut(): Promise<Account>;
+  /** Deletes the RivetHub account, not any memory. */
+  deleteAccount(): Promise<Account>;
 }

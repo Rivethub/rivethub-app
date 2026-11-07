@@ -294,3 +294,73 @@ export const modelJobList = z.array(
     queued: z.number(),
   }),
 );
+
+const subjectRef = z.object({ kind: z.enum(["topic", "entity", "session"]), id: z.string(), title: z.string() });
+export type SubjectWire = z.infer<typeof subjectRef>;
+
+export const reviewItem = z.object({
+  id: z.string(),
+  group: z.enum(["conflict", "fact", "filing", "tag", "tidy"]),
+  subject: subjectRef,
+  text: z.string(),
+  before: nullish(z.string()),
+  after: nullish(z.string()),
+  options: nullish(z.array(z.object({ label: z.string(), value: z.string(), source: nullish(factSource) }))),
+  evidence: z.array(z.object({ session: sessionMention, at: timeSchema, quote: z.string(), highlight: nullish(z.string()) })),
+  createdAt: timeSchema,
+});
+export type ReviewWire = z.infer<typeof reviewItem>;
+export const reviewList = z.array(reviewItem);
+
+const changeActor = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("you") }),
+  z.object({ kind: z.literal("wiki-writer") }),
+  z.object({ kind: z.literal("categorizer") }),
+  z.object({ kind: z.literal("summarizer") }),
+  z.object({ kind: z.literal("capture"), harness: z.string() }),
+]);
+
+export const change = z.object({
+  kind: z.enum(["fact", "decision", "new", "filed", "conflict", "tag", "merge"]),
+  subject: subjectRef,
+  text: z.string(),
+  at: timeSchema,
+  actor: changeActor,
+  source: nullish(z.object({ kind: z.literal("session"), id: z.string(), title: z.string() })),
+});
+export type ChangeWire = z.infer<typeof change>;
+export const changeList = z.array(change);
+
+export const todayDigest = z.object({
+  date: z.string(),
+  headline: z.string(),
+  summary: z.string(),
+  needsYou: z.array(reviewItem),
+  reviewCount: z.number(),
+  entries: z.array(z.object({ session: catalogRow, changes: z.array(change) })),
+  activityByDay: z.array(z.object({ date: z.string(), level: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)]) })),
+  recentlyUpdated: z.array(subjectRef),
+  freshness: z.enum(["live", "sample"]),
+});
+
+export const account = z.object({
+  email: nullish(z.string()),
+  updateSource: z.enum(["rivethub-cloud", "github"]),
+  channel: z.enum(["stable", "beta"]),
+  autoDownload: z.boolean(),
+  version: z.string(),
+  pendingUpdate: nullish(z.object({ version: z.string(), notesUrl: z.string() })),
+  crashReports: z.boolean(),
+  usageCounts: z.boolean(),
+});
+
+export const signInStarted = z.object({ requestId: z.string() });
+export const signInProgress = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("pending") }),
+  z.object({ status: z.literal("signed-in"), account }),
+]);
+
+export const hubList = z.array(
+  z.object({ id: z.string(), name: z.string(), kind: z.enum(["local", "team"]), url: z.string(), online: z.boolean(), detail: z.string(), current: z.boolean() }),
+);
+export type AccountWire = z.infer<typeof account>;

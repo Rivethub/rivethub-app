@@ -138,3 +138,39 @@ describe("Connect", () => {
     expect(connect.mock.calls[1]![2]).toBeUndefined();
   });
 });
+
+describe("Account", () => {
+  it("signs out, signs in with an email, and deletes after a confirm", async () => {
+    const { user, client } = renderAt("/settings/account");
+    const card = await screen.findByRole("region", { name: "Account" });
+    expect(within(card).getByText("phil@example.com")).toBeInTheDocument();
+
+    await user.click(within(card).getByRole("button", { name: "Sign out" }));
+    await within(card).findByText("Not signed in");
+
+    const signIn = vi.spyOn(client, "signIn");
+    await user.type(within(card).getByRole("textbox", { name: "Email" }), "new@example.com");
+    await user.click(within(card).getByRole("button", { name: "Send sign-in link" }));
+    await within(card).findByText("new@example.com");
+    expect(signIn).toHaveBeenCalledWith("new@example.com");
+
+    const del = vi.spyOn(client, "deleteAccount");
+    await user.click(within(card).getByRole("button", { name: "Delete account…" }));
+    expect(del).not.toHaveBeenCalled();
+    await user.click(within(card).getByRole("button", { name: "Delete account" }));
+    await within(card).findByText("Not signed in");
+    expect(del).toHaveBeenCalledOnce();
+  });
+});
+
+describe("History", () => {
+  it("lists a topic's changes from the client", async () => {
+    renderAt("/topics/rh-08?tab=history");
+    expect(await screen.findAllByText("Decision")).not.toHaveLength(0);
+  });
+
+  it("lists an entity's changes on its History tab", async () => {
+    renderAt("/entities/nas-01?tab=history");
+    expect(await screen.findByRole("heading", { name: "Timeline" })).toBeInTheDocument();
+  });
+});

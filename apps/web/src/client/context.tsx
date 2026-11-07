@@ -1,4 +1,4 @@
-import type { Change, CrashReport, IsoTime, MemoryClient, SubjectRef, TopicId } from "@rivethub/contracts";
+import type { CrashReport, IsoTime, MemoryClient, SubjectRef } from "@rivethub/contracts";
 import { createContext, useContext, type ReactNode } from "react";
 
 /**
@@ -10,9 +10,7 @@ export interface MemoryClientExtras {
   pins?(): Promise<SubjectRef[]>;
   setPinned?(ref: SubjectRef, pinned: boolean): Promise<void>;
   libraryCounts?(): Promise<{ topics: number; entities: number; sessions: number }>;
-  topicHistory?(id: TopicId): Promise<Change[]>;
   lastCrashReport?(): Promise<{ report: CrashReport; sentAt: IsoTime } | null>;
-  requestSignIn?(email: string): Promise<void>;
 }
 
 export type AppClient = MemoryClient & MemoryClientExtras;

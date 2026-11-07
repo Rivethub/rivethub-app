@@ -1,10 +1,13 @@
 import type { Capability, MemoryClient } from "@rivethub/contracts";
 import { createHttp, type FetchLike } from "../http.js";
+import { accountApi } from "./account.js";
 import { catalogApi } from "./catalog.js";
 import { entitiesApi } from "./entities.js";
+import { reviewApi } from "./review.js";
 import { searchApi } from "./search.js";
 import { setupApi } from "./setup.js";
 import { sessionsApi } from "./sessions.js";
+import { todayApi } from "./today.js";
 import { topicsApi } from "./topics.js";
 
 export type LiveMethods = Omit<MemoryClient, "capabilities">;
@@ -24,6 +27,10 @@ export interface RhOptions {
 
 /** Routes of which one must answer for a capability to count as live. A 404 with the runtime's "not found" body means the route is absent. */
 const PROBES: Partial<Record<Capability, string[]>> = {
+  today: ["/api/today"],
+  review: ["/api/review"],
+  account: ["/api/account"],
+  hubs: ["/api/hubs"],
   topics: ["/api/topics"],
   entities: ["/api/entities"],
   sessions: ["/api/sessions?limit=1", "/api/harnesses"],
@@ -42,6 +49,9 @@ export function createRhClient(options: RhOptions): RhClient {
   const catalog = catalogApi(http);
   const entities = entitiesApi(http);
   const setup = setupApi(http);
+  const review = reviewApi(http);
+  const today = todayApi(http);
+  const account = accountApi(http);
 
   /** The catalog serves a call when this runtime has it; otherwise the client-side merge does. */
   const viaCatalog = <A extends unknown[], R>(fromCatalog: (...a: A) => Promise<R>, merged: (...a: A) => Promise<R>) =>
@@ -70,6 +80,17 @@ export function createRhClient(options: RhOptions): RhClient {
       setVisibility: sessions.setVisibility,
       keep: async (id, keep) => (keep ? sessions.keep(id, true) : catalog.unkeep(id)),
       search: search.search,
+      today: today.today,
+      changes: today.changes,
+      reviewQueue: review.reviewQueue,
+      decide: review.decide,
+      account: account.account,
+      updateAccount: account.updateAccount,
+      signIn: account.signIn,
+      pollSignIn: account.pollSignIn,
+      signOut: account.signOut,
+      deleteAccount: account.deleteAccount,
+      hubs: account.hubs,
     },
     catalog: catalog.catalog,
     async probe() {

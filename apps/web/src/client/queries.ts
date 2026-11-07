@@ -22,7 +22,7 @@ export const keys = {
   review: ["review"],
   topicTree: ["topics"],
   topic: (id: TopicId) => ["topic", id],
-  topicHistory: (id: TopicId) => ["topic", id, "history"],
+  changes: (subject: TopicId | EntityId) => ["changes", subject],
   entities: (type?: EntityType) => ["entities", type ?? "all"],
   entity: (id: EntityId, asOf?: IsoTime) => ["entity", id, asOf ?? "now"],
   sessions: (q: SessionQuery) => ["sessions", q],
@@ -61,10 +61,9 @@ export const useModelJobs = () => q(keys.modelJobs, (c) => c.modelJobs());
 export const useHubs = () => q(keys.hubs, (c) => c.hubs());
 export const useAccount = () => q(keys.account, (c) => c.account());
 
+export const useChanges = (subject: TopicId | EntityId) => q(keys.changes(subject), (c) => c.changes({ subject }));
+
 /** Extras resolve to `null` when the client does not implement them. */
-export function useTopicHistory(id: TopicId) {
-  return q(keys.topicHistory(id), (c) => (c.topicHistory ? c.topicHistory(id) : Promise.resolve(null)));
-}
 export const usePins = () => q(keys.pins, (c) => (c.pins ? c.pins() : Promise.resolve(null)));
 export const useLibraryCounts = () => q(keys.counts, (c) => (c.libraryCounts ? c.libraryCounts() : Promise.resolve(null)));
 export const useLastCrashReport = () => q(keys.crash, (c) => (c.lastCrashReport ? c.lastCrashReport() : Promise.resolve(null)));
@@ -83,7 +82,7 @@ function useWrite<A, R>(fn: (c: AppClient, arg: A) => Promise<R>, invalidate: (a
   });
 }
 
-const memoryWide: QueryKey[] = [["today"], keys.review, ["topic"], ["entity"], ["session"], ["sessions"], keys.topicTree, keys.counts];
+const memoryWide: QueryKey[] = [["today"], ["changes"], keys.review, ["topic"], ["entity"], ["session"], ["sessions"], keys.topicTree, keys.counts];
 
 export const useDecide = () =>
   useWrite((c, a: { id: ReviewItemId; decision: ReviewDecision }) => c.decide(a.id, a.decision), () => memoryWide);
@@ -93,13 +92,13 @@ export const useUpdateTopic = () =>
     (a) => [keys.topic(a.id), keys.topicTree],
   );
 export const useAddDecision = () =>
-  useWrite((c, a: { id: TopicId; text: string }) => c.addDecision(a.id, a.text), (a) => [keys.topic(a.id), keys.topicHistory(a.id), ["today"]]);
+  useWrite((c, a: { id: TopicId; text: string }) => c.addDecision(a.id, a.text), (a) => [keys.topic(a.id), keys.changes(a.id), ["today"]]);
 export const usePlaceSession = () =>
   useWrite((c, a: { session: SessionId; topic: TopicId | null }) => c.placeSession(a.session, a.topic), () => memoryWide);
 export const useSetFact = () =>
   useWrite(
     (c, a: { entity: EntityId; fact: { id?: FactId; key: string; value: string; pinned: boolean } }) => c.setFact(a.entity, a.fact),
-    (a) => [["entity", a.entity], ["today"]],
+    (a) => [["entity", a.entity], keys.changes(a.entity), ["today"]],
   );
 export const useRenameSession = () =>
   useWrite((c, a: { id: SessionId; title: string }) => c.renameSession(a.id, a.title), (a) => [keys.session(a.id), ["sessions"]]);
@@ -121,6 +120,8 @@ export const useConnectHarness = () =>
   );
 export const useUpdateAccount = () =>
   useWrite((c, patch: Parameters<AppClient["updateAccount"]>[0]) => c.updateAccount(patch), () => [keys.account]);
+export const useSignOut = () => useWrite((c, _: void) => c.signOut(), () => [keys.account]);
+export const useDeleteAccount = () => useWrite((c, _: void) => c.deleteAccount(), () => [keys.account]);
 export const useSetPinned = () =>
   useWrite(
     (c, a: { ref: SubjectRef; pinned: boolean }) => (c.setPinned ? c.setPinned(a.ref, a.pinned) : Promise.resolve()),

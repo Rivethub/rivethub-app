@@ -64,6 +64,7 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
   const world: World = buildWorld();
   const now = options.now ?? (() => NOW);
   let serial = 0;
+  let pendingEmail: string | undefined;
   const nextId = (prefix: string) => `${prefix}-${++serial}`;
 
   const topicById = (id: string): TopicRec => {
@@ -303,6 +304,16 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       world.effects.delete(id);
     },
 
+    async changes(query) {
+      const from = query.from ?? "";
+      const to = query.to ?? "\uffff";
+      const mine = world.sessions
+        .flatMap((rec) => rec.detail.changed)
+        .filter((c) => c.at >= from && c.at <= to)
+        .filter((c) => query.subject === undefined || c.subject.id === query.subject || c.source?.id === query.subject);
+      return clone(mine.sort((a, b) => b.at.localeCompare(a.at)));
+    },
+
     async topicTree() {
       return clone(buildTree());
     },
@@ -535,6 +546,28 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       for (const [key, value] of Object.entries(patch)) {
         if (value !== undefined) Object.assign(world.account, { [key]: value });
       }
+    },
+
+    async signIn(email) {
+      pendingEmail = email;
+      return { requestId: nextId("signin") };
+    },
+
+    async pollSignIn() {
+      if (pendingEmail === undefined) throw new ClientError("no sign-in is waiting");
+      world.account.email = pendingEmail;
+      pendingEmail = undefined;
+      return { status: "signed-in", account: clone(world.account) };
+    },
+
+    async signOut() {
+      delete world.account.email;
+      return clone(world.account);
+    },
+
+    async deleteAccount() {
+      delete world.account.email;
+      return clone(world.account);
     },
   };
 

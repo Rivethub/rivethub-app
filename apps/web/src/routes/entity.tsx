@@ -1,7 +1,7 @@
-import type { EntityArticle, EntityId, EntitySummary, EntityType, Fact, IsoTime } from "@rivethub/contracts";
+import type { ChangeKind, EntityArticle, EntityId, EntitySummary, EntityType, Fact, IsoTime } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEntities, useEntity, useReviewQueue, useSetFact } from "../client/queries";
+import { useChanges, useEntities, useEntity, useReviewQueue, useSetFact } from "../client/queries";
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, type Tab } from "../components/article";
 import { PinIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
@@ -135,7 +135,7 @@ export function EntityPage() {
               <>
                 <PhoneFacts e={e!} readOnly={!!asOf} />
                 <p className="m-0 font-serif text-[16px] leading-[1.6]">{e!.lead}</p>
-                <Timeline e={e!} />
+                <Timeline rows={e!.timeline} />
               </>
             ) : (
               <EntityTab e={e!} tab={tab} />
@@ -186,14 +186,21 @@ function EntityTitle({ e, phone }: { e: EntityArticle; phone?: boolean }) {
   );
 }
 
-function Timeline({ e }: { e: EntityArticle }) {
-  if (!e.timeline.length) return null;
+interface TimelineRow {
+  at: string;
+  text: string;
+  kind: ChangeKind;
+  source?: { id: string; title: string } | undefined;
+}
+
+function Timeline({ rows }: { rows: TimelineRow[] }) {
+  if (!rows.length) return null;
   return (
     <>
       <H2>Timeline</H2>
       <ol className="m-0 flex list-none flex-col gap-2.5 p-0 font-sans text-[14px]">
-        {e.timeline.map((t, i) => (
-          <li key={i} className="grid grid-cols-[60px_10px_minmax(0,1fr)] items-baseline gap-2.5" style={{ opacity: i === e.timeline.length - 1 && e.timeline.length > 3 ? 0.75 : 1 }}>
+        {rows.map((t, i) => (
+          <li key={i} className="grid grid-cols-[60px_10px_minmax(0,1fr)] items-baseline gap-2.5" style={{ opacity: i === rows.length - 1 && rows.length > 3 ? 0.75 : 1 }}>
             <span className="text-[12px] text-muted-foreground">{shortDate(t.at)}</span>
             <span aria-hidden="true" className="size-2 self-center rounded-full" style={{ background: changeKind[t.kind].color }} />
             <span className="leading-[1.5]">
@@ -207,13 +214,18 @@ function Timeline({ e }: { e: EntityArticle }) {
   );
 }
 
+function EntityHistory({ e }: { e: EntityArticle }) {
+  const changes = useChanges(e.id).data;
+  return <Timeline rows={changes?.length ? changes.map((c) => ({ at: c.at, text: c.text, kind: c.kind, source: c.source })) : e.timeline} />;
+}
+
 function EntityTab({ e, tab }: { e: EntityArticle; tab: TabId }) {
   if (tab === "sessions") return <SessionRows sessions={e.sessions} />;
   if (tab === "history") {
     const previous = e.facts.filter((f) => f.previous);
     return (
       <>
-        <Timeline e={e} />
+        <EntityHistory e={e} />
         {previous.length > 0 && (
           <>
             <H2>Earlier values</H2>
@@ -232,7 +244,7 @@ function EntityTab({ e, tab }: { e: EntityArticle; tab: TabId }) {
   return (
     <>
       <p className="m-0">{e.lead}</p>
-      <Timeline e={e} />
+      <Timeline rows={e.timeline} />
       {e.connected.length > 0 && (
         <>
           <H2>Connected</H2>
