@@ -121,3 +121,20 @@ describe("Entity facts", () => {
     expect(within(row).getByRole("img", { name: "Pinned" })).toBeInTheDocument();
   });
 });
+
+describe("Connect", () => {
+  it("shows the dry-run diff first and writes only when Connect is pressed", async () => {
+    const { user, client } = renderAt("/settings/connections");
+    const connect = vi.spyOn(client, "connectHarness");
+    const fix = (await screen.findAllByRole("button", { name: /Fix/ }))[0]!;
+    await user.click(fix);
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
+    expect(connect.mock.calls[0]![2]).toEqual({ dryRun: true });
+    expect(await within(dialog).findByText(/hooks/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Connect" }));
+    await within(dialog).findByText(/Done\. rh changed this file/);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(connect.mock.calls[1]![2]).toBeUndefined();
+  });
+});

@@ -53,7 +53,7 @@ export function createClient(options: ClientOptions): MemoryClient {
   const liveSession = choose("sessions", "session");
   const liveKeep = choose("sessions", "keep");
 
-  /** rh can only delete for good, so a UI trash is held here and filtered out of live lists. */
+  /** Only a runtime without the session catalog lands here: it can delete for good but not trash, so a UI trash is held and filtered out of live lists. */
   const trashed = new Map<SessionId, SessionSummaryRow>();
 
   const client: MemoryClient = {
@@ -75,9 +75,9 @@ export function createClient(options: ClientOptions): MemoryClient {
     addDecision: choose("topics", "addDecision"),
     placeSession: choose("topics", "placeSession"),
 
-    entities: sample.entities,
-    entity: sample.entity,
-    setFact: sample.setFact,
+    entities: choose("entities", "entities"),
+    entity: choose("entities", "entity"),
+    setFact: choose("entities", "setFact"),
 
     async sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>> {
       const page = await liveSessions(query);
@@ -99,18 +99,32 @@ export function createClient(options: ClientOptions): MemoryClient {
     },
     async trash(ids) {
       if (!(await live("sessions"))) return sample.trash(ids);
+      try {
+        return await rh.methods.trash!(ids);
+      } catch (error) {
+        if (!(error instanceof RouteMissingError)) throw error;
+      }
       for (const id of ids) {
         const detail = await liveSession(id);
         trashed.set(id, { ...toRow(detail), trashed: true, kept: false });
       }
     },
+    async restore(ids) {
+      if (!(await live("sessions"))) return sample.restore(ids);
+      try {
+        return await rh.methods.restore!(ids);
+      } catch (error) {
+        if (!(error instanceof RouteMissingError)) throw error;
+      }
+      for (const id of ids) trashed.delete(id);
+    },
     tag: sample.tag,
 
     search: choose("search", "search"),
 
-    harnesses: sample.harnesses,
-    connectHarness: sample.connectHarness,
-    modelJobs: sample.modelJobs,
+    harnesses: choose("harnesses", "harnesses"),
+    connectHarness: choose("harnesses", "connectHarness"),
+    modelJobs: choose("models", "modelJobs"),
 
     hubs: sample.hubs,
     account: sample.account,

@@ -390,6 +390,13 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       }
       return wait(undefined);
     },
+    async restore(ids) {
+      for (const id of ids) {
+        const s = sessions.get(id);
+        if (s) s.trashed = false;
+      }
+      return wait(undefined);
+    },
     async tag(id, key, value, op) {
       const s = sessions.get(id);
       if (!s) return wait(undefined);
@@ -431,16 +438,16 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     },
 
     harnesses: () => wait(data.harnesses),
-    async connectHarness(id, part) {
+    async connectHarness(id, part, options) {
       const h = data.harnesses.find((x) => x.id === id);
-      if (h) {
+      if (h && !options?.dryRun) {
         if (part === "capture") h.capture.state = "receiving";
         else h.recall.state = "connected";
       }
       const file = h?.path ?? `~/.${id}/config`;
       return wait({
         diff: `--- ${file}\n+++ ${file}\n@@\n+[hooks.session_end]\n+command = "rh capture --harness ${id}"\n+[mcp_servers.rivethub]\n+command = "rh mcp"\n`,
-        backupPath: `${file}.rh-backup`,
+        backupPath: options?.dryRun ? "" : `${file}.rh-backup`,
       });
     },
     modelJobs: () => wait(data.modelJobs),

@@ -180,3 +180,117 @@ export const memorySearch = z.object({
     }),
   ),
 });
+
+export const catalogRow = z.object({
+  id: z.string(),
+  title: z.string(),
+  harness: z.string(),
+  startedAt: timeSchema,
+  endedAt: nullish(timeSchema),
+  messageCount: z.number(),
+  topic: nullish(z.object({ id: z.string(), path: z.array(z.string()) })),
+  visibility: z.string(),
+  kept: z.boolean(),
+  trashed: z.boolean(),
+  memoryState: z.enum(["capturing", "queued", "summarized", "flagged"]),
+  gist: nullish(z.string()),
+  parentId: nullish(z.string()),
+  childCount: nullish(z.number()),
+});
+export type CatalogRow = z.infer<typeof catalogRow>;
+
+export const catalogPage = z.object({ items: z.array(catalogRow), next: nullish(z.string()) });
+
+export const catalogDetail = catalogRow.extend({
+  cwd: nullish(z.string()),
+  resumeCommand: nullish(z.string()),
+  changed: z.array(z.object({ summary: z.string() })).default([]),
+  entities: z.array(z.object({ id: z.string(), title: z.string() })).default([]),
+  tags: z.array(z.object({ key: z.string(), value: z.string(), state: z.enum(["applied", "suggested"]) })).default([]),
+});
+
+const entityType = z.enum(["person", "agent", "machine", "hardware", "model", "service", "software", "repository", "domain", "database"]);
+const sessionMention = z.object({ id: z.string(), title: z.string() });
+const factSource = z.object({ session: sessionMention, at: timeSchema, value: z.string() });
+const shared = z.discriminatedUnion("kind", [z.object({ kind: z.literal("private") }), z.object({ kind: z.literal("space"), space: z.string() })]);
+
+export const entitySummary = z.object({ id: z.string(), title: z.string(), type: entityType, sessionCount: z.number() });
+export const entityList = z.array(entitySummary);
+
+export const entityArticle = entitySummary.extend({
+  aliases: z.array(z.string()),
+  topic: nullish(z.object({ id: z.string(), path: z.array(z.string()) })),
+  visibility: shared,
+  lead: z.string(),
+  facts: z.array(
+    z.object({
+      id: z.string(),
+      key: z.string(),
+      value: z.string(),
+      since: timeSchema,
+      pinned: z.boolean(),
+      sources: z.array(factSource),
+      conflict: nullish(z.object({ candidates: z.array(factSource) })),
+      previous: nullish(z.object({ value: z.string(), until: timeSchema })),
+    }),
+  ),
+  timeline: z.array(
+    z.object({
+      at: timeSchema,
+      text: z.string(),
+      kind: z.enum(["fact", "decision", "new", "filed", "conflict", "tag", "merge"]),
+      source: nullish(sessionMention),
+    }),
+  ),
+  connected: z.array(z.object({ id: z.string(), title: z.string(), sharedSessions: z.number() })),
+  sessions: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      harness: z.string(),
+      startedAt: timeSchema,
+      endedAt: nullish(timeSchema),
+      messageCount: z.number(),
+      topic: nullish(z.object({ id: z.string(), path: z.array(z.string()) })),
+      visibility: shared,
+      kept: z.boolean(),
+      trashed: z.boolean(),
+      memoryState: z.enum(["capturing", "queued", "summarized", "flagged"]),
+      gist: nullish(z.string()),
+    }),
+  ),
+  tags: z.array(z.object({ key: z.string(), value: z.string(), state: z.enum(["applied", "suggested"]) })),
+  freshness: z.enum(["live", "sample"]),
+});
+
+export const harnessStatusList = z.array(
+  z.object({
+    id: z.string(),
+    name: z.string(),
+    found: z.boolean(),
+    path: nullish(z.string()),
+    version: nullish(z.string()),
+    capture: z.object({
+      method: z.enum(["hook", "plugin", "store-scan", "client-push"]),
+      state: z.enum(["receiving", "stale", "not-connected"]),
+      lastCaptureAt: nullish(timeSchema),
+      detail: z.string(),
+    }),
+    recall: z.object({ state: z.enum(["connected", "not-connected", "elsewhere"]), detail: z.string() }),
+    canConnect: z.boolean(),
+  }),
+);
+
+export const connectOutcome = z.object({ diff: z.string(), backupPath: z.string() });
+
+export const modelJobList = z.array(
+  z.object({
+    role: z.enum(["default", "summarizer", "categorizer", "wiki-writer", "embedder"]),
+    provider: nullish(z.string()),
+    model: nullish(z.string()),
+    inheritsDefault: z.boolean(),
+    health: z.enum(["healthy", "slow", "failing"]),
+    detail: z.string(),
+    queued: z.number(),
+  }),
+);

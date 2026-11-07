@@ -444,6 +444,10 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       }
     },
 
+    async restore(ids) {
+      for (const id of ids) sessionById(id).detail.trashed = false;
+    },
+
     async tag(id, key, value, op) {
       const { detail } = sessionById(id);
       const at = detail.tags.findIndex((tag) => tag.key === key && tag.value === value);
@@ -496,7 +500,7 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       return clone(world.harnesses);
     },
 
-    async connectHarness(id: HarnessId, part) {
+    async connectHarness(id: HarnessId, part, options) {
       const harness = world.harnesses.find((candidate) => candidate.id === id);
       if (!harness) throw new NotFoundError(`harness ${id}`);
       if (!harness.canConnect) throw new ClientError(`${harness.name} has nothing to connect`);
@@ -505,6 +509,7 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
         part === "capture"
           ? `--- ${file}\n+++ ${file}\n@@ hooks @@\n+[hooks.rivethub]\n+command = "rh capture --harness ${harness.id}"\n`
           : `--- ${file}\n+++ ${file}\n@@ mcp @@\n+[mcp.rivethub]\n+url = "https://127.0.0.1:5174/mcp"\n`;
+      if (options?.dryRun) return { diff, backupPath: "" };
       if (part === "capture") {
         harness.capture = { ...harness.capture, state: "receiving", lastCaptureAt: now(), detail: "Yes · just now" };
       } else {

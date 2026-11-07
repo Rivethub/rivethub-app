@@ -1,6 +1,6 @@
 import type { Account, HarnessStatus, ModelJob, ModelRole } from "@rivethub/contracts";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAccount, useConnectHarness, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useUpdateAccount } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
@@ -163,32 +163,47 @@ const modelLabel = (j: ModelJob, all: ModelJob[]) => {
 };
 const jobStatus = (j: ModelJob) => `${j.detail}${j.queued ? ` · ${j.queued} waiting` : ""}`;
 
+function DiffView({ diff }: { diff: string }) {
+  return (
+    <pre className="m-0 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6]">
+      {diff.split("\n").map((line, i) => (
+        <span key={i} className="block" style={{ color: line.startsWith("+") ? ok : line.startsWith("-") ? "var(--error)" : undefined }}>{line}</span>
+      ))}
+    </pre>
+  );
+}
+
 function ConnectDialog({ harness, part, onClose }: { harness: HarnessStatus; part: "capture" | "recall"; onClose: () => void }) {
-  const connect = useConnectHarness();
+  const preview = useConnectHarness();
+  const apply = useConnectHarness();
+  const { mutate: previewIt } = preview;
+  useEffect(() => previewIt({ id: harness.id, part, dryRun: true }), [previewIt, harness.id, part]);
+  const failed = preview.isError ? preview.error : apply.isError ? apply.error : null;
+  const unchanged = preview.data !== undefined && preview.data.diff.trim() === "";
   return (
     <Modal label={`Connect ${harness.name}`} onClose={onClose} className="gap-3 p-5">
       <h2 className="m-0 text-[16px] font-semibold">{part === "capture" ? "Capture" : "Recall"} for {harness.name}</h2>
-      {connect.data ? (
+      {apply.data ? (
         <>
-          <p className="m-0 text-muted-foreground">Done. rh changed this file and kept a backup at <code className="font-mono text-[12px]">{connect.data.backupPath}</code>.</p>
-          <pre className="m-0 max-h-72 overflow-auto rounded-lg bg-code p-3 font-mono text-[12px] leading-[1.6]">
-            {connect.data.diff.split("\n").map((line, i) => (
-              <span key={i} className="block" style={{ color: line.startsWith("+") ? ok : line.startsWith("-") ? "var(--error)" : undefined }}>{line}</span>
-            ))}
-          </pre>
+          <p className="m-0 text-muted-foreground">Done. rh changed this file{apply.data.backupPath ? <> and kept a backup at <code className="font-mono text-[12px]">{apply.data.backupPath}</code></> : null}.</p>
+          <DiffView diff={apply.data.diff} />
           <span className="flex justify-end"><Button variant="primary" size="md" onClick={onClose}>Close</Button></span>
         </>
-      ) : connect.isError ? (
-        <ErrorNote error={connect.error} />
+      ) : failed ? (
+        <>
+          <ErrorNote error={failed} />
+          <span className="flex justify-end"><Button size="md" onClick={onClose}>Close</Button></span>
+        </>
       ) : (
         <>
           <p className="m-0 leading-[1.5] text-muted-foreground">
-            rh adds its {part === "capture" ? "hook" : "MCP entry"} to <code className="font-mono text-[12px]">{harness.path ?? harness.capture.detail}</code> only if it is missing, and keeps a backup of the file first. You will see the change it made.
+            rh adds its {part === "capture" ? "hook" : "MCP entry"} to <code className="font-mono text-[12px]">{harness.path ?? harness.capture.detail}</code> only if it is missing, and keeps a backup of the file first. This is the change it will make.
           </p>
+          {preview.data ? <DiffView diff={unchanged ? "Nothing to change. It is already set up." : preview.data.diff} /> : <Loading />}
           <span className="flex justify-end gap-2">
             <Button size="md" onClick={onClose}>Cancel</Button>
-            <Button variant="primary" size="md" disabled={connect.isPending} onClick={() => connect.mutate({ id: harness.id, part })}>
-              {connect.isPending ? "Connecting…" : "Connect"}
+            <Button variant="primary" size="md" disabled={!preview.data || unchanged || apply.isPending} onClick={() => apply.mutate({ id: harness.id, part })}>
+              {apply.isPending ? "Connecting…" : "Connect"}
             </Button>
           </span>
         </>

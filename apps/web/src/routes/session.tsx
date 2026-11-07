@@ -1,7 +1,7 @@
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
+import { useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
 import { ArticleBar, ArticleTabs, Crumbs, MobileBack } from "../components/article";
 import { EditableText } from "../components/editable";
 import { FolderIcon, KeepIcon, ShareIcon, TrashIcon } from "../components/icons";
@@ -52,6 +52,7 @@ function SessionList({ view, text, selected, phone }: { view: View; text: string
             >
               <span className="flex justify-between text-[12px] text-muted-foreground"><span>{s.harness}</span><span>{time(s.startedAt)}</span></span>
               <span className="truncate">{s.title}</span>
+              {s.childCount ? <span className="text-[12px] text-muted-foreground">{subagents(s.childCount)}</span> : null}
               <span className="text-[12px]" style={{ color: s.topic ? "var(--muted-foreground)" : "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
             </Link>
           ))}
@@ -144,6 +145,7 @@ export function SessionPage() {
   const s = useSession(sessionId as SessionId);
   const keep = useKeep();
   const trash = useTrash();
+  const restore = useRestore();
   const navigate = useNavigate();
   const range: [number, number] | undefined = search.from !== undefined ? [search.from, search.to ?? search.from] : undefined;
   const d = s.data;
@@ -178,7 +180,7 @@ export function SessionPage() {
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
               {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} phone />}
             </div>
-            <PhoneActions d={d!} onTrash={doTrash} />
+            <PhoneActions d={d!} onTrash={doTrash} onRestore={() => restore.mutate([d!.id])} />
           </>
         )}
       </Frame>
@@ -192,7 +194,11 @@ export function SessionPage() {
           <ArticleBar crumbs={<Crumbs items={[{ label: "Sessions", to: "/sessions" }, { label: d!.title }]} />}>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined })} />
             <Button className="ml-2" aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
-            <Button variant="danger" onClick={doTrash} disabled={d!.trashed}>{d!.trashed ? "In trash" : "Trash"}</Button>
+            {d!.trashed ? (
+              <Button onClick={() => restore.mutate([d!.id])} disabled={restore.isPending}>Restore</Button>
+            ) : (
+              <Button variant="danger" onClick={doTrash}>Trash</Button>
+            )}
           </ArticleBar>
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
@@ -203,6 +209,8 @@ export function SessionPage() {
     </Frame>
   );
 }
+
+const subagents = (n: number) => `${n} subagent${n === 1 ? "" : "s"}`;
 
 function SessionHeader({ d }: { d: SessionDetail }) {
   const rename = useRenameSession();
@@ -218,6 +226,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
           {d.endedAt ? `–${time(d.endedAt)}` : ""} · {d.messageCount} messages{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
         </span>
+        {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
       </div>
       {d.resumeCommand && (
         <>
@@ -492,7 +501,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
   );
 }
 
-function PhoneActions({ d, onTrash }: { d: SessionDetail; onTrash: () => void }) {
+function PhoneActions({ d, onTrash, onRestore }: { d: SessionDetail; onTrash: () => void; onRestore: () => void }) {
   const keep = useKeep();
   const [sheet, setSheet] = useState<"file" | "share" | null>(null);
   const btn = "flex min-h-12 flex-col items-center justify-center gap-0.5 border-0 bg-transparent text-[12px]";
@@ -501,7 +510,11 @@ function PhoneActions({ d, onTrash }: { d: SessionDetail; onTrash: () => void })
       <button type="button" className={btn} onClick={() => setSheet("file")}><FolderIcon size={20} />File</button>
       <button type="button" className={btn} onClick={() => setSheet("share")}><ShareIcon size={20} />Share</button>
       <button type="button" className={cx(btn, d.kept && "text-primary")} aria-pressed={d.kept} onClick={() => keep.mutate({ id: d.id, keep: !d.kept })}><KeepIcon size={20} />{d.kept ? "Kept" : "Keep"}</button>
-      <button type="button" className={cx(btn, "text-error")} onClick={onTrash}><TrashIcon size={20} />Trash</button>
+      {d.trashed ? (
+        <button type="button" className={btn} onClick={onRestore}><TrashIcon size={20} />Restore</button>
+      ) : (
+        <button type="button" className={cx(btn, "text-error")} onClick={onTrash}><TrashIcon size={20} />Trash</button>
+      )}
       {sheet && (
         <Modal label={sheet === "file" ? "File this session" : "Share this session"} placement="sheet" onClose={() => setSheet(null)} className="gap-3 px-4">
           <span className="text-[17px] font-semibold">{sheet === "file" ? "File under" : "Shared with"}</span>

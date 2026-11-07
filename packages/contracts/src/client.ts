@@ -78,13 +78,16 @@ export interface MemoryClient {
   renameSession(id: SessionId, title: string): Promise<void>;
   setVisibility(id: SessionId, visibility: Visibility): Promise<void>;
   keep(id: SessionId, keep: boolean): Promise<void>;
+  /** Moves sessions to the trash. Reversible with `restore`; nothing is deleted for good. */
   trash(ids: SessionId[]): Promise<void>;
+  restore(ids: SessionId[]): Promise<void>;
   tag(id: SessionId, key: string, value: string, op: "add" | "remove" | "accept" | "reject"): Promise<void>;
 
   search(text: string): Promise<SearchResults>;
 
   harnesses(): Promise<HarnessStatus[]>;
-  connectHarness(id: HarnessId, part: "capture" | "recall"): Promise<{ diff: string; backupPath: string }>;
+  /** With `dryRun` nothing is written: the diff is what connecting would change, and `backupPath` is empty. */
+  connectHarness(id: HarnessId, part: "capture" | "recall", options?: { dryRun?: boolean }): Promise<{ diff: string; backupPath: string }>;
   modelJobs(): Promise<ModelJob[]>;
 
   hubs(): Promise<Hub[]>;

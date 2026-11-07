@@ -50,6 +50,10 @@ export interface SessionSummaryRow {
   trashed: boolean;
   memoryState: "capturing" | "queued" | "summarized" | "flagged";
   gist?: string;
+  /** Set on a subagent session: the session that spawned it. */
+  parentId?: SessionId;
+  /** Set on a session that spawned subagents. Absent when it has none. */
+  childCount?: number;
 }
 
 export type TranscriptPart =

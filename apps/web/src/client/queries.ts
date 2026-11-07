@@ -108,13 +108,17 @@ export const useSetVisibility = () =>
 export const useKeep = () =>
   useWrite((c, a: { id: SessionId; keep: boolean }) => c.keep(a.id, a.keep), (a) => [keys.session(a.id), ["sessions"]]);
 export const useTrash = () => useWrite((c, ids: SessionId[]) => c.trash(ids), () => memoryWide);
+export const useRestore = () => useWrite((c, ids: SessionId[]) => c.restore(ids), () => memoryWide);
 export const useTag = () =>
   useWrite(
     (c, a: { id: SessionId; key: string; value: string; op: "add" | "remove" | "accept" | "reject" }) => c.tag(a.id, a.key, a.value, a.op),
     (a) => [keys.session(a.id)],
   );
 export const useConnectHarness = () =>
-  useWrite((c, a: { id: HarnessId; part: "capture" | "recall" }) => c.connectHarness(a.id, a.part), () => [keys.harnesses]);
+  useWrite(
+    (c, a: { id: HarnessId; part: "capture" | "recall"; dryRun?: boolean }) => c.connectHarness(a.id, a.part, a.dryRun ? { dryRun: true } : undefined),
+    (a) => (a.dryRun ? [] : [keys.harnesses]),
+  );
 export const useUpdateAccount = () =>
   useWrite((c, patch: Parameters<AppClient["updateAccount"]>[0]) => c.updateAccount(patch), () => [keys.account]);
 export const useSetPinned = () =>

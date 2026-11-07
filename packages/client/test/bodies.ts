@@ -119,3 +119,74 @@ export const memorySearchBody = {
 export const trashBody = {
   candidates: [{ session: "claude-code:s-9", harness: "claude-code", title: "test", updatedAt: "2026-10-30T09:01:00.000Z", reason: "one-word-reply", userTurns: 1, reply: "ok" }],
 };
+
+/** crates/wire/src/gateway/session_catalog.rs: SessionSummaryPage. Optional fields are skipped, not null. */
+export const catalogPageBody = {
+  items: [
+    { id: "claude-code:s-1", title: "Wire the stream", harness: "claude-code", startedAt: "2026-11-06T09:00:00Z", endedAt: "2026-11-06T10:30:00Z", messageCount: 42, topic: { id: "t-b", path: ["RivetHub", "rh runtime"] }, visibility: "private", kept: true, trashed: false, memoryState: "summarized", gist: "Wired the capture stream.", childCount: 2 },
+    { id: "claude-code:agent-7", title: "Explore the store", harness: "claude-code", startedAt: "2026-11-06T09:10:00Z", messageCount: 5, visibility: "team-1", kept: false, trashed: false, memoryState: "capturing", parentId: "claude-code:s-1" },
+  ],
+  next: "1788685800000.claude-code:agent-7",
+};
+
+export const catalogDetailBody = {
+  ...catalogPageBody.items[0],
+  cwd: "/home/phil/rivethub",
+  resumeCommand: "claude --resume s-1",
+  changed: [],
+  entities: [],
+  tags: [],
+};
+
+/** crates/wire/src/gateway/entities.rs: EntitySummary[] and EntityArticle. */
+export const entityListBody = [
+  { id: "nas-01", title: "nas-01", type: "machine", sessionCount: 3 },
+  { id: "rh", title: "rh", type: "software", sessionCount: 9 },
+];
+
+export const entityArticleBody = {
+  id: "nas-01",
+  title: "nas-01",
+  type: "machine",
+  sessionCount: 3,
+  aliases: ["nas"],
+  topic: { id: "t-d", path: ["Home lab"] },
+  visibility: { kind: "space", space: "team-1" },
+  lead: "The home NAS.",
+  facts: [
+    {
+      id: "f-1", key: "backup window", value: "03:00", since: "2026-11-05T08:00:00Z", pinned: true,
+      sources: [{ session: { id: "claude-code:s-1", title: "Wire the stream" }, at: "2026-11-05T08:00:00Z", value: "03:00" }],
+      previous: { value: "02:30", until: "2026-11-05T08:00:00Z" },
+    },
+    {
+      id: "f-2", key: "pool", value: "tank", since: "2026-11-04T08:00:00Z", pinned: false, sources: [],
+      conflict: { candidates: [{ session: { id: "claude-code:s-1", title: "Wire the stream" }, at: "2026-11-04T08:00:00Z", value: "tank" }, { session: { id: "codex:c-1", title: "NAS check" }, at: "2026-11-04T09:00:00Z", value: "pool0" }] },
+    },
+  ],
+  timeline: [
+    { at: "2026-11-05T08:00:00Z", text: "Moved backup to 03:00", kind: "fact", source: { id: "claude-code:s-1", title: "Wire the stream" } },
+    { at: "2026-11-01T08:00:00Z", text: "First seen", kind: "new" },
+  ],
+  connected: [{ id: "rh", title: "rh", sharedSessions: 2 }],
+  sessions: [
+    { id: "claude-code:s-1", title: "Wire the stream", harness: "claude-code", startedAt: "2026-11-06T09:00:00Z", endedAt: "2026-11-06T10:30:00Z", messageCount: 42, topic: { id: "t-b", path: ["RivetHub"] }, visibility: { kind: "private" }, kept: false, trashed: false, memoryState: "summarized", gist: "Wired it." },
+  ],
+  tags: [{ key: "area", value: "storage", state: "suggested" }],
+  freshness: "live",
+};
+
+/** kernel harness_setup.rs: HarnessStatus[] (capture.method and states are kebab-case). */
+export const captureStatusBody = [
+  { id: "claude-code", name: "Claude Code", found: true, path: "/home/phil/.claude/settings.json", version: "2.1.0", capture: { method: "hook", state: "receiving", lastCaptureAt: "2026-11-06T10:30:00Z", detail: "hook installed; last capture 2026-11-06T10:30:00Z" }, recall: { state: "connected", detail: "MCP entry present" }, canConnect: false },
+  { id: "codex", name: "Codex", found: true, capture: { method: "store-scan", state: "stale", detail: "hook missing; nothing captured yet" }, recall: { state: "not-connected", detail: "no MCP entry" }, canConnect: true },
+];
+
+export const connectOutcomeBody = { diff: "--- a/config.toml\n+++ b/config.toml\n@@\n+[hooks.rivethub]\n", backupPath: "" };
+
+/** crates/wire/src/gateway/memory_models.rs: ModelJob[]. */
+export const modelJobsBody = [
+  { role: "default", provider: "big", model: "big-model", inheritsDefault: false, health: "healthy", detail: "inherited by categorizer, wiki-writer", queued: 0 },
+  { role: "summarizer", inheritsDefault: false, health: "failing", detail: "2 queued", queued: 2 },
+  { role: "wiki-writer", inheritsDefault: true, health: "slow", detail: "", queued: 0 },
+];
