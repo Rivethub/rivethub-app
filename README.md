@@ -1,12 +1,11 @@
 # rivethub-app
 
-Everything in RivetHub that isn't the runtime. The runtime ([rivethub-runtime](https://github.com/philbert440/rivethub-runtime), the `rh` binary) captures sessions from your coding harnesses, stores memory and serves it. This repo holds the apps that use that memory, and the small cloud service they share.
+Everything in RivetHub that isn't the runtime. The runtime ([rivethub-runtime](https://github.com/Rivethub/rivethub-runtime), the `rh` binary) captures sessions from your coding harnesses, stores memory and serves it. This repo holds the apps that use that memory. The sign-in, telemetry and updates service is [rivethub-cloud](https://github.com/Rivethub/rivethub-cloud).
 
 | Path | What it is |
 | --- | --- |
 | `apps/web` | The memory manager in the browser. `rh` serves the built files from `gateway.static_dir`. |
 | `apps/mobile` | The same memory manager as an Expo app for Android and iOS. |
-| `apps/cloud` | `rivethub.cloud`: email sign-in, anonymous telemetry and update manifests. |
 | `packages/contracts` | Types shared by everything here, matching the runtime's HTTP API. |
 | `packages/client` | A typed client for a hub, used by web and mobile. |
 | `integrations/opencode` | An opencode plug-in that tells `rh` when a session finishes a turn. |
