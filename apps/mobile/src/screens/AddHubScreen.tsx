@@ -84,7 +84,7 @@ export function AddHubScreen({ navigation }: Props) {
             Type the hub URL, or scan a pairing code. On the Android emulator this machine is https://10.0.2.2:5174. A phone on the same network needs the machine's LAN address.
           </Text>
           <TextField label="Hub URL" value={url} onChangeText={setUrl} placeholder="https://10.0.2.2:5174" />
-          <TextField label="Name" value={name} onChangeText={setName} placeholder="phildesk" />
+          <TextField label="Name" value={name} onChangeText={setName} placeholder="My desktop" />
           <TextField label="Token, optional" value={token} onChangeText={setToken} placeholder="Bearer token" secure />
           {error ? <Text style={{ color: palette.error, fontSize: 13 }}>{error}</Text> : null}
           <PrimaryButton label={saving ? "Saving…" : "Save hub"} onPress={() => void save()} disabled={saving} />

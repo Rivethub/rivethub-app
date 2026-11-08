@@ -1,5 +1,5 @@
 {
-  "name": "rivethub",
+  "name": "rivethub-app",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.28.5",
