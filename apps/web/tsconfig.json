@@ -5,5 +5,5 @@
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom/vitest"],
     "noEmit": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "fontsource.ts"]
 }
