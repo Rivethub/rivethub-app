@@ -1,7 +1,11 @@
 import { execFile } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer, type RequestListener, type Server } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -136,6 +140,104 @@ describe("fetchRh", () => {
       fetchRh({ lock: lockPinning(sha), target: TARGET, cacheDir, stageDir, download: fakeRelease({ archive: partial, sums: sumsLine(sha) }) }),
     ).rejects.toThrow(/one rivethub-migrate at its top level, found 0/);
     expect(await exists(stageDir)).toBe(false);
+  });
+});
+
+describe("httpDownload", () => {
+  let certFile: string;
+  let https: Server;
+  let http: Server;
+  const httpHits: string[] = [];
+  const origin = (server: Server, scheme: string) => `${scheme}://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  const routes: Record<string, RequestListener> = {
+    "/asset": (_req, res) => res.end("payload"),
+    "/hop": (_req, res) => res.writeHead(302, { location: "/asset" }).end(),
+    "/downgrade": (_req, res) => res.writeHead(302, { location: `${origin(http, "http")}/asset` }).end(),
+    "/loop": (_req, res) => res.writeHead(302, { location: "/loop" }).end(),
+    // Says 1000 bytes, sends 5, then stalls: only a check on Content-Length can stop it.
+    "/declared-large": (_req, res) => res.writeHead(200, { "content-length": 1000 }).write("12345"),
+    // No Content-Length, sends 12 bytes, then stalls: only a check while streaming can stop it.
+    "/streamed-large": (_req, res) => {
+      res.writeHead(200).write("123456");
+      setTimeout(() => res.write("789012"), 50);
+    },
+  };
+
+  const listen = async (server: Server) => {
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    return server;
+  };
+
+  beforeAll(async () => {
+    const keyFile = path.join(fixtures, "key.pem");
+    certFile = path.join(fixtures, "cert.pem");
+    await exec("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=127.0.0.1",
+      "-addext", "subjectAltName=IP:127.0.0.1", "-keyout", keyFile, "-out", certFile]);
+    https = await listen(
+      createHttpsServer({ key: await readFile(keyFile), cert: await readFile(certFile) }, (req, res) => {
+        const route = routes[req.url ?? ""];
+        if (route) route(req, res);
+        else res.writeHead(404).end();
+      }),
+    );
+    http = await listen(
+      createHttpServer((req, res) => {
+        httpHits.push(req.url ?? "");
+        res.end("payload over http");
+      }),
+    );
+  });
+  afterAll(() => {
+    for (const server of [https, http]) server.closeAllConnections();
+    return Promise.all([https, http].map((server) => new Promise((resolve) => server.close(resolve))));
+  });
+  beforeEach(() => {
+    httpHits.length = 0;
+  });
+
+  const fetchRhModule = pathToFileURL(path.join(path.dirname(fileURLToPath(import.meta.url)), "fetch-rh.ts")).href;
+  const runner = `import { httpDownload } from ${JSON.stringify(fetchRhModule)};
+const { url, dest, maxBytes } = JSON.parse(process.env.DOWNLOAD);
+await httpDownload(url, dest, maxBytes);`;
+
+  /** Runs httpDownload in a node that trusts the fixture certificate; resolves to what it wrote, or its error. */
+  async function download(url: string, maxBytes?: number): Promise<{ body: string } | { error: string }> {
+    const dest = path.join(work, "download");
+    const env = { ...process.env, NODE_EXTRA_CA_CERTS: certFile, DOWNLOAD: JSON.stringify({ url, dest, maxBytes }) };
+    try {
+      await exec(process.execPath, ["--input-type=module", "-e", runner], { env, timeout: 4_000 });
+      return { body: await readFile(dest, "utf8") };
+    } catch (error) {
+      const { stderr, killed } = error as { stderr: string; killed: boolean };
+      return { error: killed ? "timed out" : stderr };
+    }
+  }
+
+  it("follows a redirect that stays on https", async () => {
+    expect(await download(`${origin(https, "https")}/hop`)).toEqual({ body: "payload" });
+  });
+
+  it("refuses a redirect from https to http without requesting it", async () => {
+    expect(await download(`${origin(https, "https")}/downgrade`)).toEqual({ error: expect.stringMatching(/refusing http:.*downloads stay on https/) });
+    expect(httpHits).toEqual([]);
+  });
+
+  it("refuses an http URL", async () => {
+    expect(await download(`${origin(http, "http")}/asset`)).toEqual({ error: expect.stringMatching(/downloads stay on https/) });
+    expect(httpHits).toEqual([]);
+  });
+
+  it("gives up after five redirects", async () => {
+    expect(await download(`${origin(https, "https")}/loop`)).toEqual({ error: expect.stringMatching(/more than 5 redirects/) });
+  });
+
+  it("refuses a Content-Length over the limit before reading the body", async () => {
+    expect(await download(`${origin(https, "https")}/declared-large`, 10)).toEqual({ error: expect.stringMatching(/1000 bytes is over the 10-byte limit/) });
+  });
+
+  it("stops reading once the body passes the limit", async () => {
+    expect(await download(`${origin(https, "https")}/streamed-large`, 10)).toEqual({ error: expect.stringMatching(/over the 10-byte limit/) });
   });
 });
 
