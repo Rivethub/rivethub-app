@@ -5,7 +5,7 @@
 // electron-builder runs against that stage with the config below.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmod, cp, lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, cp, lstat, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -23,6 +23,8 @@ export const DESKTOP_APP_ID = "io.rivethub.desktop";
 export const PRODUCT_NAME = "RivetHub";
 export const LINUX_TARGETS = ["AppImage", "deb"] as const;
 export const LINUX_ARCHES = ["x64", "arm64"] as const;
+/** Replaces electron-builder's AppRun in the AppImage; see the script's header for why. */
+const APP_RUN_SOURCE = path.join(desktopDir, "linux/AppRun");
 export type LinuxArch = (typeof LINUX_ARCHES)[number];
 
 /** Repo-relative payloads copied into the app's resources directory, as t3code's DESKTOP_EXTRA_RESOURCES. */
@@ -79,7 +81,7 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
     publish: null,
     // The static AppImage runtime, so hosts with only FUSE 3 (Ubuntu 22.04 and later) don't need libfuse2.
     toolsets: { appimage: "1.0.3" },
-    afterPack: removeSharedWriteAccessAfterPack,
+    afterPack,
     linux: {
       executableName: EXECUTABLE_NAME,
       icon: path.join(repoRoot, "apps/web/public/icons/icon-512.png"),
@@ -93,13 +95,23 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
       syncDesktopName: true,
     },
     // No tray icon, so not electron-builder's default libappindicator3-1 recommend.
-    deb: { depends: DEB_DEPENDS, recommends: [], packageCategory: "utils" },
+    deb: {
+      depends: DEB_DEPENDS,
+      recommends: [],
+      packageCategory: "utils",
+      // afterPack's AppRun is for the AppImage only.
+      fpm: ["--exclude", `opt/${PRODUCT_NAME}/AppRun`],
+    },
   };
 }
 
-// Electron's Linux zips can carry group- or world-writable files, and electron-builder copies
-// their modes into the .deb and AppImage. Same fix as t3code's scripts/linux-after-pack.ts.
-async function removeSharedWriteAccessAfterPack(context: AfterPackContext): Promise<void> {
+async function afterPack(context: AfterPackContext): Promise<void> {
+  // The AppImage target writes its generated AppRun into its stage and then copies the app
+  // directory over it, so this AppRun is the one that ships in the AppImage.
+  await copyFile(APP_RUN_SOURCE, path.join(context.appOutDir, "AppRun"));
+  await chmod(path.join(context.appOutDir, "AppRun"), 0o755);
+  // Electron's Linux zips can carry group- or world-writable files, and electron-builder copies
+  // their modes into the .deb and AppImage. Same fix as t3code's scripts/linux-after-pack.ts.
   await removeSharedWriteAccess(context.appOutDir);
 }
 
