@@ -12,6 +12,9 @@ const TYPES: Record<string, string> = {
   ".webmanifest": "application/manifest+json",
 };
 
+/** rh's policy for the web app (rivethub-runtime CONTRACT note 147), so a page the hub would block fails here too. */
+const HUB_CSP = "default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+
 /**
  * Stands in for rh serving apps/web from `gateway.static_dir` until the
  * backend manager lands: the built web app with an SPA fallback, loopback only.
@@ -19,6 +22,7 @@ const TYPES: Record<string, string> = {
 export async function serveWebBuild(directory: string): Promise<{ origin: string; close: () => Promise<void> }> {
   const root = path.resolve(directory);
   const server: Server = createServer((request, response) => {
+    response.setHeader("content-security-policy", HUB_CSP);
     // Off-origin exits a hostile or broken node could serve; the window must not follow them.
     if (request.url === "/redirect-out") {
       response.writeHead(302, { location: "https://example.com/" }).end();
