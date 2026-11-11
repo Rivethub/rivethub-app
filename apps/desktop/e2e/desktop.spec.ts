@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RivetHubDesktop } from "@rivethub/contracts";
 import { _electron, expect, test, type ElectronApplication } from "@playwright/test";
 
 import { serveWebBuild } from "./webServer";
@@ -76,7 +77,7 @@ test("renders Today from sample data on the node's origin", async () => {
   await app.close();
 });
 
-test("the renderer has no Node and sees only rivethub.relogin", async () => {
+test("the renderer has no Node and sees only rivethub.relogin and rivethub.updates", async () => {
   const app = await launch();
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -87,8 +88,22 @@ test("the renderer has no Node and sees only rivethub.relogin", async () => {
     module: typeof (globalThis as Record<string, unknown>)["module"],
     rivethub: Object.keys((window as unknown as { rivethub: object }).rivethub),
     relogin: typeof (window as unknown as { rivethub: { relogin: unknown } }).rivethub.relogin,
+    updates: Object.keys((window as unknown as { rivethub: { updates: object } }).rivethub.updates),
   }));
-  expect(surface).toEqual({ require: "undefined", process: "undefined", module: "undefined", rivethub: ["relogin"], relogin: "function" });
+  expect(surface).toEqual({
+    require: "undefined",
+    process: "undefined",
+    module: "undefined",
+    rivethub: ["relogin", "updates"],
+    relogin: "function",
+    updates: ["getState", "onState", "setChannel", "restartToUpdate"],
+  });
+  // An unpackaged run with no feed of its own never checks for updates.
+  expect(await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.getState())).toEqual({
+    state: "disabled",
+    channel: "stable",
+    reason: "Updates run only in the packaged app.",
+  });
 
   await app.close();
 });

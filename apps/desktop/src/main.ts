@@ -1,9 +1,11 @@
 import path from "node:path";
 import { app, BrowserWindow, session } from "electron";
 
+import { UPDATE_STATE_CHANNEL } from "./ipc/channels";
 import { registerIpcHandlers } from "./ipc/handlers";
 import { mintLoginCode, signedInUrl } from "./node/login";
 import { parseNodeUrl } from "./node/nodeUrl";
+import { createDesktopUpdates } from "./updates/desktopUpdates";
 import { createMainWindow, unreachablePage } from "./window/mainWindow";
 import { isNodeUrl } from "./window/navigation";
 
@@ -50,7 +52,12 @@ function run(nodeUrl: URL): void {
   void app.whenReady().then(async () => {
     session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(allowPermission(permission)));
     session.defaultSession.setPermissionCheckHandler((_contents, permission) => allowPermission(permission));
-    registerIpcHandlers(origin, openSignedIn);
+    const updates = createDesktopUpdates({
+      settingsFile: path.join(app.getPath("userData"), "update-settings.json"),
+      window: () => mainWindow,
+      onState: (state) => mainWindow?.webContents.send(UPDATE_STATE_CHANNEL, state),
+    });
+    registerIpcHandlers(origin, openSignedIn, updates);
     mainWindow = createMainWindow({
       preloadPath: path.join(__dirname, "preload.cjs"),
       origin,
@@ -61,6 +68,7 @@ function run(nodeUrl: URL): void {
       mainWindow = null;
     });
     await openSignedIn(mainWindow);
+    updates.start();
   });
 }
 

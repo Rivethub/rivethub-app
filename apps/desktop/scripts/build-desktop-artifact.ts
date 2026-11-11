@@ -15,6 +15,7 @@ import { Arch, build, Platform, type AfterPackContext, type Configuration } from
 
 import { EXECUTABLE_NAME, RESOURCE_DIRS } from "../src/bundle/layout.ts";
 import { rhTargetFor } from "../src/rh/rhLock.ts";
+import { channelFeedUrl, UPDATE_FEED_BASE } from "../src/updates/updateFeed.ts";
 
 const desktopDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(desktopDir, "../..");
@@ -66,7 +67,12 @@ export const DEB_DEPENDS = [
   "xdg-utils",
 ];
 
-export function createBuildConfig(options: { electronVersion: string; outputDir: string }): Configuration {
+/** A version such as 0.2.0-nightly.20261111.1 ships on nightly, as in t3code's resolveDesktopUpdateChannel. */
+export function updateChannelFor(version: string): "stable" | "nightly" {
+  return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "stable";
+}
+
+export function createBuildConfig(options: { electronVersion: string; outputDir: string; version: string }): Configuration {
   return {
     appId: DESKTOP_APP_ID,
     productName: PRODUCT_NAME,
@@ -77,8 +83,10 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
     extraResources: DESKTOP_EXTRA_RESOURCES.map(({ from, to }) => ({ from: path.join(repoRoot, from), to })),
     // The bundle has no node_modules; nothing to rebuild.
     npmRebuild: false,
-    // No update feed yet (PR 8 adds get.rivethub.io/desktop); also stops electron-builder inferring a GitHub one.
-    publish: null,
+    // Writes latest-linux.yml (latest-linux-arm64.yml on arm64) beside the packages, for upload to
+    // this channel's directory, and resources/app-update.yml. The app picks the directory at run
+    // time from the user's channel setting.
+    publish: { provider: "generic", url: channelFeedUrl(UPDATE_FEED_BASE, updateChannelFor(options.version)) },
     // The static AppImage runtime, so hosts with only FUSE 3 (Ubuntu 22.04 and later) don't need libfuse2.
     toolsets: { appimage: "1.0.3" },
     afterPack,
@@ -172,7 +180,7 @@ async function main(): Promise<void> {
     const artifacts = await build({
       projectDir: stage,
       targets: Platform.LINUX.createTarget([...LINUX_TARGETS], Arch[arch]),
-      config: createBuildConfig({ electronVersion, outputDir }),
+      config: createBuildConfig({ electronVersion, outputDir, version: desktopPackage.version }),
       publish: "never",
     });
     for (const artifact of artifacts) console.log(artifact);
