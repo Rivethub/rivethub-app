@@ -169,7 +169,10 @@ test("a click spent on a node page can't open the OS browser from the next page"
     a.textContent = "to-meta";
     document.body.prepend(a);
   });
-  await page.click("#to-meta");
+  // /meta-out refreshes to example.com at once and main blocks that navigation, so it never
+  // finishes. Waiting for navigations after the click (the default) hangs whenever the refresh is
+  // scheduled before that wait ends.
+  await page.click("#to-meta", { noWaitAfter: true });
   await expect(page).toHaveURL(`${web.origin}/meta-out`);
   await page.waitForTimeout(500);
   expect(openedExternally()).toEqual([]);
