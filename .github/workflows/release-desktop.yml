@@ -1,5 +1,5 @@
-# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests the packaged
-# AppImage, and uploads both as workflow artifacts. Publishing (GitHub releases,
+# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests both packages,
+# and uploads them as workflow artifacts. Publishing (GitHub releases,
 # get.rivethub.io/desktop) comes later; this workflow publishes nothing.
 name: Release desktop
 
@@ -8,6 +8,11 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "package.json"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/release-desktop.yml"
 
 permissions:
@@ -31,14 +36,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: pnpm
       - name: Cache Electron, electron-builder tools and rh
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/electron
@@ -50,22 +55,30 @@ jobs:
       - name: Build AppImage and .deb
         run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release
 
-      # A build can package fine and still not open. This launches the app from the shipped AppImage.
+      # The AppImage must ship our AppRun, which refuses to start rather than add --no-sandbox.
+      - name: Check the AppImage's AppRun
+        run: RIVETHUB_APPIMAGE="$(ls "$PWD"/release/*.AppImage)" pnpm --filter @rivethub/desktop exec vitest run scripts/appimage-apprun.test.ts
+
+      # A build can package fine and still not open. This launches the app from each package, with
+      # Chromium's sandbox on: ubuntu-22.04 runners allow unprivileged user namespaces. On a runner
+      # that didn't, the smoke would pass --no-sandbox to the .deb's unpacked binary only, and the
+      # AppImage check would fail, because its AppRun refuses to start there.
       - name: Launch check
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb
-          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.AppImage)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check"
+          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.AppImage)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/appimage"
+          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.deb)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/deb"
       - name: Upload launch check output
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-launch-check-linux-${{ matrix.arch }}
           path: ${{ runner.temp }}/desktop-launch-check
           if-no-files-found: ignore
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rivethub-desktop-linux-${{ matrix.arch }}
           path: |
