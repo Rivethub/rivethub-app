@@ -32,10 +32,12 @@ pnpm dev:desktop --sample    # the same, on sample data
 pnpm build:desktop           # builds apps/web, then apps/desktop/dist-electron
 pnpm test:desktop            # Playwright end-to-end; on a headless box: xvfb-run -a pnpm test:desktop
 pnpm dist:desktop:linux --arch x64   # AppImage + .deb in release/ (--arch arm64, --output-dir <dir>)
-xvfb-run -a pnpm smoke:desktop --executable release/RivetHub-0.0.0-x86_64.AppImage
+xvfb-run -a pnpm smoke:desktop --executable release/RivetHub-0.0.0-x86_64.AppImage   # or the .deb
 ```
 
 `dist:desktop:linux` stages the rh pinned in `apps/desktop/rh.lock.json` for the target arch, builds `apps/web` and `apps/desktop`, and packages them with electron-builder. The app's `resources/` holds `rh/` (`rh`, `rivethub-migrate`, rh's `LICENSE`) and `web/` (the `apps/web` build). `smoke:desktop` opens the packaged app on sample data served from that `web/` and checks `resources/rh/rh version`. The `Release desktop` workflow runs both on x64 and arm64 and uploads the AppImage and .deb as workflow artifacts.
+
+The AppImage starts only where unprivileged user namespaces work, which Chromium's sandbox needs there. Elsewhere, such as Ubuntu 24.04 with its default AppArmor policy, its `AppRun` (`apps/desktop/linux/AppRun`) exits with a message pointing to the .deb instead of running the app with `--no-sandbox`. The .deb's postinst installs an AppArmor profile that lets the sandbox run.
 
 `RIVETHUB_DESKTOP_URL` sets the page the window opens. It must be a loopback `http(s)` URL, and the default is `http://127.0.0.1:5174/`. The window can't navigate away from that origin.
 
