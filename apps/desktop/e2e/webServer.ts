@@ -19,6 +19,15 @@ const TYPES: Record<string, string> = {
 export async function serveWebBuild(directory: string): Promise<{ origin: string; close: () => Promise<void> }> {
   const root = path.resolve(directory);
   const server: Server = createServer((request, response) => {
+    // Off-origin exits a hostile or broken node could serve; the window must not follow them.
+    if (request.url === "/redirect-out") {
+      response.writeHead(302, { location: "https://example.com/" }).end();
+      return;
+    }
+    if (request.url === "/meta-out") {
+      response.writeHead(200, { "content-type": TYPES[".html"] }).end('<meta http-equiv="refresh" content="0;url=https://example.com/">');
+      return;
+    }
     const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
     const candidate = path.resolve(root, `.${pathname}`);
     const inside = candidate.startsWith(root + path.sep);
