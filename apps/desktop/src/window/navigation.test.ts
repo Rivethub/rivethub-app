@@ -42,15 +42,15 @@ describe("createUserActivation", () => {
     const c = clock();
     const activation = createUserActivation(c.now);
     expect(activation.consume()).toBe(false);
-    activation.note("mouseMove");
-    activation.note("mouseWheel");
+    activation.notePointer("mouseMove");
+    activation.notePointer("mouseWheel");
     expect(activation.consume()).toBe(false);
   });
 
   it("lets one link out right after a click", () => {
     const c = clock();
     const activation = createUserActivation(c.now);
-    activation.note("mouseUp");
+    activation.notePointer("mouseDown");
     c.advance(ACTIVATION_MS - 1);
     expect(activation.consume()).toBe(true);
     expect(activation.consume()).toBe(false);
@@ -59,8 +59,26 @@ describe("createUserActivation", () => {
   it("expires", () => {
     const c = clock();
     const activation = createUserActivation(c.now);
-    activation.note("rawKeyDown");
+    activation.noteKey("keyDown", "Enter");
     c.advance(ACTIVATION_MS);
+    expect(activation.consume()).toBe(false);
+  });
+
+  it("counts Enter and Space but not other keys or key-ups", () => {
+    const c = clock();
+    const activation = createUserActivation(c.now);
+    activation.noteKey("keyDown", "a");
+    activation.noteKey("keyUp", "Enter");
+    expect(activation.consume()).toBe(false);
+    activation.noteKey("keyDown", " ");
+    expect(activation.consume()).toBe(true);
+  });
+
+  it("forgets a pending activation when the page navigates", () => {
+    const c = clock();
+    const activation = createUserActivation(c.now);
+    activation.notePointer("mouseDown");
+    activation.reset();
     expect(activation.consume()).toBe(false);
   });
 });

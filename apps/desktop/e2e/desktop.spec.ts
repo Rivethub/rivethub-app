@@ -142,6 +142,44 @@ test("only a link the user clicks goes to the OS browser", async () => {
   await app.close();
 });
 
+test("a click spent on a node page can't open the OS browser from the next page", async () => {
+  const app = await launch();
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.evaluate(() => {
+    const a = document.createElement("a");
+    a.id = "to-meta";
+    a.href = "/meta-out";
+    a.textContent = "to-meta";
+    document.body.prepend(a);
+  });
+  await page.click("#to-meta");
+  await expect(page).toHaveURL(`${web.origin}/meta-out`);
+  await page.waitForTimeout(500);
+  expect(openedExternally()).toEqual([]);
+  await app.close();
+});
+
+test("typing in a text box doesn't let the page open the OS browser", async () => {
+  const app = await launch();
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+  await page.evaluate(() => {
+    const input = document.createElement("input");
+    input.id = "box";
+    input.addEventListener("keydown", () => window.open("https://example.com/from-typing"));
+    document.body.prepend(input);
+  });
+  await page.click("#box");
+  await page.waitForTimeout(1100);
+  await page.keyboard.press("a");
+  await page.waitForTimeout(300);
+  expect(openedExternally()).toEqual([]);
+  await app.close();
+});
+
 test("a redirect or meta refresh off the node is dropped and opens nothing", async () => {
   const app = await launch();
   const page = await app.firstWindow();
