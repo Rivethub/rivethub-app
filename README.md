@@ -13,7 +13,7 @@ Everything in RivetHub that isn't the runtime. The runtime ([rivethub-runtime](h
 
 ## Develop
 
-Needs Node 22 or later and pnpm (the version is pinned in `package.json`).
+Needs Node 22.18 or later and pnpm (the version is pinned in `package.json`).
 
 ```sh
 pnpm install
