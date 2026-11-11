@@ -20,10 +20,11 @@ export function parseExternalUrl(raw: string): string | null {
   }
 }
 
-/** How long a click or key press lets the page hand one link to the OS browser. */
+/** How long a click, Enter or Space lets the page hand one link to the OS browser. */
 export const ACTIVATION_MS = 1000;
 
-const ACTIVATING_INPUTS = new Set(["mouseDown", "mouseUp", "rawKeyDown", "keyDown", "touchEnd", "gestureTap"]);
+const ACTIVATING_POINTER = new Set(["mouseDown", "touchEnd", "gestureTap"]);
+const ACTIVATING_KEYS = new Set(["Enter", " "]);
 
 /**
  * Tracks user input main sees, so a link goes to the OS browser only right
@@ -33,8 +34,17 @@ const ACTIVATING_INPUTS = new Set(["mouseDown", "mouseUp", "rawKeyDown", "keyDow
 export function createUserActivation(now: () => number = Date.now) {
   let activatedAt = -Infinity;
   return {
-    note(inputType: string): void {
-      if (ACTIVATING_INPUTS.has(inputType)) activatedAt = now();
+    /** A pointer event main saw (`input-event`): a press or tap activates; moves and scrolls don't. */
+    notePointer(inputType: string): void {
+      if (ACTIVATING_POINTER.has(inputType)) activatedAt = now();
+    },
+    /** A key main saw (`before-input-event`): only Enter or Space, the keys that follow a focused link, activate. */
+    noteKey(inputType: string, key: string): void {
+      if (inputType === "keyDown" && ACTIVATING_KEYS.has(key)) activatedAt = now();
+    },
+    /** Forget any pending activation, so a new page can't spend input given to the old one. */
+    reset(): void {
+      activatedAt = -Infinity;
     },
     consume(): boolean {
       const active = now() - activatedAt < ACTIVATION_MS;

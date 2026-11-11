@@ -37,7 +37,8 @@ export function createMainWindow({ preloadPath, origin, windowStateFile, onLeftN
   // Only a link the user just clicked goes to the OS browser. Redirects, meta
   // refreshes and scripted navigations off the node are dropped.
   const activation = createUserActivation();
-  window.webContents.on("input-event", (_event, input) => activation.note(input.type));
+  window.webContents.on("input-event", (_event, input) => activation.notePointer(input.type));
+  window.webContents.on("before-input-event", (_event, input) => activation.noteKey(input.type, input.key));
   const openIfClicked = (url: string) => {
     const external = parseExternalUrl(url);
     if (external !== null && activation.consume()) void shell.openExternal(external);
@@ -54,8 +55,11 @@ export function createMainWindow({ preloadPath, origin, windowStateFile, onLeftN
   window.webContents.on("will-redirect", (event, url) => {
     if (!isNodeUrl(origin, url)) event.preventDefault();
   });
+  // A new page can't spend input given to the page before it (a click on a
+  // node link followed by that page's meta refresh off the node, say).
   // about:blank and the like commit without will-navigate.
   window.webContents.on("did-navigate", (_event, url) => {
+    activation.reset();
     if (!isNodeUrl(origin, url) && url !== unreachablePage(origin)) onLeftNode(window);
   });
 
