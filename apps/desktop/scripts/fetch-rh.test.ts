@@ -170,6 +170,24 @@ describe("fetchRh", () => {
     expect(await exists(stageDir)).toBe(false);
   });
 
+  it("stages only rh's own bytes when the archive also holds rh/evil", async () => {
+    const rhSrc = path.join(fixtures, "joined-rh-src");
+    const evilSrc = path.join(fixtures, "joined-evil-src");
+    await mkdir(rhSrc, { recursive: true });
+    await mkdir(path.join(evilSrc, "rh"), { recursive: true });
+    await writeFile(path.join(rhSrc, "rh"), "#!/bin/sh\necho rh\n");
+    await writeFile(path.join(rhSrc, "rivethub-migrate"), "#!/bin/sh\n");
+    await writeFile(path.join(rhSrc, "LICENSE"), "license\n");
+    await writeFile(path.join(evilSrc, "rh", "evil"), "echo evil\n");
+    const joined = path.join(fixtures, "joined.tar.gz");
+    await exec("tar", ["-czf", joined, "-C", rhSrc, "rh", "rivethub-migrate", "LICENSE", "-C", evilSrc, "rh/evil"]);
+    const sha = await sha256File(joined);
+
+    await fetchRh({ lock: lockPinning(sha), target: TARGET, cacheDir, stageDir, download: fakeRelease({ archive: joined, sums: sumsLine(sha) }) });
+    expect(await readFile(staged("rh"), "utf8")).toBe("#!/bin/sh\necho rh\n");
+    expect(await readdir(stageDir)).toEqual(["LICENSE", "rh", "rivethub-migrate"]);
+  });
+
   it("refuses a file in the archive over the size limit and keeps the previous stage", async () => {
     await mkdir(stageDir, { recursive: true });
     await writeFile(staged("rh"), "previous build");

@@ -161,7 +161,14 @@ test("a click spent on a node page can't open the OS browser from the next page"
   await app.close();
 });
 
-test("typing in a text box doesn't let the page open the OS browser", async () => {
+/** Types `key` from main with sendInputEvent, so it goes through before-input-event as a real key press does. */
+const typeFromMain = (app: ElectronApplication, key: string) =>
+  app.evaluate(({ BrowserWindow }, key) => {
+    const contents = BrowserWindow.getAllWindows()[0]!.webContents;
+    for (const type of ["keyDown", "char", "keyUp"] as const) contents.sendInputEvent({ type, keyCode: key });
+  }, key);
+
+test("typing a letter in a text box doesn't let the page open the OS browser (Space there still does, as Space on a focused link must)", async () => {
   const app = await launch();
   const page = await app.firstWindow();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -174,7 +181,8 @@ test("typing in a text box doesn't let the page open the OS browser", async () =
   });
   await page.click("#box");
   await page.waitForTimeout(1100);
-  await page.keyboard.press("a");
+  await typeFromMain(app, "a");
+  await expect(page.locator("#box")).toHaveValue("a");
   await page.waitForTimeout(300);
   expect(openedExternally()).toEqual([]);
   await app.close();
