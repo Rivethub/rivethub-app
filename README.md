@@ -30,10 +30,12 @@ The desktop app:
 pnpm dev:desktop             # Vite for apps/web plus Electron pointed at it; /api goes to rh
 pnpm dev:desktop --sample    # the same, on sample data
 pnpm build:desktop           # builds apps/web, then apps/desktop/dist-electron
-pnpm test:desktop            # Playwright end-to-end; on a headless box: xvfb-run -a pnpm test:desktop
+pnpm test:desktop            # Playwright end-to-end; on a headless box: xvfb-run -a -s '-screen 0 1920x1080x24' pnpm test:desktop
 pnpm dist:desktop:linux --arch x64   # AppImage + .deb in release/ (--arch arm64, --output-dir <dir>)
-xvfb-run -a pnpm smoke:desktop --executable release/RivetHub-0.0.0-x86_64.AppImage   # or the .deb
+xvfb-run -a -s '-screen 0 1920x1080x24' pnpm smoke:desktop --executable release/RivetHub-0.0.0-x86_64.AppImage   # or the .deb
 ```
+
+xvfb-run's default screen is 640x480, which is smaller than the window's minimum size; the e2e window-bounds and clipboard tests fail on it.
 
 `dist:desktop:linux` stages the rh pinned in `apps/desktop/rh.lock.json` for the target arch, builds `apps/web` and `apps/desktop`, and packages them with electron-builder. The app's `resources/` holds `rh/` (`rh`, `rivethub-migrate`, rh's `LICENSE`) and `web/` (the `apps/web` build). `smoke:desktop` opens the packaged app on sample data served from that `web/` and checks `resources/rh/rh version`. The `Release desktop` workflow runs both on x64 and arm64 and uploads the AppImage and .deb as workflow artifacts.
 

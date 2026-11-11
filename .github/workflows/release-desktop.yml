@@ -74,8 +74,19 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb
-          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.AppImage)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/appimage"
-          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.deb)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/deb"
+          xvfb-run -a -s '-screen 0 1920x1080x24' pnpm smoke:desktop --executable "$(ls release/*.AppImage)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/appimage"
+          xvfb-run -a -s '-screen 0 1920x1080x24' pnpm smoke:desktop --executable "$(ls release/*.deb)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check/deb"
+
+      # The desktop e2e suite (window, navigation, IPC, and updates against a local https mock feed)
+      # on the dev build that the package step just built.
+      - name: End-to-end tests
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' pnpm --filter @rivethub/desktop exec playwright test
+
+      # Packages a nightly-versioned AppImage + .deb again and checks electron-builder names the
+      # manifest latest-linux*.yml and leaves app-update.yml without a channel.
+      - name: Check a nightly build's update files
+        run: RIVETHUB_PACKAGE_CHECK=1 pnpm --filter @rivethub/desktop exec vitest run scripts/update-manifest.test.ts
+
       - name: Upload launch check output
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -102,21 +113,29 @@ jobs:
   # TODO(Phil) before the first publish:
   #   - Make the `rivethub-io` self-hosted runner available to this repo (it is registered to
   #     Rivethub/rivethub-io only), or register another runner with that label.
-  #   - Add the DEPLOY_SSH_KEY secret to this repo (the same key rivethub-io uses).
+  #   - Create the `desktop-publish` environment with a required reviewer and deployments limited
+  #     to main, and add DEPLOY_SSH_KEY to it as an environment secret (not a repo secret).
+  #   - Make that a desktop-only key: in rivet's authorized_keys on the host, prefix it with
+  #     command="rrsync -wo /var/www/get.rivethub.io/desktop",restrict
+  #     so it can only write under desktop/ and can't touch the website. The paths below are
+  #     then relative to that root.
+  #   - Set the repository variable DEPLOY_KNOWN_HOSTS to the host's known_hosts line(s)
+  #     (ssh-keyscan once from a trusted machine, check the fingerprint).
   #   - Create /var/www/get.rivethub.io/desktop/{stable,nightly} on the host, owned by rivet.
   #   - Set the repository variable DESKTOP_PUBLISH_ENABLED=true.
   publish:
     name: Publish to get.rivethub.io
     needs: linux
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && vars.DESKTOP_PUBLISH_ENABLED == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && vars.DESKTOP_PUBLISH_ENABLED == 'true' }}
     runs-on: [self-hosted, linux, x64, rivethub-io]
+    # A required reviewer on this environment gates the deploy key; a workflow edit can't skip it.
+    environment: desktop-publish
     timeout-minutes: 15
     concurrency:
       group: publish-desktop
       cancel-in-progress: false
     env:
       DEPLOY_HOST: 100.120.143.117
-      FEED_ROOT: /var/www/get.rivethub.io/desktop
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -138,28 +157,28 @@ jobs:
           echo "Publishing ${version} to ${channel}"
           echo "CHANNEL=${channel}" >> "$GITHUB_ENV"
 
+      # The host key is pinned in a repo variable, not trusted on first use.
       - name: Configure deploy SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
         run: |
-          test -n "${DEPLOY_SSH_KEY}" || { echo "::error::DEPLOY_SSH_KEY secret is not set"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "::error::DEPLOY_SSH_KEY is not set in the desktop-publish environment"; exit 1; }
+          test -n "${DEPLOY_KNOWN_HOSTS}" || { echo "::error::DEPLOY_KNOWN_HOSTS repository variable is not set"; exit 1; }
           KEY="${RUNNER_TEMP}/deploy_key"
           printf '%s\n' "${DEPLOY_SSH_KEY}" > "${KEY}"
           chmod 600 "${KEY}"
-          ssh-keyscan -H "${DEPLOY_HOST}" > "${RUNNER_TEMP}/known_hosts" 2>/dev/null
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${RUNNER_TEMP}/known_hosts"
           echo "SSH_CMD=ssh -i ${KEY} -o UserKnownHostsFile=${RUNNER_TEMP}/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
 
-      # Refuse to create the feed directory; it must already exist on the host.
-      - name: Verify the feed directory exists
-        run: ${SSH_CMD} rivet@"${DEPLOY_HOST}" "test -d '${FEED_ROOT}/${CHANNEL}'"
-
       # Packages first, manifests last, so a client never reads a manifest whose files aren't there
-      # yet. No --delete: older packages stay for rollback.
+      # yet. No --delete: older packages stay for rollback. The key's rrsync forced command roots
+      # these paths at /var/www/get.rivethub.io/desktop, and the channel directory must already exist.
       - name: Upload
         run: |
           set -euo pipefail
-          rsync -z --chmod=F644 -e "${SSH_CMD}" dist/*.AppImage dist/*.deb rivet@"${DEPLOY_HOST}":"${FEED_ROOT}/${CHANNEL}/"
-          rsync -z --chmod=F644 -e "${SSH_CMD}" dist/latest-linux.yml dist/latest-linux-arm64.yml rivet@"${DEPLOY_HOST}":"${FEED_ROOT}/${CHANNEL}/"
+          rsync -z --chmod=F644 -e "${SSH_CMD}" dist/*.AppImage dist/*.deb rivet@"${DEPLOY_HOST}":"${CHANNEL}/"
+          rsync -z --chmod=F644 -e "${SSH_CMD}" dist/latest-linux.yml dist/latest-linux-arm64.yml rivet@"${DEPLOY_HOST}":"${CHANNEL}/"
 
       - name: Verify
         run: |

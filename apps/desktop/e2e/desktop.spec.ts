@@ -45,7 +45,7 @@ const openedExternally = (): string[] => {
 };
 
 /**
- * Electron on X11 (run the suite under xvfb-run for a fixed screen) with
+ * Electron on X11 (run the suite under `xvfb-run -a -s '-screen 0 1920x1080x24'`; its default 640x480 screen is smaller than the window) with
  * Wayland and ELECTRON_RUN_AS_NODE stripped, so the host's displays and
  * window manager don't leak into window bounds.
  */
