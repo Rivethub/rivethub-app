@@ -88,7 +88,9 @@ test("the web app loads under the hub's CSP without a violation", async () => {
   await expect(page.getByRole("button", { name: "Copy resume" })).toBeVisible();
   await page.goto(`${web.origin}/?sample`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned \d+ things/);
-  expect(await page.evaluate(() => document.fonts.check('16px "Source Serif 4 Variable"'))).toBe(true);
+  const serif = () =>
+    page.evaluate(() => [...document.fonts].some((face) => face.family.replace(/["']/g, "") === "Source Serif 4 Variable" && face.status === "loaded"));
+  await expect.poll(serif).toBe(true);
   expect(refused).toEqual([]);
   await app.close();
 });
