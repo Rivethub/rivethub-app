@@ -87,6 +87,10 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
     // this channel's directory, and resources/app-update.yml. The app picks the directory at run
     // time from the user's channel setting.
     publish: { provider: "generic", url: channelFeedUrl(UPDATE_FEED_BASE, updateChannelFor(options.version)) },
+    // The channel is the feed directory. Left on, electron-builder would name a prerelease's
+    // manifest after its tag (nightly-linux.yml) and pin app-update.yml to that channel, while the
+    // app always asks for latest-linux.yml.
+    detectUpdateChannel: false,
     // The static AppImage runtime, so hosts with only FUSE 3 (Ubuntu 22.04 and later) don't need libfuse2.
     toolsets: { appimage: "1.0.3" },
     afterPack,
@@ -163,6 +167,16 @@ async function main(): Promise<void> {
   await run("pnpm", ["--filter", "@rivethub/desktop...", "build"], repoRoot);
 
   const desktopPackage = JSON.parse(await readFile(path.join(desktopDir, "package.json"), "utf8")) as { version: string };
+  for (const artifact of await packageLinux({ arch, outputDir, version: desktopPackage.version, targets: LINUX_TARGETS })) console.log(artifact);
+}
+
+/** Packages the already-built dist-electron, staged rh and apps/web build. Returns the artifact paths. */
+export async function packageLinux(options: {
+  arch: LinuxArch;
+  outputDir: string;
+  version: string;
+  targets: readonly (typeof LINUX_TARGETS)[number][];
+}): Promise<string[]> {
   const electronVersion = (createRequire(import.meta.url)("electron/package.json") as { version: string }).version;
   const stage = await mkdtemp(path.join(tmpdir(), "rivethub-desktop-stage-"));
   try {
@@ -170,7 +184,7 @@ async function main(): Promise<void> {
     const stagePackage = {
       name: EXECUTABLE_NAME,
       productName: PRODUCT_NAME,
-      version: desktopPackage.version,
+      version: options.version,
       private: true,
       description: "RivetHub desktop app",
       homepage: "https://rivethub.io",
@@ -179,13 +193,12 @@ async function main(): Promise<void> {
       main: "dist-electron/boot.cjs",
     };
     await writeFile(path.join(stage, "package.json"), `${JSON.stringify(stagePackage, null, 2)}\n`);
-    const artifacts = await build({
+    return await build({
       projectDir: stage,
-      targets: Platform.LINUX.createTarget([...LINUX_TARGETS], Arch[arch]),
-      config: createBuildConfig({ electronVersion, outputDir, version: desktopPackage.version }),
+      targets: Platform.LINUX.createTarget([...options.targets], Arch[options.arch]),
+      config: createBuildConfig({ electronVersion, outputDir: options.outputDir, version: options.version }),
       publish: "never",
     });
-    for (const artifact of artifacts) console.log(artifact);
   } finally {
     await rm(stage, { recursive: true, force: true });
   }
