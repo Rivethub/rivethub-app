@@ -9,3 +9,4 @@ dist-electron
 prod-resources
 test-results
 playwright-report
+release

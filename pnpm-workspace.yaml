@@ -7,3 +7,5 @@ allowBuilds:
   esbuild: true
   "@parcel/watcher": true
   electron: true
+  # electron-builder's Windows installer helper; Linux packaging never runs it.
+  electron-winstaller: false

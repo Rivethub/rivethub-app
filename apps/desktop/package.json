@@ -8,11 +8,13 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev:desktop": "node scripts/dev.mjs",
+    "dist:linux": "node scripts/build-desktop-artifact.ts",
     "fetch-rh": "node scripts/fetch-rh.ts",
     "start": "electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "pnpm --filter @rivethub/desktop... build && playwright test"
+    "test:e2e": "pnpm --filter @rivethub/desktop... build && playwright test",
+    "smoke": "node scripts/smoke-desktop-app.ts"
   },
   "dependencies": {
     "@rivethub/contracts": "workspace:*",
@@ -24,6 +26,7 @@
     "@rivethub/web": "workspace:*",
     "@types/node": "22.20.5",
     "electron": "45.2.3",
+    "electron-builder": "26.18.1",
     "esbuild": "0.28.2",
     "typescript": "~5.9.3",
     "vitest": "5.0.5"
