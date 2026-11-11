@@ -15,7 +15,7 @@ import { Arch, build, Platform, type AfterPackContext, type Configuration } from
 
 import { EXECUTABLE_NAME, RESOURCE_DIRS } from "../src/bundle/layout.ts";
 import { rhTargetFor } from "../src/rh/rhLock.ts";
-import { channelFeedUrl, UPDATE_FEED_BASE } from "../src/updates/updateFeed.ts";
+import { channelFeedUrl, UPDATE_FEED_BASE, updateChannelFor } from "../src/updates/updateFeed.ts";
 
 const desktopDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const repoRoot = path.resolve(desktopDir, "../..");
@@ -66,11 +66,6 @@ export const DEB_DEPENDS = [
   "libxrandr2",
   "xdg-utils",
 ];
-
-/** A version such as 0.2.0-nightly.20261111.1 ships on nightly, as in t3code's resolveDesktopUpdateChannel. */
-export function updateChannelFor(version: string): "stable" | "nightly" {
-  return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "stable";
-}
 
 export function createBuildConfig(options: { electronVersion: string; outputDir: string; version: string }): Configuration {
   return {

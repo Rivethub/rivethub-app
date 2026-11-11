@@ -3,6 +3,15 @@ import type { DesktopUpdateChannel } from "@rivethub/contracts";
 /** Static files: get.rivethub.io/desktop/<channel>/latest-linux.yml (latest-linux-arm64.yml on arm64) beside the packages. */
 export const UPDATE_FEED_BASE = "https://get.rivethub.io/desktop";
 
+/**
+ * A version such as 0.2.0-nightly.20261111.1 is a nightly build, as in t3code's
+ * resolveDesktopUpdateChannel. The build publishes it to nightly/, and the app follows nightly
+ * until the user picks a channel.
+ */
+export function updateChannelFor(version: string): DesktopUpdateChannel {
+  return /-nightly\.\d{8}\.\d+$/.test(version) ? "nightly" : "stable";
+}
+
 /** The channel's generic-provider directory. Updates come over https only. */
 export function channelFeedUrl(base: string, channel: DesktopUpdateChannel): string {
   const url = new URL(base);
