@@ -8,6 +8,9 @@
   },
   "scripts": {
     "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "dev:desktop": "pnpm --filter @rivethub/desktop dev:desktop",
+    "build:desktop": "pnpm --filter @rivethub/desktop... build",
+    "test:desktop": "pnpm --filter @rivethub/desktop test:e2e",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
