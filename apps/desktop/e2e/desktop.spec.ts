@@ -78,13 +78,15 @@ test("renders Today from sample data on the node's origin", async () => {
 });
 
 test("the web app loads under the hub's CSP without a violation", async () => {
-  const app = await launch(`${web.origin}/sessions/s-retention?sample`);
+  const app = await launch();
   const page = await app.firstWindow();
   const refused: string[] = [];
   page.on("console", (message) => {
     if (message.text().includes("Content Security Policy")) refused.push(message.text());
   });
 
+  // Navigate only once the listener is attached, so the first page's violations are seen too.
+  await page.goto(`${web.origin}/sessions/s-retention?sample`);
   await expect(page.getByRole("button", { name: "Copy resume" })).toBeVisible();
   await page.goto(`${web.origin}/?sample`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned \d+ things/);
