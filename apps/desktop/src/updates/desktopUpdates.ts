@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { DesktopUpdateChannel, DesktopUpdateState, IsoTime } from "@rivethub/contracts";
 import { app, dialog, session, shell, type BrowserWindow, type MessageBoxOptions } from "electron";
-import { AppImageUpdater, DebUpdater, type AppUpdater } from "electron-updater";
+import { AppImageUpdater, DebUpdater, type BaseUpdater } from "electron-updater";
 
 import { readUpdateChannel, writeUpdateChannel } from "../settings/updateChannel";
+import { installWithLockHandoff } from "./lockHandoff";
 import { channelFeedUrl, debDownloadUrl, detectInstall, UPDATE_FEED_BASE, type UpdateInstall } from "./updateFeed";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -48,7 +49,7 @@ function readPackageType(): string | null {
   }
 }
 
-function createUpdater(install: Exclude<UpdateInstall, { kind: "unsupported" }>, forceDevUpdateConfig: boolean): AppUpdater {
+function createUpdater(install: Exclude<UpdateInstall, { kind: "unsupported" }>, forceDevUpdateConfig: boolean): BaseUpdater {
   const updater = install.kind === "appimage" ? new AppImageUpdater() : new DebUpdater();
   updater.forceDevUpdateConfig = forceDevUpdateConfig;
   // check() downloads, and only for an AppImage: a .deb only learns the version.
@@ -96,9 +97,13 @@ export function createDesktopUpdates(options: {
 
   const restartToUpdate = () => {
     if (updater === null || state.state !== "ready") throw new Error("No update is ready to install.");
-    // The new copy starts before this one exits; it must be able to take the single-instance lock.
-    app.releaseSingleInstanceLock();
-    updater.quitAndInstall();
+    const lock = { release: () => app.releaseSingleInstanceLock(), acquire: () => app.requestSingleInstanceLock() };
+    // install() starts the new copy and reports failure (also an "error" event) instead of throwing.
+    if (!installWithLockHandoff(lock, () => updater.install(false, true))) {
+      setState({ state: "error", channel, message: "The update couldn't be installed. Download RivetHub again from get.rivethub.io." });
+      throw new Error("The update couldn't be installed.");
+    }
+    app.quit();
   };
 
   let checking = false;
@@ -122,7 +127,7 @@ export function createDesktopUpdates(options: {
     }
   };
 
-  const checkOnce = async (updater: AppUpdater) => {
+  const checkOnce = async (updater: BaseUpdater) => {
     if (state.state === "ready") return;
     const checked = channel;
     const stale = () => recheck || channel !== checked;
@@ -165,6 +170,8 @@ export function createDesktopUpdates(options: {
         detail: "Restart RivetHub to finish updating.",
       }).then((restart) => {
         if (restart && state.state === "ready" && state.version === version) restartToUpdate();
+      }).catch((error: unknown) => {
+        console.error(`RivetHub: ${errorMessage(error)}`);
       });
     } catch (error) {
       if (!stale()) setState({ state: "error", channel: checked, message: errorMessage(error) });
