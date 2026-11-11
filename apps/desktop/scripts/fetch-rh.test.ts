@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, type RequestListener, type Server } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
@@ -23,10 +23,15 @@ let fixtures: string;
 let archive: string;
 let archiveSha: string;
 
-async function makeArchive(name: string, members: Record<string, string>): Promise<string> {
+/** Members are files at mode 0755, or `{ symlink: target }`. */
+async function makeArchive(name: string, members: Record<string, string | { symlink: string }>): Promise<string> {
   const src = path.join(fixtures, `${name}-src`);
   await mkdir(src, { recursive: true });
   for (const [member, body] of Object.entries(members)) {
+    if (typeof body !== "string") {
+      await symlink(body.symlink, path.join(src, member));
+      continue;
+    }
     await writeFile(path.join(src, member), body);
     await chmod(path.join(src, member), 0o755);
   }
@@ -84,9 +89,10 @@ function fakeRelease(files: { archive?: string; sums: string }): Download & { ur
 const sumsLine = (sha: string, name = ASSET) => `${sha}  ${name}\n`;
 const staged = (name: string) => path.join(stageDir, name);
 const exists = (file: string) => access(file).then(() => true, () => false);
+const modeOf = async (file: string) => (await stat(file)).mode & 0o777;
 
 describe("fetchRh", () => {
-  it("stages executable rh and rivethub-migrate from an archive matching the lock and SHA256SUMS", async () => {
+  it("stages executable rh and rivethub-migrate, and rh's LICENSE, from an archive matching the lock and SHA256SUMS", async () => {
     const release = fakeRelease({ sums: sumsLine(OTHER, "rh-9.9.9-aarch64-unknown-linux-gnu.tar.gz") + sumsLine(archiveSha) });
     await expect(fetchRh({ lock: lockPinning(archiveSha), target: TARGET, cacheDir, stageDir, download: release })).resolves.toEqual({ fromCache: false });
 
@@ -96,7 +102,17 @@ describe("fetchRh", () => {
     ]);
     expect((await exec(staged("rh"), ["version"])).stdout).toBe("RivetHub v9.9.9\n");
     expect((await exec(staged("rivethub-migrate"))).stdout).toBe("migrate\n");
-    expect(await exists(staged("LICENSE"))).toBe(false);
+    expect(await readFile(staged("LICENSE"), "utf8")).toBe("license\n");
+    expect(await readdir(stageDir)).toEqual(["LICENSE", "rh", "rivethub-migrate"]);
+  });
+
+  it("makes the stage readable by everyone: the directory and binaries 0755, LICENSE 0644", async () => {
+    await fetchRh({ lock: lockPinning(archiveSha), target: TARGET, cacheDir, stageDir, download: fakeRelease({ sums: sumsLine(archiveSha) }) });
+
+    expect(await modeOf(stageDir)).toBe(0o755);
+    expect(await modeOf(staged("rh"))).toBe(0o755);
+    expect(await modeOf(staged("rivethub-migrate"))).toBe(0o755);
+    expect(await modeOf(staged("LICENSE"))).toBe(0o644);
   });
 
   it("uses the cached archive without the network once it has been verified", async () => {
@@ -132,14 +148,39 @@ describe("fetchRh", () => {
     expect(await exists(path.join(cacheDir, lock().targets[TARGET].sha256))).toBe(false);
   });
 
-  it("refuses an archive without rivethub-migrate", async () => {
-    const partial = await makeArchive("partial.tar.gz", { rh: "#!/bin/sh\n" });
+  it.each(["rivethub-migrate", "LICENSE"])("refuses an archive without %s", async (missing) => {
+    const members = { rh: "#!/bin/sh\n", "rivethub-migrate": "#!/bin/sh\n", LICENSE: "license\n" };
+    delete members[missing as keyof typeof members];
+    const partial = await makeArchive(`without-${missing}.tar.gz`, members);
     const sha = await sha256File(partial);
 
     await expect(
       fetchRh({ lock: lockPinning(sha), target: TARGET, cacheDir, stageDir, download: fakeRelease({ archive: partial, sums: sumsLine(sha) }) }),
-    ).rejects.toThrow(/one rivethub-migrate at its top level, found 0/);
+    ).rejects.toThrow(`one ${missing} at its top level, found 0`);
     expect(await exists(stageDir)).toBe(false);
+  });
+
+  it("refuses an archive whose rh is a symlink", async () => {
+    const linked = await makeArchive("symlink.tar.gz", { rh: { symlink: "/bin/sh" }, "rivethub-migrate": "#!/bin/sh\n", LICENSE: "license\n" });
+    const sha = await sha256File(linked);
+
+    await expect(
+      fetchRh({ lock: lockPinning(sha), target: TARGET, cacheDir, stageDir, download: fakeRelease({ archive: linked, sums: sumsLine(sha) }) }),
+    ).rejects.toThrow(`rh in ${ASSET} is not a regular file`);
+    expect(await exists(stageDir)).toBe(false);
+  });
+
+  it("refuses a file in the archive over the size limit and keeps the previous stage", async () => {
+    await mkdir(stageDir, { recursive: true });
+    await writeFile(staged("rh"), "previous build");
+    const big = await makeArchive("big.tar.gz", { rh: "x".repeat(4096), "rivethub-migrate": "#!/bin/sh\n", LICENSE: "license\n" });
+    const sha = await sha256File(big);
+
+    await expect(
+      fetchRh({ lock: lockPinning(sha), target: TARGET, cacheDir, stageDir, maxFileBytes: 1024, download: fakeRelease({ archive: big, sums: sumsLine(sha) }) }),
+    ).rejects.toThrow(`rh in ${ASSET}: over the 1024-byte limit`);
+    expect(await readFile(staged("rh"), "utf8")).toBe("previous build");
+    expect(await readdir(path.dirname(stageDir))).toEqual(["rh"]);
   });
 });
 
@@ -261,5 +302,6 @@ describe.runIf(process.env["RIVETHUB_FETCH_RH_LIVE"] === "1" && rhTargetFor(proc
   it(`stages the pinned rh ${rhLock.version} for ${TARGET}`, { timeout: 300_000 }, async () => {
     await fetchRh({ lock: rhLock, target: TARGET, cacheDir, stageDir });
     expect((await exec(staged("rh"), ["version"])).stdout).toContain(`RivetHub v${rhLock.version}`);
+    expect(await readFile(staged("LICENSE"), "utf8")).toContain("Apache License");
   });
 });
