@@ -14,20 +14,28 @@ export interface RhPaths {
 }
 
 export function rhPaths(env: NodeJS.ProcessEnv = process.env): RhPaths {
-  const home = env["HOME"] || homedir();
+  const rawHome = env["HOME"] ?? homedir();
+  if (!absoluteWithoutParents(rawHome)) {
+    throw new Error("HOME must be an absolute directory path without '..' components");
+  }
+  const home = withoutTrailingSeparator(normalize(rawHome));
   const override = env["RIVETHUB_HOME"];
-  if (override !== undefined && override !== "" && !absoluteWithoutParents(override)) {
+  if (override !== undefined && !absoluteWithoutParents(override)) {
     throw new Error("RIVETHUB_HOME must be an absolute directory path without '..' components");
   }
-  const hubHome = override ? normalize(override) : join(home, ".rivethub");
+  const hubHome = override !== undefined ? withoutTrailingSeparator(normalize(override)) : join(home, ".rivethub");
   return {
     hubHome,
     config: join(hubHome, "config.yaml"),
     env: join(hubHome, ".env"),
     captureSpool: join(hubHome, "capture-spool"),
-    startLock: join(hubHome, "local-start.lock"),
+    startLock: join(hubHome, "run", "local-start.lock"),
     installedRh: join(home, ".local", "bin", "rh"),
   };
+}
+
+function withoutTrailingSeparator(path: string): string {
+  return path.length > 1 && path.endsWith(sep) ? path.slice(0, -1) : path;
 }
 
 function absoluteWithoutParents(path: string): boolean {
