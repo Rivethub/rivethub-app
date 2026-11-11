@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -62,7 +63,7 @@ function installAppImage(): string {
   return appImage;
 }
 
-async function launch(env: Record<string, string>): Promise<ElectronApplication> {
+function launchOptions(env: Record<string, string>): { args: string[]; env: Record<string, string> } {
   const base: Record<string, string | undefined> = {
     ...process.env,
     RIVETHUB_DESKTOP_URL: `${web.origin}/?sample`,
@@ -75,13 +76,15 @@ async function launch(env: Record<string, string>): Promise<ElectronApplication>
   for (const name of ["ELECTRON_RUN_AS_NODE", "WAYLAND_DISPLAY", "APPIMAGE", "RIVETHUB_DESKTOP_PACKAGE_TYPE"]) {
     if (!(name in env)) delete base[name];
   }
-  return _electron.launch({
-    executablePath: electronPath,
+  return {
     // The mock feed's certificate is self-signed.
     args: [stageApp(), `--user-data-dir=${path.join(work, "user-data")}`, "--ozone-platform=x11", "--ignore-certificate-errors"],
     env: Object.fromEntries(Object.entries(base).filter((e): e is [string, string] => e[1] !== undefined)),
-  });
+  };
 }
+
+const launch = (env: Record<string, string>): Promise<ElectronApplication> =>
+  _electron.launch({ executablePath: electronPath, ...launchOptions(env) });
 
 /** Records each URL shell.openExternal would open (it runs xdg-open on Linux). */
 function fakeXdgOpen(): string {
@@ -139,6 +142,40 @@ test("an AppImage of 0.1.0 downloads 0.1.1, verifies it, asks, and restarts into
   expect(existsSync(appImage)).toBe(false);
   expect(readFileSync(updated, "utf8")).toBe(NEW_APPIMAGE);
   await expect.poll(() => (existsSync(path.join(work, "restarted.log")) ? readFileSync(path.join(work, "restarted.log"), "utf8") : "")).toMatch(/^0\.1\.1/);
+});
+
+test("an install that fails keeps this copy running and takes the single-instance lock back", async () => {
+  publishRelease(feedRoot, { channel: "stable", version: "0.1.1", appImage: NEW_APPIMAGE });
+  feed = await serveUpdateFeed(feedRoot, { protocol: "https" });
+  const appImage = installAppImage();
+  const env = { RIVETHUB_DESKTOP_UPDATE_FEED: feed.feedBase, APPIMAGE: appImage };
+  const app = await launch(env);
+  const page = await app.firstWindow();
+  await stubPrompts(app, 1);
+  feed.release();
+  expect(await settledState(page, ["ready", "error"])).toMatchObject({ state: "ready" });
+
+  // The updater can't remove the old AppImage from a read-only directory.
+  chmodSync(path.dirname(appImage), 0o555);
+  try {
+    await expect(page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate())).rejects.toThrow(
+      /couldn't be installed/,
+    );
+  } finally {
+    chmodSync(path.dirname(appImage), 0o755);
+  }
+  expect(await updateState(page)).toMatchObject({ state: "error", message: expect.stringMatching(/couldn't be installed/) });
+
+  const { args, env: secondEnv } = launchOptions(env);
+  const second = spawn(electronPath, args, { env: secondEnv, stdio: "ignore" });
+  const exited = await Promise.race([
+    new Promise<number | null>((resolve) => second.on("exit", resolve)),
+    new Promise<"still running">((resolve) => setTimeout(() => resolve("still running"), 15_000)),
+  ]);
+  if (exited === "still running") second.kill();
+  expect(exited).toBe(0);
+  expect(app.windows()).toHaveLength(1);
+  await app.close();
 });
 
 test("a download whose sha512 doesn't match the feed is refused", async () => {
