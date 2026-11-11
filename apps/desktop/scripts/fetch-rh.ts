@@ -7,7 +7,7 @@ import { createWriteStream } from "node:fs";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,9 @@ const desktopDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 export const STAGE_DIR = path.join(desktopDir, "prod-resources", "rh");
 export const STAGED_BINARIES = ["rh", "rivethub-migrate"] as const;
 const SUMS = "SHA256SUMS";
+export const MAX_DOWNLOAD_BYTES = 256 * 2 ** 20;
+const MAX_REDIRECTS = 5;
+const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
 export type Download = (url: string, dest: string) => Promise<void>;
 
@@ -92,11 +95,40 @@ async function run(command: string, args: string[]): Promise<string> {
   return (await promisify(execFile)(command, args, { maxBuffer: 1 << 20 })).stdout;
 }
 
-const httpDownload: Download = async (url, dest) => {
-  const response = await fetch(url);
+/** GETs `url` over https only, following at most five redirects that stay on https, and writes at most `maxBytes` to `dest`. */
+export async function httpDownload(url: string, dest: string, maxBytes = MAX_DOWNLOAD_BYTES): Promise<void> {
+  const response = await getHttps(url);
   if (!response.ok || !response.body) throw new Error(`GET ${url}: HTTP ${response.status}`);
-  await pipeline(Readable.fromWeb(response.body as ReadableStream), createWriteStream(dest, { flags: "wx" }));
-};
+  const length = Number(response.headers.get("content-length") ?? 0);
+  if (length > maxBytes) {
+    await response.body.cancel();
+    throw new Error(`GET ${url}: ${length} bytes is over the ${maxBytes}-byte limit`);
+  }
+  await pipeline(Readable.fromWeb(response.body as ReadableStream), atMost(maxBytes, `GET ${url}`), createWriteStream(dest, { flags: "wx" }));
+}
+
+async function getHttps(url: string): Promise<Response> {
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (new URL(url).protocol !== "https:") throw new Error(`refusing ${url}: downloads stay on https`);
+    const response = await fetch(url, { redirect: "manual" });
+    const location = response.headers.get("location");
+    if (!REDIRECTS.has(response.status) || location === null) return response;
+    await response.body?.cancel();
+    url = new URL(location, url).href;
+  }
+  throw new Error(`GET ${url}: more than ${MAX_REDIRECTS} redirects`);
+}
+
+/** Passes bytes through until more than `maxBytes` have gone by, then fails the stream. */
+function atMost(maxBytes: number, what: string): Transform {
+  let seen = 0;
+  return new Transform({
+    transform(chunk: Buffer, _encoding, done) {
+      seen += chunk.length;
+      done(seen > maxBytes ? new Error(`${what}: over the ${maxBytes}-byte limit`) : null, chunk);
+    },
+  });
+}
 
 async function main(): Promise<void> {
   const { values } = parseArgs({ options: { target: { type: "string" }, "cache-dir": { type: "string" } } });
