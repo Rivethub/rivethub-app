@@ -80,7 +80,9 @@ async function stage(archive: string, stageDir: string, maxFileBytes: number): P
     Object.entries(STAGED_FILES).map(async ([name, mode]) => {
       const found = members.filter((member) => member === name || member === `./${name}`);
       if (found.length !== 1) throw new Error(`${path.basename(archive)} should hold one ${name} at its top level, found ${found.length}`);
-      if (!(await run("tar", ["-tvzf", archive, found[0]!])).startsWith("-")) throw new Error(`${name} in ${path.basename(archive)} is not a regular file`);
+      const listed = (await run("tar", ["--no-recursion", "-tvzf", archive, found[0]!])).split("\n").filter(Boolean);
+      if (listed.length !== 1) throw new Error(`${path.basename(archive)} should hold one ${name} at its top level, found ${listed.length}`);
+      if (!listed[0]!.startsWith("-")) throw new Error(`${name} in ${path.basename(archive)} is not a regular file`);
       return { name, mode, member: found[0]! };
     }),
   );
@@ -98,7 +100,7 @@ async function stage(archive: string, stageDir: string, maxFileBytes: number): P
 
 /** Writes one archive member to `dest`, stopping tar once more than `maxBytes` come out. */
 async function extract(archive: string, member: string, dest: string, mode: number, maxBytes: number): Promise<void> {
-  const tar = spawn("tar", ["-xzOf", archive, member], { stdio: ["ignore", "pipe", "pipe"] });
+  const tar = spawn("tar", ["--no-recursion", "-xzOf", archive, member], { stdio: ["ignore", "pipe", "pipe"] });
   let stderr = "";
   tar.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
   const copied = pipeline(tar.stdout, atMost(maxBytes, `${member} in ${path.basename(archive)}`), createWriteStream(dest, { flags: "wx" })).catch(
