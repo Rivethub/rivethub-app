@@ -1,6 +1,6 @@
 import type { Account } from "@rivethub/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { signInWithEmail } from "../lib/signin";
+import { signInWithEmail } from "./signIn";
 
 const account: Account = { email: "phil@example.com", updateSource: "rivethub-cloud", channel: "stable", autoDownload: true, version: "0.8.0", crashReports: true, usageCounts: false };
 

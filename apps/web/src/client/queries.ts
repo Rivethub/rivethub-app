@@ -1,3 +1,4 @@
+import { keys, memoryWideKeys } from "@rivethub/client-runtime/query-keys";
 import type {
   Capability,
   EntityId,
@@ -15,29 +16,6 @@ import type {
 } from "@rivethub/contracts";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { useClient, type AppClient } from "./context";
-
-export const keys = {
-  capabilities: ["capabilities"],
-  today: (date?: string) => ["today", date ?? "now"],
-  review: ["review"],
-  topicTree: ["topics"],
-  topic: (id: TopicId) => ["topic", id],
-  changes: (subject: TopicId | EntityId) => ["changes", subject],
-  entities: (type?: EntityType) => ["entities", type ?? "all"],
-  entity: (id: EntityId, asOf?: IsoTime) => ["entity", id, asOf ?? "now"],
-  sessions: (q: SessionQuery) => ["sessions", q],
-  session: (id: SessionId) => ["session", id],
-  transcript: (id: SessionId) => ["session", id, "transcript"],
-  summaryTree: (id: SessionId) => ["session", id, "summary"],
-  search: (text: string) => ["search", text],
-  harnesses: ["harnesses"],
-  modelJobs: ["modelJobs"],
-  hubs: ["hubs"],
-  account: ["account"],
-  pins: ["pins"],
-  counts: ["counts"],
-  crash: ["crash"],
-} satisfies Record<string, QueryKey | ((...a: never[]) => QueryKey)>;
 
 function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true) {
   const client = useClient();
@@ -82,10 +60,8 @@ function useWrite<A, R>(fn: (c: AppClient, arg: A) => Promise<R>, invalidate: (a
   });
 }
 
-const memoryWide: QueryKey[] = [["today"], ["changes"], keys.review, ["topic"], ["entity"], ["session"], ["sessions"], keys.topicTree, keys.counts];
-
 export const useDecide = () =>
-  useWrite((c, a: { id: ReviewItemId; decision: ReviewDecision }) => c.decide(a.id, a.decision), () => memoryWide);
+  useWrite((c, a: { id: ReviewItemId; decision: ReviewDecision }) => c.decide(a.id, a.decision), () => memoryWideKeys);
 export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
@@ -94,7 +70,7 @@ export const useUpdateTopic = () =>
 export const useAddDecision = () =>
   useWrite((c, a: { id: TopicId; text: string }) => c.addDecision(a.id, a.text), (a) => [keys.topic(a.id), keys.changes(a.id), ["today"]]);
 export const usePlaceSession = () =>
-  useWrite((c, a: { session: SessionId; topic: TopicId | null }) => c.placeSession(a.session, a.topic), () => memoryWide);
+  useWrite((c, a: { session: SessionId; topic: TopicId | null }) => c.placeSession(a.session, a.topic), () => memoryWideKeys);
 export const useSetFact = () =>
   useWrite(
     (c, a: { entity: EntityId; fact: { id?: FactId; key: string; value: string; pinned: boolean } }) => c.setFact(a.entity, a.fact),
@@ -106,8 +82,8 @@ export const useSetVisibility = () =>
   useWrite((c, a: { id: SessionId; visibility: Visibility }) => c.setVisibility(a.id, a.visibility), (a) => [keys.session(a.id), ["sessions"]]);
 export const useKeep = () =>
   useWrite((c, a: { id: SessionId; keep: boolean }) => c.keep(a.id, a.keep), (a) => [keys.session(a.id), ["sessions"]]);
-export const useTrash = () => useWrite((c, ids: SessionId[]) => c.trash(ids), () => memoryWide);
-export const useRestore = () => useWrite((c, ids: SessionId[]) => c.restore(ids), () => memoryWide);
+export const useTrash = () => useWrite((c, ids: SessionId[]) => c.trash(ids), () => memoryWideKeys);
+export const useRestore = () => useWrite((c, ids: SessionId[]) => c.restore(ids), () => memoryWideKeys);
 export const useTag = () =>
   useWrite(
     (c, a: { id: SessionId; key: string; value: string; op: "add" | "remove" | "accept" | "reject" }) => c.tag(a.id, a.key, a.value, a.op),

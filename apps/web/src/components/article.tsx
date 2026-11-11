@@ -1,7 +1,7 @@
+import { dayLabel } from "@rivethub/client-runtime/format";
 import type { SessionSummaryRow } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { dayLabel } from "../lib/format";
 import { BackIcon } from "./icons";
 import { cx } from "./ui";
 

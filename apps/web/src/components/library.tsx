@@ -1,8 +1,9 @@
+import { dayLabel } from "@rivethub/client-runtime/format";
 import type { TopicNode } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { usePins, useTopicTree } from "../client/queries";
-import { dayLabel, subjectHref } from "../lib/format";
+import { subjectHref } from "../lib/format";
 import { MobileHeader, SidebarSection } from "./shell";
 import { cx } from "./ui";
 

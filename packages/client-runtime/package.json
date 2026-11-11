@@ -1,0 +1,34 @@
+{
+  "name": "@rivethub/client-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./format": {
+      "types": "./src/format.ts",
+      "default": "./src/format.ts"
+    },
+    "./hub-list": {
+      "types": "./src/hubList.ts",
+      "default": "./src/hubList.ts"
+    },
+    "./query-keys": {
+      "types": "./src/queryKeys.ts",
+      "default": "./src/queryKeys.ts"
+    },
+    "./sign-in": {
+      "types": "./src/signIn.ts",
+      "default": "./src/signIn.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@rivethub/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "3.2.4"
+  }
+}

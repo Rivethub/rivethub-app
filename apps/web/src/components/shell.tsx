@@ -1,8 +1,10 @@
+import { count } from "@rivethub/client-runtime/format";
+import { canSwitchTo, currentHubSummary } from "@rivethub/client-runtime/hub-list";
 import type { Hub } from "@rivethub/contracts";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount, useHarnesses, useHubs, useLibraryCounts, useModelJobs, usePins, useReviewQueue } from "../client/queries";
-import { count, subjectHref } from "../lib/format";
+import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
 import { useTheme, THEMES } from "../theme";
 import { GearIcon, LibraryIcon, ReviewIcon, SearchIcon, TodayIcon } from "./icons";
@@ -138,13 +140,6 @@ function LibraryAndPins() {
   );
 }
 
-function hubMeta(hubs: Hub[] | undefined, harnessCount: number | undefined) {
-  const current = hubs?.find((h) => h.current);
-  if (!current) return { name: "No hub", meta: "Not connected", online: false };
-  const meta = current.kind === "local" ? `Local hub${harnessCount !== undefined ? ` · ${harnessCount} harnesses` : ""}` : current.detail;
-  return { name: current.name, meta, online: current.online };
-}
-
 export function HubList({ hubs, onPick }: { hubs: Hub[]; onPick?: () => void }) {
   return (
     <>
@@ -160,7 +155,7 @@ export function HubList({ hubs, onPick }: { hubs: Hub[]; onPick?: () => void }) 
           </>
         );
         const cls = cx("flex min-h-14 items-center gap-2 rounded-lg p-2 text-foreground hover:no-underline md:min-h-0", h.current ? "bg-selected" : "hover:bg-accent");
-        if (h.current || !h.online || h.url === "#") {
+        if (!canSwitchTo(h)) {
           return (
             <span key={h.id} role="menuitem" aria-current={h.current || undefined} aria-disabled={!h.current || undefined} className={cx(cls, !h.online && "opacity-70")} onClick={onPick}>
               {body}
@@ -178,7 +173,7 @@ function SidebarFooter() {
   const harnesses = useHarnesses().data;
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const current = hubMeta(hubs, harnesses?.filter((h) => h.capture.state === "receiving").length);
+  const current = currentHubSummary(hubs, harnesses?.filter((h) => h.capture.state === "receiving").length);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
@@ -257,7 +252,7 @@ export function MobileTabs() {
 export function HubChip() {
   const hubs = useHubs().data;
   const [open, setOpen] = useState(false);
-  const current = hubMeta(hubs, undefined);
+  const current = currentHubSummary(hubs, undefined);
   return (
     <>
       <button

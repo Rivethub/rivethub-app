@@ -1,3 +1,4 @@
+import { count, dayLabel, harnessNames, longDay, localDay, shortDate, time } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,7 @@ import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
 import { Frame, Logo } from "../components/shell";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, count, dayLabel, harnessNames, longDay, localDay, shortDate, subjectHref, time } from "../lib/format";
+import { changeKind, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/sessions/$sessionId");
