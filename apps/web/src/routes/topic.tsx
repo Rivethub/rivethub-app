@@ -1,3 +1,4 @@
+import { dayLabel, shortDate, time, whenLabel } from "@rivethub/client-runtime/format";
 import type { TopicArticle, TopicId, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -8,7 +9,7 @@ import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
 import { Chip, ErrorNote, Eyebrow, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, dayLabel, shortDate, time, whenLabel } from "../lib/format";
+import { changeKind } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/topics/$topicId");

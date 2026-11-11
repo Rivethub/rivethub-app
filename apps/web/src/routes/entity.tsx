@@ -1,3 +1,4 @@
+import { dayLabel, entityTypes, localDay, parseDay, shortDate, time } from "@rivethub/client-runtime/format";
 import type { ChangeKind, EntityArticle, EntityId, EntitySummary, EntityType, Fact, IsoTime } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,7 @@ import { Modal } from "../components/modal";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar, SidebarSection } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, dayLabel, entityTypes, localDay, parseDay, shortDate, time } from "../lib/format";
+import { changeKind } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { visibilityLabel } from "./topic";
 

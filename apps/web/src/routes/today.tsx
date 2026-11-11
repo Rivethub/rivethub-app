@@ -1,9 +1,10 @@
+import { localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useReviewQueue, useToday, useTopicTree } from "../client/queries";
 import { Frame, MainSidebar, MobileHeader } from "../components/shell";
 import { Button, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
-import { changeKind, localDay, longDay, parseDay, primaryAction, reviewKindLabel, shortDate, subjectHref, subjectKindLabel, whenLabel } from "../lib/format";
+import { changeKind, reviewKindLabel, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/");

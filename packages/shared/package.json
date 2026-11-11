@@ -1,0 +1,31 @@
+{
+  "name": "@rivethub/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./healthz": {
+      "types": "./src/healthz.ts",
+      "import": "./src/healthz.ts"
+    },
+    "./rhPaths": {
+      "types": "./src/rhPaths.ts",
+      "import": "./src/rhPaths.ts"
+    },
+    "./sha256sums": {
+      "types": "./src/sha256sums.ts",
+      "import": "./src/sha256sums.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "vitest": "3.2.4"
+  }
+}

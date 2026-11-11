@@ -1,10 +1,11 @@
+import { dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
 import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDecide, useReviewQueue } from "../client/queries";
 import { Frame, HubChip, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, KindTag, Loading, SampleBadge } from "../components/ui";
-import { dayLabel, primaryAction, reviewGroups, reviewKindLabel, shortDate, subjectHref } from "../lib/format";
+import { reviewGroups, reviewKindLabel, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/review");
