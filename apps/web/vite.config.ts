@@ -14,6 +14,8 @@ const hub = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  // The hub's CSP is default-src 'self', which blocks data: URLs: never inline assets (fonts included).
+  build: { assetsInlineLimit: 0 },
   server: { proxy: { "/api": hub, "/wiki": hub } },
   preview: { proxy: { "/api": hub, "/wiki": hub } },
   test: {
