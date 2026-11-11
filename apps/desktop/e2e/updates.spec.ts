@@ -39,15 +39,15 @@ test.afterEach(async () => {
 });
 
 /**
- * The app as version 0.1.0: the built main process with a package.json of that version, and
+ * The app at `version` (0.1.0 unless a test says otherwise): the built main process with a package.json of that version, and
  * the dev-app-update.yml electron-updater reads its cache directory name from when unpackaged.
  */
-function stageApp(): string {
+function stageApp(version = "0.1.0"): string {
   const appDir = path.join(work, "app");
   cpSync(path.join(desktopDir, "dist-electron"), path.join(appDir, "dist-electron"), { recursive: true });
   writeFileSync(
     path.join(appDir, "package.json"),
-    JSON.stringify({ name: "rivethub", productName: "RivetHub", version: "0.1.0", main: "dist-electron/boot.cjs" }),
+    JSON.stringify({ name: "rivethub", productName: "RivetHub", version, main: "dist-electron/boot.cjs" }),
   );
   writeFileSync(path.join(appDir, "dev-app-update.yml"), "provider: generic\nurl: https://get.rivethub.io/desktop/stable\nupdaterCacheDirName: rivethub-updater\n");
   return appDir;
@@ -63,14 +63,14 @@ function installAppImage(): string {
   return appImage;
 }
 
-function launchOptions(env: Record<string, string>): { args: string[]; env: Record<string, string> } {
+function launchOptions(env: Record<string, string>, version?: string): { args: string[]; env: Record<string, string> } {
   const base: Record<string, string | undefined> = {
     ...process.env,
     RIVETHUB_DESKTOP_URL: `${web.origin}/?sample`,
     XDG_CACHE_HOME: path.join(work, "cache"),
     RIVETHUB_TEST_OPENED: path.join(work, "opened-externally.log"),
     RIVETHUB_TEST_RESTARTED: path.join(work, "restarted.log"),
-    PATH: `${fakeXdgOpen()}${path.delimiter}${process.env["PATH"] ?? ""}`,
+    PATH: `${fakeBin()}${path.delimiter}${process.env["PATH"] ?? ""}`,
     ...env,
   };
   for (const name of ["ELECTRON_RUN_AS_NODE", "WAYLAND_DISPLAY", "APPIMAGE", "RIVETHUB_DESKTOP_PACKAGE_TYPE"]) {
@@ -78,16 +78,16 @@ function launchOptions(env: Record<string, string>): { args: string[]; env: Reco
   }
   return {
     // The mock feed's certificate is self-signed.
-    args: [stageApp(), `--user-data-dir=${path.join(work, "user-data")}`, "--ozone-platform=x11", "--ignore-certificate-errors"],
+    args: [stageApp(version), `--user-data-dir=${path.join(work, "user-data")}`, "--ozone-platform=x11", "--ignore-certificate-errors"],
     env: Object.fromEntries(Object.entries(base).filter((e): e is [string, string] => e[1] !== undefined)),
   };
 }
 
-const launch = (env: Record<string, string>): Promise<ElectronApplication> =>
-  _electron.launch({ executablePath: electronPath, ...launchOptions(env) });
+const launch = (env: Record<string, string>, version?: string): Promise<ElectronApplication> =>
+  _electron.launch({ executablePath: electronPath, ...launchOptions(env, version) });
 
-/** Records each URL shell.openExternal would open (it runs xdg-open on Linux). */
-function fakeXdgOpen(): string {
+/** Stand-ins on PATH. xdg-open (what shell.openExternal runs on Linux) records each URL. */
+function fakeBin(): string {
   const bin = path.join(work, "bin");
   if (!existsSync(bin)) {
     mkdirSync(bin);
@@ -165,6 +165,12 @@ test("an install that fails keeps this copy running and takes the single-instanc
     chmodSync(path.dirname(appImage), 0o755);
   }
   expect(await updateState(page)).toMatchObject({ state: "error", message: expect.stringMatching(/couldn't be installed/) });
+  // electron-updater ignores further installs this session, so no check runs again and nothing offers a restart.
+  const requestsBefore = feed.requests.length;
+  await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.setChannel("stable"));
+  await page.waitForTimeout(500);
+  expect(await updateState(page)).toMatchObject({ state: "error", message: expect.stringMatching(/couldn't be installed/) });
+  expect(feed.requests).toHaveLength(requestsBefore);
 
   const { args, env: secondEnv } = launchOptions(env);
   const second = spawn(electronPath, args, { env: secondEnv, stdio: "ignore" });
@@ -176,6 +182,36 @@ test("an install that fails keeps this copy running and takes the single-instanc
   expect(exited).toBe(0);
   expect(app.windows()).toHaveLength(1);
   await app.close();
+});
+
+test("a launch during a failing install keeps the lock; the updating copy quits and one window remains", async () => {
+  publishRelease(feedRoot, { channel: "stable", version: "0.1.1", appImage: NEW_APPIMAGE });
+  feed = await serveUpdateFeed(feedRoot, { protocol: "https" });
+  const env = { RIVETHUB_DESKTOP_UPDATE_FEED: feed.feedBase, APPIMAGE: installAppImage() };
+  const first = await launch(env);
+  const page = await first.firstWindow();
+  await stubPrompts(first, 1);
+  feed.release();
+  expect(await settledState(page, ["ready", "error"])).toMatchObject({ state: "ready" });
+
+  // The updater moves the new AppImage into place with `mv`. This one holds the install open until
+  // the second launch is up, then fails it.
+  const [started, go] = [path.join(work, "mv-started"), path.join(work, "mv-go")];
+  writeFileSync(path.join(fakeBin(), "mv"), `#!/bin/sh\n: > '${started}'\nwhile [ ! -e '${go}' ]; do sleep 0.1; done\nexit 1\n`);
+  chmodSync(path.join(fakeBin(), "mv"), 0o755);
+  const firstClosed = first.waitForEvent("close");
+  void page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate()).catch(() => {});
+  await expect.poll(() => existsSync(started)).toBe(true);
+
+  const second = await launch(env);
+  await second.firstWindow();
+  expect(await second.evaluate(({ app }) => app.hasSingleInstanceLock())).toBe(true);
+  writeFileSync(go, "");
+
+  await firstClosed;
+  expect(await second.evaluate(({ app }) => app.hasSingleInstanceLock())).toBe(true);
+  expect(second.windows()).toHaveLength(1);
+  await second.close();
 });
 
 test("a download whose sha512 doesn't match the feed is refused", async () => {
@@ -241,6 +277,20 @@ test("a .deb install is told about 0.1.1 and sent to the download, never downloa
   expect(await prompts(app)).toEqual(["RivetHub 0.1.1 is available"]);
   await expect.poll(() => (existsSync(path.join(work, "opened-externally.log")) ? readFileSync(path.join(work, "opened-externally.log"), "utf8") : "")).toBe(`${downloadUrl}\n`);
   expect(feed.requests.filter((p) => !p.endsWith(".yml"))).toEqual([]);
+  await app.close();
+});
+
+test("a nightly build with no saved channel stays on nightly", async () => {
+  publishRelease(feedRoot, { channel: "nightly", version: "0.2.0-nightly.20261112.1", appImage: NEW_APPIMAGE });
+  publishRelease(feedRoot, { channel: "stable", version: "0.3.0", appImage: NEW_APPIMAGE });
+  feed = await serveUpdateFeed(feedRoot, { protocol: "https" });
+  const app = await launch({ RIVETHUB_DESKTOP_UPDATE_FEED: feed.feedBase, RIVETHUB_DESKTOP_PACKAGE_TYPE: "deb" }, "0.2.0-nightly.20261111.1");
+  const page = await app.firstWindow();
+  await stubPrompts(app, 1);
+  feed.release();
+
+  expect(await settledState(page, ["manual", "error"])).toMatchObject({ state: "manual", channel: "nightly", version: "0.2.0-nightly.20261112.1" });
+  expect(feed.requests.filter((p) => p.includes("/stable/"))).toEqual([]);
   await app.close();
 });
 

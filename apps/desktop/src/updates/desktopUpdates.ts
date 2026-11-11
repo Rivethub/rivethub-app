@@ -6,7 +6,7 @@ import { AppImageUpdater, DebUpdater, type BaseUpdater } from "electron-updater"
 
 import { readUpdateChannel, writeUpdateChannel } from "../settings/updateChannel";
 import { installWithLockHandoff } from "./lockHandoff";
-import { channelFeedUrl, debDownloadUrl, detectInstall, UPDATE_FEED_BASE, type UpdateInstall } from "./updateFeed";
+import { channelFeedUrl, debDownloadUrl, detectInstall, UPDATE_FEED_BASE, updateChannelFor, type UpdateInstall } from "./updateFeed";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** electron-updater makes all its requests on this session (its NET_SESSION_NAME). */
@@ -77,7 +77,7 @@ export function createDesktopUpdates(options: {
   onState: (state: DesktopUpdateState) => void;
 }): DesktopUpdates {
   const { install, feedBase, forceDevUpdateConfig } = updateSource();
-  let channel = readUpdateChannel(options.settingsFile);
+  let channel = readUpdateChannel(options.settingsFile, updateChannelFor(app.getVersion()));
   let state: DesktopUpdateState =
     install.kind === "unsupported" ? { state: "disabled", channel, reason: install.reason } : { state: "idle", channel, checkedAt: null };
   const setState = (next: DesktopUpdateState) => {
@@ -95,14 +95,19 @@ export function createDesktopUpdates(options: {
     return response === 0;
   };
 
+  let installFailed = false;
   const restartToUpdate = () => {
     if (updater === null || state.state !== "ready") throw new Error("No update is ready to install.");
     const lock = { release: () => app.releaseSingleInstanceLock(), acquire: () => app.requestSingleInstanceLock() };
     // install() starts the new copy and reports failure (also an "error" event) instead of throwing.
-    if (!installWithLockHandoff(lock, () => updater.install(false, true))) {
+    const result = installWithLockHandoff(lock, () => updater.install(false, true));
+    if (result === "failed") {
+      // electron-updater ignores install() after a failed one, so this session stops updating.
+      installFailed = true;
       setState({ state: "error", channel, message: "The update couldn't be installed. Download RivetHub again from get.rivethub.io." });
       throw new Error("The update couldn't be installed.");
     }
+    // "lost": a launch during the install took the lock and has its own window, so this copy goes.
     app.quit();
   };
 
@@ -111,7 +116,7 @@ export function createDesktopUpdates(options: {
 
   /** One check at a time. A check asked for meanwhile (a channel change, say) runs next, and the stale result is dropped. */
   const check = async () => {
-    if (updater === null) return;
+    if (updater === null || installFailed) return;
     if (checking) {
       recheck = true;
       return;
@@ -188,7 +193,7 @@ export function createDesktopUpdates(options: {
       if (state.state === "downloading") throw new Error("Wait for the download to finish before changing channels.");
       writeUpdateChannel(options.settingsFile, next);
       channel = next;
-      setState(state.state === "disabled" ? { ...state, channel } : { state: "idle", channel, checkedAt: null });
+      setState(state.state === "disabled" || installFailed ? { ...state, channel } : { state: "idle", channel, checkedAt: null });
       void check();
       return state;
     },

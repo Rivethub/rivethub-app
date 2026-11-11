@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { createBuildConfig, updateChannelFor } from "./build-desktop-artifact";
+import { updateChannelFor } from "../src/updates/updateFeed";
+import { createBuildConfig } from "./build-desktop-artifact";
 
 describe("update feed in the build", () => {
   it("ships nightly versions on nightly and everything else on stable", () => {
