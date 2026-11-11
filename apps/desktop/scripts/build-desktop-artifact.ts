@@ -97,6 +97,8 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
       enableNodeCliInspectArguments: false,
       onlyLoadAppFromAsar: true,
       enableCookieEncryption: true,
+      // The window loads rh over loopback http, never file://.
+      grantFileProtocolExtraPrivileges: false,
     },
     linux: {
       executableName: EXECUTABLE_NAME,
