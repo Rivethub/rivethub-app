@@ -41,6 +41,18 @@ The AppImage starts only where unprivileged user namespaces work, which Chromium
 
 `RIVETHUB_DESKTOP_URL` sets the page the window opens. It must be a loopback `http(s)` URL, and the default is `http://127.0.0.1:5174/`. The window can't navigate away from that origin.
 
+### Desktop updates
+
+The app updates itself with electron-updater from static files on `https://get.rivethub.io/desktop/<channel>/`: `latest-linux.yml` (`latest-linux-arm64.yml` on arm64) next to the packages. There is no cloud service in the path. The channel is `stable` by default. A user opts into `nightly` through `window.rivethub.updates.setChannel`, and the choice is saved in `update-settings.json` in the app's user data. The packaged app checks on startup and every six hours, and only over https. electron-updater rejects a download whose sha512 doesn't match the manifest.
+
+- **AppImage.** The new AppImage downloads in the background. The app then asks before it restarts. Answering "Restart now" (or calling `rivethub.updates.restartToUpdate()`) replaces the AppImage file in place and starts the new one. Nothing installs on quit.
+- **.deb.** dpkg owns the files, so the app can't replace them. It says a new version is available and links to the new .deb in the channel's directory. electron-builder writes a `resources/package-type` file into the .deb, which is how the app tells the two apart.
+- **Unpacked copies and dev runs.** They don't check. An unpackaged run honors `RIVETHUB_DESKTOP_UPDATE_FEED` and `RIVETHUB_DESKTOP_PACKAGE_TYPE` for the end-to-end tests. A packaged app ignores both.
+
+The app's version is independent of rh's. Each app build ships the rh pinned in `apps/desktop/rh.lock.json`, so updating the app is how a desktop user gets a newer rh. On the next start after an update, the app reinstalls `~/.local/bin/rh` from its bundle (the backend manager, PR 5). The updater itself does nothing with rh.
+
+`pnpm dist:desktop:linux` writes the manifests next to the packages. A version like `0.2.0-nightly.20261111.1` builds for `nightly`, and anything else builds for `stable`. Running the `Release desktop` workflow with `publish` set uploads both arches to the channel's directory. That job stays off until `DESKTOP_PUBLISH_ENABLED` is set; see its TODO.
+
 ## Deploy the web app to a hub
 
 ```sh

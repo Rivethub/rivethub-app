@@ -18,12 +18,18 @@ export type SetupState =
 
 export type DesktopUpdateChannel = "stable" | "nightly";
 
+/**
+ * The app's own updates, from static files at get.rivethub.io/desktop/<channel>/.
+ * `manual`: a .deb install can't replace itself, so the user downloads the new package.
+ * `disabled`: a dev build, or an install that isn't the AppImage or the .deb.
+ */
 export type DesktopUpdateState =
+  | { state: "disabled"; channel: DesktopUpdateChannel; reason: string }
   | { state: "idle"; channel: DesktopUpdateChannel; checkedAt: IsoTime | null }
   | { state: "checking"; channel: DesktopUpdateChannel }
-  | { state: "available"; channel: DesktopUpdateChannel; version: string }
   | { state: "downloading"; channel: DesktopUpdateChannel; version: string; percent: number }
   | { state: "ready"; channel: DesktopUpdateChannel; version: string }
+  | { state: "manual"; channel: DesktopUpdateChannel; version: string; downloadUrl: string }
   | { state: "error"; channel: DesktopUpdateChannel; message: string };
 
 /**
@@ -34,4 +40,13 @@ export type DesktopUpdateState =
 export interface RivetHubDesktop {
   /** Main mints a new login code with the owner token and reloads the window through `/login`. */
   relogin: () => Promise<void>;
+  updates: {
+    getState: () => Promise<DesktopUpdateState>;
+    /** Calls `listener` on every change; returns the unsubscribe. */
+    onState: (listener: (state: DesktopUpdateState) => void) => () => void;
+    /** Persists the channel and checks it now. Stable is the default; nightly is opt-in. */
+    setChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
+    /** Quits and installs a `ready` update; rejects in any other state. */
+    restartToUpdate: () => Promise<void>;
+  };
 }

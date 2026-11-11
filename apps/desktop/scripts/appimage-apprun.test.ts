@@ -2,7 +2,7 @@
 // linux/AppRun; with RIVETHUB_APPIMAGE=<RivetHub-*.AppImage> it tests the AppRun packed in that
 // AppImage, as the release workflow does after each build.
 import { execFile, spawnSync } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,5 +72,14 @@ describe(`AppRun${appImage ? ` in ${path.basename(appImage)}` : ""}`, () => {
     expect(run.status).toBe(0);
     expect(run.appArgs).toEqual(["--some-flag", "two words"]);
     expect(run.notification).toBeUndefined();
+  });
+
+  // electron-builder writes the .deb's package-type marker into the shared app directory after
+  // packing the AppImage; if that order changed, the AppImage would only ever notify.
+  it.runIf(appImage)("updates in place: has app-update.yml for get.rivethub.io and no .deb marker", async () => {
+    await exec(path.resolve(appImage!), ["--appimage-extract", "resources/*"], { cwd: dir });
+    const resources = path.join(dir, "squashfs-root/resources");
+    expect(await readFile(path.join(resources, "app-update.yml"), "utf8")).toMatch(/^url: https:\/\/get\.rivethub\.io\/desktop\/(stable|nightly)\/$/m);
+    await expect(access(path.join(resources, "package-type"))).rejects.toThrow();
   });
 });
