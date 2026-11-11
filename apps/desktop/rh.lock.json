@@ -1,0 +1,18 @@
+{
+  "repository": "Rivethub/rivethub-runtime",
+  "version": "0.8.0",
+  "targets": {
+    "x86_64-unknown-linux-gnu": {
+      "asset": "rh-0.8.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "59978393572ac4141d72f86b2fd6d30a8aacf40f0eaa85f4172e826cb070049f"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "asset": "rh-0.8.0-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "2ec035b0e26a7ccce4191b3a2b6f7350b002691bdcac7818fbfb0c72a5370512"
+    },
+    "universal-apple-darwin": {
+      "asset": "rh-0.8.0-universal-apple-darwin.tar.gz",
+      "sha256": "75396ab8f5fea3509358702547e4bf00e101450f03b20637864e8abaed4e01d8"
+    }
+  }
+}
