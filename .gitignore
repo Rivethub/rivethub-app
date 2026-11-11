@@ -6,5 +6,6 @@ dist
 *.tsbuildinfo
 coverage
 dist-electron
+prod-resources
 test-results
 playwright-report
