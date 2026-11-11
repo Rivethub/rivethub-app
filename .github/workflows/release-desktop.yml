@@ -150,10 +150,16 @@ jobs:
           test -f dist/latest-linux.yml && test -f dist/latest-linux-arm64.yml
           version=$(sed -n 's/^version: //p' dist/latest-linux.yml)
           test "${version}" = "$(sed -n 's/^version: //p' dist/latest-linux-arm64.yml)"
-          case "${version}" in
-            *-nightly.*) channel=nightly ;;
-            *) channel=stable ;;
-          esac
+          # Same rule as updateChannelFor in apps/desktop/src/updates/updateFeed.ts. A version that mentions
+          # nightly but doesn't match it would land in nightly/ while the app reads it as stable.
+          if [[ "${version}" =~ -nightly\.[0-9]{8}\.[0-9]+$ ]]; then
+            channel=nightly
+          elif [[ "${version}" == *nightly* ]]; then
+            echo "::error::${version} is not x.y.z-nightly.YYYYMMDD.N, so the app would not treat it as nightly"
+            exit 1
+          else
+            channel=stable
+          fi
           echo "Publishing ${version} to ${channel}"
           echo "CHANNEL=${channel}" >> "$GITHUB_ENV"
 
