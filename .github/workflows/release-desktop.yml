@@ -1,0 +1,75 @@
+# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests the packaged
+# AppImage, and uploads both as workflow artifacts. Publishing (GitHub releases,
+# get.rivethub.io/desktop) comes later; this workflow publishes nothing.
+name: Release desktop
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/release-desktop.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: linux-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Cache Electron, electron-builder tools and rh
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.cache/rivethub/rh
+          key: desktop-linux-${{ matrix.arch }}-${{ hashFiles('pnpm-lock.yaml', 'apps/desktop/rh.lock.json') }}
+          restore-keys: desktop-linux-${{ matrix.arch }}-
+      - run: pnpm install --frozen-lockfile --filter "@rivethub/desktop..."
+      - name: Build AppImage and .deb
+        run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release
+
+      # A build can package fine and still not open. This launches the app from the shipped AppImage.
+      - name: Launch check
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          xvfb-run -a pnpm smoke:desktop --executable "$(ls release/*.AppImage)" --artifacts-dir "$RUNNER_TEMP/desktop-launch-check"
+      - name: Upload launch check output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-launch-check-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/desktop-launch-check
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rivethub-desktop-linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          compression-level: 0
