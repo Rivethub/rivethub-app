@@ -27,17 +27,11 @@ export type DesktopUpdateState =
   | { state: "error"; channel: DesktopUpdateChannel; message: string };
 
 /**
- * What the Electron preload exposes as `window.desktopBridge`. The web build
- * checks for it and falls back to browser behaviour when it is absent.
+ * What the Electron preload exposes as `window.rivethub`, and nothing more.
+ * The renderer is apps/web on rh's own origin with a browser session; main
+ * holds the owner token and only ever hands the window a fresh login.
  */
-export interface DesktopBridge {
-  getNode: () => Promise<NodeStatus>;
-  onNodeStatus: (listener: (status: NodeStatus) => void) => () => void;
-  restartNode: () => Promise<void>;
-  getSetupState: () => Promise<SetupState>;
-  openExternal: (url: string) => Promise<boolean>;
-  getUpdateState: () => Promise<DesktopUpdateState>;
-  onUpdateState: (listener: (state: DesktopUpdateState) => void) => () => void;
-  checkForUpdate: () => Promise<DesktopUpdateState>;
-  installUpdate: () => Promise<void>;
+export interface RivetHubDesktop {
+  /** Main mints a new login code with the owner token and reloads the window through `/login`. */
+  relogin: () => Promise<void>;
 }
