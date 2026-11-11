@@ -134,7 +134,7 @@ export function SessionsIndex() {
 }
 
 const selectCls =
-  "w-full appearance-none rounded-lg border border-input bg-card bg-[length:10px] bg-[right_10px_center] bg-no-repeat py-1.5 pr-7 pl-2.5 text-foreground bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M0 0h10L5 6z' fill='%239da9a0'/%3E%3C/svg%3E\")]";
+  "w-full appearance-none rounded-lg border border-input bg-card bg-[length:10px] bg-[right_10px_center] bg-no-repeat py-1.5 pr-7 pl-2.5 text-foreground bg-[url(/icons/select-chevron.svg)]";
 
 const visibilityKey = (v: Visibility) => (v.kind === "private" ? "private" : `space:${v.space}`);
 
