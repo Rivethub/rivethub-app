@@ -82,6 +82,14 @@ export function createBuildConfig(options: { electronVersion: string; outputDir:
     // The static AppImage runtime, so hosts with only FUSE 3 (Ubuntu 22.04 and later) don't need libfuse2.
     toolsets: { appimage: "1.0.3" },
     afterPack,
+    // https://www.electronjs.org/docs/latest/tutorial/fuses. Embedded asar integrity validation is macOS and Windows only.
+    electronFuses: {
+      runAsNode: false,
+      enableNodeOptionsEnvironmentVariable: false,
+      enableNodeCliInspectArguments: false,
+      onlyLoadAppFromAsar: true,
+      enableCookieEncryption: true,
+    },
     linux: {
       executableName: EXECUTABLE_NAME,
       icon: path.join(repoRoot, "apps/web/public/icons/icon-512.png"),
