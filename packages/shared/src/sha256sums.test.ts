@@ -44,6 +44,12 @@ describe("parseSha256Sums", () => {
     expect(parseSha256Sums(`${HELLO_SHA.toUpperCase()} *a.tar.gz\r\n\n`)).toEqual(new Map([["a.tar.gz", HELLO_SHA]]));
   });
 
+  it("refuses a file listed twice, even when one line is right", () => {
+    const right = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03";
+    expect(() => parseSha256Sums(`${"0".repeat(64)}  rh.tar.gz\n${right}  rh.tar.gz\n`)).toThrow(/more than once/);
+    expect(() => parseSha256Sums(`${right}  rh.tar.gz\n${right}  rh.tar.gz\n`)).toThrow(/more than once/);
+  });
+
   it("fails closed on a line it cannot read", () => {
     expect(() => parseSha256Sums("not a checksum line\n")).toThrow(/cannot read/);
   });

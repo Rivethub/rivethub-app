@@ -30,6 +30,21 @@ describe("probeHealthz", () => {
     expect(await probeHealthz(await serve(200, JSON.stringify({ ok: true })))).toEqual({ kind: "foreign", status: 200 });
   });
 
+  it("calls a body with an empty identity foreign", async () => {
+    const url = await serve(200, JSON.stringify({ ok: true, sessions: 0, name: "", node: "" }));
+    expect(await probeHealthz(url)).toEqual({ kind: "foreign", status: 200 });
+  });
+
+  it("calls a body without a session count foreign", async () => {
+    const url = await serve(200, JSON.stringify({ ok: true, name: "desk", node: "desk" }));
+    expect(await probeHealthz(url)).toEqual({ kind: "foreign", status: 200 });
+  });
+
+  it("calls a redirect foreign even when it carries an rh-shaped body", async () => {
+    const url = await serve(302, JSON.stringify({ ok: true, sessions: 0, name: "desk", node: "desk" }));
+    expect(await probeHealthz(url)).toEqual({ kind: "foreign", status: 302 });
+  });
+
   it("reports nothing listening as unreachable", async () => {
     const url = await serve(200, "{}");
     await new Promise<void>((resolve) => server!.close(() => resolve()));

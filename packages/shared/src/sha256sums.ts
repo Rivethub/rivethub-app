@@ -11,7 +11,9 @@ export function parseSha256Sums(text: string): Map<string, string> {
     if (line.trim() === "") continue;
     const match = LINE.exec(line);
     if (!match) throw new Error(`SHA256SUMS has a line it cannot read: ${JSON.stringify(line)}`);
-    sums.set(match[2]!, match[1]!.toLowerCase());
+    const name = match[2]!;
+    if (sums.has(name)) throw new Error(`SHA256SUMS lists ${JSON.stringify(name)} more than once`);
+    sums.set(name, match[1]!.toLowerCase());
   }
   return sums;
 }
