@@ -7,7 +7,7 @@ import type {
   SessionSummaryRow,
 } from "@rivethub/contracts";
 import { NetworkError, RouteMissingError } from "./errors.js";
-import type { FetchLike } from "./http.js";
+import type { AuthSeam, FetchLike } from "./http.js";
 import { createRhClient, type LiveMethods } from "./rh/index.js";
 import { toRow } from "./rh/util.js";
 import { createSampleClient } from "./sample/client.js";
@@ -17,6 +17,7 @@ export interface ClientOptions {
   fetch?: FetchLike;
   /** How long one request may take before it is aborted. Defaults to 30 seconds. Capability probes stay at 2.5 seconds. */
   timeoutMs?: number;
+  auth?: AuthSeam;
 }
 
 const CAPABILITIES: Capability[] = [
