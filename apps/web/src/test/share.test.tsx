@@ -93,10 +93,13 @@ describe("Share", () => {
     await user.click(confirm);
 
     await waitFor(() =>
-      expect(share.createDraft).toHaveBeenCalledWith([
-        { id: "s-1", decision: { kind: "redact", terms: ["alex"], dropToolOutputs: true } },
-        { id: "s-2", decision: { kind: "approve" } },
-      ]),
+      expect(share.createDraft).toHaveBeenCalledWith(
+        [
+          { id: "s-1", decision: { kind: "redact", terms: ["alex"], dropToolOutputs: true } },
+          { id: "s-2", decision: { kind: "approve" } },
+        ],
+        { decide: true },
+      ),
     );
     expect(await screen.findByText("Best effort: read the flags yourself.")).toBeInTheDocument();
     expect(screen.getByLabelText("Flagged text of Flag 1")).toHaveTextContent("ignore<U+202E>me");

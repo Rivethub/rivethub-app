@@ -24,8 +24,9 @@ export function createShareClient(options: ShareClientOptions): ShareClient {
     find: async ({ text, limit }) =>
       http.sendFor("POST", "/api/share/find", wire.findReply, { query: text, ...(limit === undefined ? {} : { limit }) }),
 
-    createDraft: (sessions) =>
+    createDraft: (sessions, options) =>
       http.sendFor("POST", "/api/share/drafts", wire.draftCreated, {
+        ...(options?.decide === undefined ? {} : { decide: options.decide }),
         sessions: sessions.map(({ id, decision }) =>
           decision.kind === "approve"
             ? { id, decision: "approve" }

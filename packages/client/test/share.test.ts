@@ -29,11 +29,15 @@ function client(routes: Parameters<typeof fakeRh>[0], auth?: Parameters<typeof c
 describe("share client", () => {
   it("sends decisions in rh's shape and reads the report with escaped flag text", async () => {
     const { share, calls } = client({ "POST /api/share/drafts": { status: 201, body: report } });
-    const draft = await share.createDraft([
-      { id: SESSION, decision: { kind: "redact", terms: ["alex"], dropToolOutputs: true } },
-      { id: "other", decision: { kind: "approve" } },
-    ]);
+    const draft = await share.createDraft(
+      [
+        { id: SESSION, decision: { kind: "redact", terms: ["alex"], dropToolOutputs: true } },
+        { id: "other", decision: { kind: "approve" } },
+      ],
+      { decide: true },
+    );
     expect(calls[0]!.body).toEqual({
+      decide: true,
       sessions: [
         { id: SESSION, decision: "redact", redact: { terms: ["alex"], drop_tool_outputs: true } },
         { id: "other", decision: "approve" },

@@ -2,6 +2,8 @@ import { HttpError, NetworkError, ReauthRequiredError, RouteMissingError } from 
 
 /** A refusal rendered for a person: what happened, and where to go to fix it. */
 export interface Failure {
+  /** rh's reason, when it gave one. */
+  code?: string;
   /** The person has to sign in again before the action can succeed. */
   reauth?: boolean;
   title: string;
@@ -12,7 +14,7 @@ export interface Failure {
 
 const SEND: Record<string, Failure> = {
   not_local: { title: "Share from the machine rh runs on.", detail: "Sharing works only from the app on the same computer as your rh node." },
-  decide_unconfigured: { title: "The decision model isn't set up.", detail: "Set memory.sanitize.decide in your rh config, then try again.", backTo: "decide" },
+  decide_unconfigured: { title: "The decision model isn't set up.", detail: "Set memory.sanitize.decide in your rh config to have it flag suspicious text. Its second look is now off, so you can sanitize without it.", backTo: "decide" },
   unknown_draft: { title: "Your draft expired.", detail: "Drafts stay in rh's memory for 30 minutes. Decide again to make a new one.", backTo: "decide" },
   full: { title: "Too many drafts are open.", detail: "Wait a moment, or discard a draft from another window, then try again.", backTo: "decide" },
   open_flags: { title: "Some flags are still open.", detail: "Keep, redact or map every flag before you share.", backTo: "review" },
@@ -70,7 +72,10 @@ export function describeFailure(error: unknown, flow: "send" | "receive"): Failu
   if (error instanceof HttpError) {
     if (error.status === 401) return { ...REAUTH, title: "You're signed out.", detail: "Sign in again to continue." };
     const known = error.code === undefined ? undefined : (flow === "send" ? SEND : RECEIVE)[error.code];
-    if (known) return error.code === "undecided" || error.code === "secret_import" ? { ...known, detail: `${known.detail ?? ""}${sessionsNote(error.sessions)}`.trim() } : known;
+    if (known) {
+      const detail = error.code === "undecided" || error.code === "secret_import" ? `${known.detail ?? ""}${sessionsNote(error.sessions)}`.trim() : known.detail;
+      return { ...known, code: error.code!, ...(detail === undefined ? {} : { detail }) };
+    }
     return { title: "rh refused that.", detail: error.message.replace(/^\d+ \S+: /, "") };
   }
   return error instanceof Error ? { title: "Something went wrong.", detail: error.message } : { title: "Something went wrong." };

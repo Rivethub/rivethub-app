@@ -64,7 +64,7 @@ export function SharePage() {
 
   const sanitize = () => {
     dispatch({ type: "sanitize" });
-    share.createDraft(chosenSessions(state.rows)).then((report) => {
+    share.createDraft(chosenSessions(state.rows), { decide: state.decide }).then((report) => {
       storeDraft(report.draft);
       setResumable(null);
       dispatch({ type: "drafted", report });
@@ -111,7 +111,7 @@ export function SharePage() {
       )}
       {state.step === "choose" && <Choose picked={state.picked} onToggle={(session) => dispatch({ type: "toggle", session })} onContinue={() => dispatch({ type: "to-decide" })} />}
       {(state.step === "decide" || state.step === "sanitizing") && (
-        <Decide rows={state.rows} busy={state.step === "sanitizing"} onChoose={(id, choice) => dispatch({ type: "decide", id, choice })} onConfirm={sanitize} onBack={() => dispatch({ type: "back" })} />
+        <Decide rows={state.rows} decide={state.decide} busy={state.step === "sanitizing"} onDecideModel={(on) => dispatch({ type: "decide-model", on })} onChoose={(id, choice) => dispatch({ type: "decide", id, choice })} onConfirm={sanitize} onBack={() => dispatch({ type: "back" })} />
       )}
       {state.step === "review" && state.report && (
         <Review

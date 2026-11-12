@@ -10,7 +10,7 @@ const OPTIONS = [
 ] as const;
 
 /** Step 2: one decision per session, reviewed in one table, confirmed once. Nothing is sanitized until the confirm. */
-export function Decide({ rows, busy, onChoose, onConfirm, onBack }: { rows: Row[]; busy: boolean; onChoose: (id: string, choice: RowChoice) => void; onConfirm: () => void; onBack: () => void }) {
+export function Decide({ rows, decide, busy, onDecideModel, onChoose, onConfirm, onBack }: { rows: Row[]; decide: boolean; busy: boolean; onDecideModel: (on: boolean) => void; onChoose: (id: string, choice: RowChoice) => void; onConfirm: () => void; onBack: () => void }) {
   const counts = tally(rows);
   return (
     <div className="flex flex-col gap-4">
@@ -28,6 +28,14 @@ export function Decide({ rows, busy, onChoose, onConfirm, onBack }: { rows: Row[
           ))}
         </tbody>
       </table>
+
+      <label className="flex items-start gap-2.5 rounded-xl border border-border bg-card p-3.5">
+        <input type="checkbox" checked={decide} onChange={(e) => onDecideModel(e.target.checked)} className="mt-1 accent-primary" />
+        <span className="flex flex-col">
+          <span>Have my decision model take a second look</span>
+          <span className="text-[12px] text-muted-foreground">It scores what the automatic scan can't settle, such as names and internal hosts, and you review the top ones before anything is sent.</span>
+        </span>
+      </label>
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3.5">
         <p aria-live="polite" className="m-0 flex-1 text-[13px]">

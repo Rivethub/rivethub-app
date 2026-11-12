@@ -53,6 +53,14 @@ describe("deciding", () => {
   });
 });
 
+describe("the decision model", () => {
+  it("turns itself off and returns to deciding when rh has none configured", () => {
+    const sanitizing = { ...picked("a"), step: "sanitizing" as const };
+    const failed = run([{ type: "fail", failure: { title: "No model", code: "decide_unconfigured", backTo: "decide" } }], sanitizing);
+    expect(failed).toMatchObject({ step: "decide", decide: false });
+  });
+});
+
 describe("reviewing and sending", () => {
   it("leaves the review only when no flag is open, and echoes the counts rh checks", () => {
     const flagged = report([flag(1, { kind: "open" }), flag(2, { kind: "keep" }), flag(3, { kind: "keep" })]);

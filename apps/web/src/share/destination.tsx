@@ -18,6 +18,10 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
   const [failure, setFailure] = useState<Failure | null>(null);
   const [signingIn, setSigningIn] = useState<ShareServer | null>(null);
   const refresh = () => client.invalidateQueries({ queryKey: SERVERS_KEY });
+  const usable = servers.data?.servers.find((s) => s.signedIn && s.default);
+  useEffect(() => {
+    if (server === undefined && usable) onServer(usable.origin);
+  }, [server, usable, onServer]);
   const chosen = servers.data?.servers.find((s) => s.origin === server);
   const fail = (error: unknown) => setFailure(describeFailure(error, "send"));
   return (

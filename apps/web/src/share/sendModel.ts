@@ -24,6 +24,8 @@ export interface SendState {
   step: SendStep;
   picked: ShareableSession[];
   rows: Row[];
+  /** Ask the decision model to flag what it finds suspicious. On unless rh has none configured. */
+  decide: boolean;
   report?: DraftReport | undefined;
   server?: string | undefined;
   signed: boolean;
@@ -31,12 +33,13 @@ export interface SendState {
   failure?: Failure | undefined;
 }
 
-export const initialSend: SendState = { step: "choose", picked: [], rows: [], signed: true };
+export const initialSend: SendState = { step: "choose", picked: [], rows: [], decide: true, signed: true };
 
 export type SendAction =
   | { type: "toggle"; session: ShareableSession }
   | { type: "to-decide" }
   | { type: "decide"; id: string; choice: RowChoice }
+  | { type: "decide-model"; on: boolean }
   | { type: "sanitize" }
   | { type: "drafted"; report: DraftReport }
   | { type: "resumed"; report: DraftReport }
@@ -67,6 +70,8 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
     }
     case "decide":
       return { ...state, rows: state.rows.map((r) => (r.session.id === action.id ? { ...r, choice: action.choice } : r)) };
+    case "decide-model":
+      return { ...state, decide: action.on };
     case "sanitize":
       return canSanitize(state.rows) ? { ...state, step: "sanitizing", failure: undefined } : state;
     case "drafted":
@@ -87,7 +92,7 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
     case "sent":
       return { ...state, step: "shared", sent: action.sent, report: undefined, failure: undefined };
     case "fail":
-      return { ...state, step: recoverStep(state.step, action.failure), failure: action.failure };
+      return { ...state, step: recoverStep(state.step, action.failure), failure: action.failure, decide: action.failure.code === "decide_unconfigured" ? false : state.decide };
     case "dismiss":
       return { ...state, failure: undefined };
     case "reset":

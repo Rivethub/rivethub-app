@@ -218,8 +218,11 @@ export interface TrustedSender {
 export interface ShareClient {
   find(search: ShareSearch): Promise<ShareableSession[]>;
 
-  /** Sanitizes the chosen sessions in rh's memory. Nothing is written to disk. */
-  createDraft(sessions: ChosenSession[]): Promise<DraftReport>;
+  /**
+   * Sanitizes the chosen sessions in rh's memory. Nothing is written to disk.
+   * With `decide`, the configured decision model also flags what it finds suspicious; without it the draft has no flags.
+   */
+  createDraft(sessions: ChosenSession[], options?: { decide?: boolean }): Promise<DraftReport>;
   draft(id: string): Promise<DraftReport>;
   mark(id: string, marks: FlagMark[]): Promise<MarksResult>;
   discard(id: string): Promise<void>;
