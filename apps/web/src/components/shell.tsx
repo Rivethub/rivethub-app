@@ -3,6 +3,7 @@ import { canSwitchTo, currentHubSummary } from "@rivethub/client-runtime/hub-lis
 import type { Hub } from "@rivethub/contracts";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useShareClient } from "../client/context";
 import { useAccount, useHarnesses, useHubs, useLibraryCounts, useModelJobs, usePins, useReviewQueue } from "../client/queries";
 import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
@@ -101,10 +102,26 @@ export function MainSidebar({ children }: { children?: ReactNode }) {
         <span className="flex-1">Review</span>
         <ReviewBadge />
       </Link>
+      <ShareLinks path={path} />
       {children ?? <LibraryAndPins />}
       <div className="flex-1" />
       <SidebarFooter />
     </SidebarShell>
+  );
+}
+
+/** Share and Receive exist only in the desktop app, where the person's own rh and sign-in are. */
+function ShareLinks({ path }: { path: string }) {
+  if (useShareClient() === null) return null;
+  return (
+    <>
+      <Link to="/share" className={cx(navRow, path === "/share" && "bg-selected")} aria-current={path === "/share" ? "page" : undefined}>
+        <span className="flex-1">Share</span>
+      </Link>
+      <Link to="/receive" className={cx(navRow, path === "/receive" && "bg-selected")} aria-current={path === "/receive" ? "page" : undefined}>
+        <span className="flex-1">Receive</span>
+      </Link>
+    </>
   );
 }
 

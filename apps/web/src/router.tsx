@@ -1,9 +1,11 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
 import { PaletteProvider } from "./components/palette";
 import { EntitiesIndex, EntityPage } from "./routes/entity";
+import { ReceivePage } from "./routes/receive";
 import { ReviewPage } from "./routes/review";
 import { SearchPage } from "./routes/search";
 import { SessionPage, SessionsIndex } from "./routes/session";
+import { SharePage } from "./routes/share";
 import { SettingsIndex, SettingsPage } from "./routes/settings";
 import { TodayPage } from "./routes/today";
 import { TopicPage, TopicsIndex } from "./routes/topic";
@@ -21,7 +23,7 @@ function clean<T extends Record<string, unknown>>(o: T): { [K in keyof T]?: Excl
 }
 
 export const ARTICLE_TABS = ["overview", "sessions", "history"] as const;
-export const SETTINGS_SECTIONS = ["connections", "account", "sharing", "trust", "appearance", "server"] as const;
+export const SETTINGS_SECTIONS = ["connections", "account", "sharing", "keys", "trust", "appearance", "server"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 const rootRoute = createRootRoute({
@@ -72,9 +74,11 @@ const settings = createRoute({
   component: SettingsPage,
 });
 const library = createRoute({ getParentRoute: () => rootRoute, path: "/library", beforeLoad: () => { throw redirect({ to: "/topics" }); } });
+const share = createRoute({ getParentRoute: () => rootRoute, path: "/share", component: SharePage });
+const receive = createRoute({ getParentRoute: () => rootRoute, path: "/receive", component: ReceivePage });
 const welcome = createRoute({ getParentRoute: () => rootRoute, path: "/welcome", component: WelcomePage });
 
-const routeTree = rootRoute.addChildren([today, review, topics, topic, entities, entity, sessions, session, search, settingsIndex, settings, library, welcome]);
+const routeTree = rootRoute.addChildren([today, review, topics, topic, entities, entity, sessions, session, search, settingsIndex, settings, library, welcome, share, receive]);
 
 export function makeRouter(history?: RouterHistory) {
   return createRouter({ routeTree, defaultPreload: "intent", scrollRestoration: true, ...(history ? { history } : {}) });
