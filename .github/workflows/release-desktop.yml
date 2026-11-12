@@ -3,9 +3,12 @@
 # artifacts. The publish job copies them to get.rivethub.io/desktop/<channel>/, where installed
 # apps look for updates; it runs only when dispatched on main with publish=true.
 #
-# Every build is a nightly, x.y.z-nightly.YYYYMMDD.<run>, from apps/desktop/package.json's x.y.z,
+# Builds are nightly-versioned, x.y.z-nightly.YYYYMMDD.<run>, from apps/desktop/package.json's x.y.z,
 # unless dispatched with channel=stable, which builds x.y.z itself. Stable is for a release that a
 # fresh install can set up and run (capture and search) with as close to one click as we can get.
+# Nightlies are published by hand (dispatch with publish=true); there is no schedule.
+# After a stable x.y.z ships, bump package.json to the next x.y.z: x.y.z-nightly sorts below x.y.z,
+# and the publish job refuses a nightly that isn't newer than the live stable release.
 name: Release desktop
 
 on:
@@ -41,6 +44,7 @@ jobs:
   # One version for both arches, so they can't straddle midnight UTC.
   version:
     runs-on: ubuntu-22.04
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.pick.outputs.version }}
     steps:
@@ -89,7 +93,9 @@ jobs:
           restore-keys: desktop-linux-${{ matrix.arch }}-
       - run: pnpm install --frozen-lockfile --filter "@rivethub/desktop..."
       - name: Build AppImage and .deb
-        run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release --version ${{ needs.version.outputs.version }}
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release --version "${VERSION}"
 
       # The AppImage must ship our AppRun, which refuses to start rather than add --no-sandbox.
       - name: Check the AppImage's AppRun
@@ -165,6 +171,9 @@ jobs:
           merge-multiple: true
 
       - name: Pick the channel
+        env:
+          WANT_VERSION: ${{ needs.version.outputs.version }}
+          WANT_CHANNEL: ${{ inputs.channel }}
         run: |
           set -euo pipefail
           ls -l dist
@@ -181,10 +190,60 @@ jobs:
           else
             channel=stable
           fi
-          test "${version}" = "${{ needs.version.outputs.version }}"
-          test "${channel}" = "${{ inputs.channel }}"
+          test "${version}" = "${WANT_VERSION}"
+          test "${channel}" = "${WANT_CHANNEL}"
           echo "Publishing ${version} to ${channel}"
           echo "CHANNEL=${channel}" >> "$GITHUB_ENV"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      # Clients update only to a strictly higher version, so republishing the same version would
+      # overwrite its packages for nobody's benefit (and break downloads mid-upload), and a nightly
+      # at or below the live stable would never reach anyone on stable who switches to nightly.
+      # Requires the new version to be above the live one on its channel, and a nightly to be
+      # above the live stable too.
+      - name: Check the version is newer than what's live
+        run: |
+          set -euo pipefail
+          # Sort key for the two shapes we publish: x.y.z (stable) and x.y.z-nightly.YYYYMMDD.N,
+          # ordered as semver orders them (a prerelease sorts below its x.y.z).
+          key() {
+            if [[ "$1" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-nightly\.([0-9]{8})\.([0-9]+))?$ ]]; then
+              if [[ -n "${BASH_REMATCH[4]}" ]]; then
+                printf '%d %d %d 0 %d %d\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[5]}" "${BASH_REMATCH[6]}"
+              else
+                printf '%d %d %d 1 0 0\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+              fi
+            else
+              echo "::error::${1} is neither x.y.z nor x.y.z-nightly.YYYYMMDD.N" >&2
+              return 1
+            fi
+          }
+          newer() { # $1 > $2
+            local a b
+            a=$(key "$1") || exit 1
+            b=$(key "$2") || exit 1
+            [[ "${a}" != "${b}" && "$(printf '%s\n%s\n' "${a}" "${b}" | sort -k1,1n -k2,2n -k3,3n -k4,4n -k5,5n -k6,6n | tail -1)" == "${a}" ]]
+          }
+          live() { # prints the live version on channel $1, or nothing if it has none yet
+            local body status
+            body=$(mktemp)
+            status=$(curl -sS -o "${body}" -w '%{http_code}' "https://get.rivethub.io/desktop/$1/latest-linux.yml")
+            case "${status}" in
+              200) sed -n 's/^version: //p' "${body}" ;;
+              404) ;;
+              *) echo "::error::GET $1/latest-linux.yml returned ${status}" >&2; return 1 ;;
+            esac
+          }
+          channels=("${CHANNEL}")
+          [[ "${CHANNEL}" == nightly ]] && channels+=(stable)
+          for c in "${channels[@]}"; do
+            current=$(live "${c}")
+            if [[ -n "${current}" ]] && ! newer "${VERSION}" "${current}"; then
+              echo "::error::${VERSION} is not newer than live ${c} ${current}; bump apps/desktop/package.json"
+              exit 1
+            fi
+            echo "live ${c}: ${current:-none}"
+          done
 
       # The host key is pinned in a repo variable, not trusted on first use.
       - name: Configure deploy SSH
