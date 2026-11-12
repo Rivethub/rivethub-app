@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mintLoginCode, signedInUrl } from "./login";
 
@@ -42,9 +42,9 @@ describe("mintLoginCode", () => {
     await writeFile(file, `#!/bin/sh\n[ "$1 $2 $3" = "auth token-path --json" ] || exit 2\nprintf '{"path":"%s"}\\n' '${tokenPath}'\n`, { mode: 0o755 });
     return file;
   };
-  const token = async (mode: number): Promise<string> => {
+  const token = async (mode: number, text = "owner-token-xyz\n"): Promise<string> => {
     const file = path.join(dir, "local-owner.token");
-    await writeFile(file, "owner-token-xyz\n", { mode });
+    await writeFile(file, text, { mode });
     await chmod(file, mode);
     return file;
   };
@@ -84,5 +84,44 @@ describe("mintLoginCode", () => {
     expect(await mintLoginCode(refusing, { rh: await fakeRh(await token(0o600)) })).toBeNull();
     expect(await mintLoginCode(refusing, { rh: path.join(dir, "no-such-rh") })).toBeNull();
     expect(await mintLoginCode(refusing, { rh: await fakeRh(path.join(dir, "absent.token")) })).toBeNull();
+  });
+
+  it("refuses a token with whitespace inside and logs nothing that holds it", async () => {
+    const origin = await node(200, { code: "one-time-code", expiresInSecs: 60 });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await mintLoginCode(origin, { rh: await fakeRh(await token(0o600, "SECRETPART1\nSECRETPART2\n")) })).toBeNull();
+    expect(seen).toEqual([]);
+    expect(JSON.stringify(logged.mock.calls)).not.toMatch(/SECRETPART/);
+    logged.mockRestore();
+  });
+
+  it("logs a fixed message when the request fails, never the error's own text", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const refusing = await node(401, { error: "owner-token-xyz" });
+    expect(await mintLoginCode(refusing, { rh: await fakeRh(await token(0o600)) })).toBeNull();
+    expect(JSON.stringify(logged.mock.calls)).not.toMatch(/owner-token-xyz|401/);
+    logged.mockRestore();
+  });
+
+  it("follows no redirect, so nothing off the node origin receives a request", async () => {
+    const landed: string[] = [];
+    const elsewhere = createServer((request, response) => {
+      landed.push(`${request.method} ${request.url}`);
+      response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ code: "stolen" }));
+    });
+    await new Promise<void>((resolve) => elsewhere.listen(0, "127.0.0.1", resolve));
+    try {
+      const target = `http://127.0.0.1:${(elsewhere.address() as AddressInfo).port}/api/auth/login-codes`;
+      server = createServer((request, response) => {
+        seen.push({ authorization: request.headers.authorization, path: `${request.method} ${request.url}` });
+        response.writeHead(307, { location: target }).end();
+      });
+      await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
+      const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      expect(await mintLoginCode(origin, { rh: await fakeRh(await token(0o600)) })).toBeNull();
+      expect(landed).toEqual([]);
+    } finally {
+      await new Promise((resolve) => elsewhere.close(resolve));
+    }
   });
 });

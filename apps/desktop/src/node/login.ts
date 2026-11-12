@@ -7,6 +7,9 @@ const execFileAsync = promisify(execFile);
 
 const TIMEOUT_MS = 10_000;
 
+/** rh writes 32 random bytes as unpadded base64url; anything else, whitespace and CR/LF included, isn't a token. */
+const TOKEN_FORMAT = /^[A-Za-z0-9_-]+$/;
+
 const TokenPath = z.object({ path: z.string().min(1) });
 const LoginCode = z.object({ code: z.string().min(1) });
 
@@ -30,12 +33,14 @@ export async function mintLoginCode(origin: string, options: MintOptions): Promi
     const response = await fetch(new URL("/api/auth/login-codes", origin), {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
+      redirect: "error",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    if (!response.ok) throw new Error(`login-codes answered ${response.status}`);
+    if (!response.ok) throw new Error("refused");
     return LoginCode.parse(await response.json()).code;
-  } catch (error) {
-    console.error(`RivetHub: couldn't mint a login code: ${error instanceof Error ? error.message : String(error)}`);
+  } catch {
+    // Fixed text on purpose: an error from fetch can quote the Authorization value.
+    console.error("RivetHub: couldn't mint a login code");
     return null;
   }
 }
@@ -45,7 +50,7 @@ async function readOwnerToken(file: string): Promise<string> {
   const info = await lstat(file);
   if (!info.isFile() || (info.mode & 0o077) !== 0) throw new Error("the owner token file must be a regular file with mode 0600");
   const token = (await readFile(file, "utf8")).trim();
-  if (token === "") throw new Error("the owner token file is empty");
+  if (!TOKEN_FORMAT.test(token)) throw new Error("the owner token file doesn't hold a base64url token");
   return token;
 }
 
