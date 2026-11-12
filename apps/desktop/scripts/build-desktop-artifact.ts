@@ -151,6 +151,10 @@ function isLinuxArch(value: string): value is LinuxArch {
   return (LINUX_ARCHES as readonly string[]).includes(value);
 }
 
+// The official regex from semver.org (SemVer 2.0.0).
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$/;
+
 async function main(): Promise<void> {
   const { values } = parseArgs({ options: { arch: { type: "string" }, "output-dir": { type: "string" }, version: { type: "string" } } });
   const arch = values.arch ?? process.arch;
@@ -161,7 +165,7 @@ async function main(): Promise<void> {
   // --version stamps a release version (CI passes x.y.z-nightly.YYYYMMDD.N); otherwise package.json's.
   const desktopPackage = JSON.parse(await readFile(path.join(desktopDir, "package.json"), "utf8")) as { version: string };
   const version = values.version ?? desktopPackage.version;
-  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`--version must be semver, got ${version}`);
+  if (!SEMVER.test(version)) throw new Error(`--version must be semver, got ${version}`);
 
   await run(process.execPath, [path.join(desktopDir, "scripts/fetch-rh.ts"), "--target", rhTargetFor("linux", arch)!], desktopDir);
   await run("pnpm", ["--filter", "@rivethub/desktop...", "build"], repoRoot);
