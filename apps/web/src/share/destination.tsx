@@ -5,7 +5,7 @@ import { useShareClient } from "../client/context";
 import { Button, cx, Loading } from "../components/ui";
 import { describeFailure, type Failure } from "./failure";
 import { Card, FailureNote, field } from "./ui";
-import { hostOf } from "./format";
+import { hostOf, sameServer } from "./format";
 
 export const SERVERS_KEY = ["share", "servers"] as const;
 
@@ -18,6 +18,11 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
   const [failure, setFailure] = useState<Failure | null>(null);
   const [signingIn, setSigningIn] = useState<ShareServer | null>(null);
   const refresh = () => client.invalidateQueries({ queryKey: SERVERS_KEY });
+  const selectSignedIn = (origin: string) =>
+    client.fetchQuery({ queryKey: SERVERS_KEY, queryFn: () => share.servers(), staleTime: 0 }).then(
+      (fresh) => onServer(fresh.servers.find((s) => sameServer(s.origin, origin))?.origin ?? origin),
+      fail,
+    );
   const usable = servers.data?.servers.find((s) => s.signedIn && s.default);
   useEffect(() => {
     if (server === undefined && usable) onServer(usable.origin);
@@ -46,7 +51,7 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
                     </span>
                   </span>
                 </label>
-                {!s.signedIn && s.kind === "cloud" && <Button size="sm" onClick={() => setSigningIn(s)}>Sign in</Button>}
+                {!s.signedIn && s.kind === "cloud" && <Button size="sm" aria-label={`Sign in to ${hostOf(s.origin)}`} onClick={() => setSigningIn(s)}>Sign in</Button>}
                 {s.signedIn && (
                   <Button size="xs" variant="ghost" aria-label={`Sign out of ${hostOf(s.origin)}`} onClick={() => void share.logout(s.origin).then(refresh, fail)}>Sign out</Button>
                 )}
@@ -59,8 +64,7 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
             origin={signingIn.origin}
             onSignedIn={(origin) => {
               setSigningIn(null);
-              void refresh();
-              onServer(origin);
+              void selectSignedIn(origin);
             }}
             onCancel={() => setSigningIn(null)}
             onFail={(error) => {
@@ -70,10 +74,7 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
           />
         )}
         <TeamForm
-          onSignedIn={(origin) => {
-            void refresh();
-            onServer(origin);
-          }}
+          onSignedIn={(origin) => void selectSignedIn(origin)}
           onFail={fail}
         />
       </Card>

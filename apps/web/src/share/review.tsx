@@ -18,8 +18,6 @@ const KINDS: { kind: Kind; label: string; hint: string }[] = [
   { kind: "map", label: "Map", hint: "Replace it with a placeholder you choose, the same everywhere." },
 ];
 
-const FLAG_ERRORS = "The placeholder and term must both be filled in.";
-
 /** A flag's edit becomes a pick only when it is complete. */
 function toPick(edit: Edit | undefined): FlagPick | undefined {
   if (!edit) return undefined;
@@ -104,7 +102,7 @@ function ReportSummary({ report }: { report: DraftReport }) {
 function FlagCard({ flag, edit, onEdit }: { flag: DraftFlag; edit: Edit | undefined; onEdit: (patch: Partial<Edit>) => void }) {
   const shown: Edit | undefined = edit ?? (flag.state.kind === "open" ? undefined : startingEdit(flag));
   const place = flag.place;
-  const where = place ? `session ${place.session} · ${place.field}${place.message === undefined ? "" : ` · message ${place.message}`}${place.more > 0 ? ` · +${place.more} more` : ""}` : "unplaced";
+  const where = place ? `session ${place.session + 1} · ${place.field}${place.message === undefined ? "" : ` · message ${place.message + 1}`}${place.more > 0 ? ` · +${place.more} more` : ""}` : "unplaced";
   const name = `Flag ${flag.number}`;
   return (
     <li aria-label={name} className={cx("flex flex-col gap-2 rounded-xl border p-3", shown ? "border-border" : "border-warning/60")}>
@@ -145,7 +143,7 @@ function FlagCard({ flag, edit, onEdit }: { flag: DraftFlag; edit: Edit | undefi
             <input type="checkbox" checked={shown.learn} onChange={(e) => onEdit({ learn: e.target.checked })} className="accent-primary" />
             Remember this mapping
           </label>
-          {(!shown.term.trim() || !shown.placeholder.trim()) && <p className="m-0 basis-full text-[12px] text-warning">{FLAG_ERRORS}</p>}
+          {(!shown.term.trim() || !shown.placeholder.trim()) && <p className="m-0 basis-full text-[12px] text-warning">Fill in both the term and the placeholder.</p>}
         </div>
       )}
     </li>

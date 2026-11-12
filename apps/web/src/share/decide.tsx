@@ -141,7 +141,7 @@ function RedactOptions({ terms, dropToolOutputs, label, onChange }: { terms: str
       </div>
       {problem && <p id={`term-problem-${label}`} role="alert" className="m-0 text-[12px] text-error">{problem}</p>}
       <label className="flex items-center gap-2 text-[13px]">
-        <input type="checkbox" checked={dropToolOutputs} onChange={(e) => onChange({ terms, dropToolOutputs: e.target.checked })} className="accent-primary" />
+        <input type="checkbox" aria-label={`Drop tool outputs in ${label}`} checked={dropToolOutputs} onChange={(e) => onChange({ terms, dropToolOutputs: e.target.checked })} className="accent-primary" />
         Drop tool outputs
       </label>
     </div>

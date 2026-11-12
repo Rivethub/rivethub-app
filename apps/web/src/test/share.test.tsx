@@ -86,7 +86,7 @@ describe("Share", () => {
     const decide = (title: string, option: string) => user.click(within(screen.getByRole("group", { name: `Decision for ${title}` })).getByRole("radio", { name: option }));
     await decide("Retention policy", "Redact");
     await user.type(screen.getByRole("textbox", { name: /Add a term to redact in Retention policy/ }), "alex{Enter}");
-    await user.click(screen.getByRole("checkbox", { name: "Drop tool outputs" }));
+    await user.click(screen.getByRole("checkbox", { name: "Drop tool outputs in Retention policy" }));
     await decide("Backup window", "Approve");
     await decide("Private notes", "Deny");
     expect(share.createDraft).not.toHaveBeenCalled();

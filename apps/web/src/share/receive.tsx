@@ -54,7 +54,7 @@ export function Report({ state, busy, onChoose, onImport, onCancel, onTrusted }:
     <div className="flex flex-col gap-4">
       <Sender report={report} onTrusted={onTrusted} />
       {report.held && (
-        <p role="alert" className="m-0 rounded-xl border border-warning/50 p-3 text-[13px]">
+        <p role="status" className="m-0 rounded-xl border border-warning/50 p-3 text-[13px]">
           <strong>Held.</strong> {blocked(report) ? "The sender's own details carry a finding, so this bundle can't be imported." : "Some sessions have findings. Nothing is imported until you decide each of them."}
         </p>
       )}

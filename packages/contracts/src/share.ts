@@ -35,7 +35,7 @@ export type FlagState = { kind: "open" } | { kind: "keep" } | { kind: "redact" }
 export type FlagChoice = Exclude<FlagState, { kind: "open" }>;
 
 export interface FlagPlace {
-  /** 1-based, in the draft's session order. */
+  /** 0-based, in the draft's session order. */
   session: number;
   message?: number;
   field: string;
