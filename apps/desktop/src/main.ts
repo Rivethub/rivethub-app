@@ -3,6 +3,7 @@ import { app, BrowserWindow, session } from "electron";
 
 import { UPDATE_STATE_CHANNEL } from "./ipc/channels";
 import { registerIpcHandlers } from "./ipc/handlers";
+import { bundledResources } from "./bundle/layout";
 import { mintLoginCode, signedInUrl } from "./node/login";
 import { parseNodeUrl } from "./node/nodeUrl";
 import { createDesktopUpdates } from "./updates/desktopUpdates";
@@ -24,10 +25,12 @@ function readNodeUrl(): URL | null {
 function run(nodeUrl: URL): void {
   const origin = nodeUrl.origin;
   let mainWindow: BrowserWindow | null = null;
+  const rh = process.env["RIVETHUB_RH"] ?? (app.isPackaged ? bundledResources(process.resourcesPath).rh : "rh");
+  const mintCode = () => mintLoginCode(origin, { rh });
 
   const openSignedIn = async (window: BrowserWindow) => {
     try {
-      await window.loadURL(signedInUrl(nodeUrl, await mintLoginCode(origin)));
+      await window.loadURL(signedInUrl(nodeUrl, await mintCode()));
     } catch (error) {
       if (window.isDestroyed()) return;
       console.error(`RivetHub: can't load ${origin}:`, error);
@@ -57,7 +60,7 @@ function run(nodeUrl: URL): void {
       window: () => mainWindow,
       onState: (state) => mainWindow?.webContents.send(UPDATE_STATE_CHANNEL, state),
     });
-    registerIpcHandlers(origin, openSignedIn, updates);
+    registerIpcHandlers(origin, mintCode, updates);
     mainWindow = createMainWindow({
       preloadPath: path.join(__dirname, "preload.cjs"),
       origin,

@@ -14,3 +14,25 @@ export const sessionAuth: AuthSeam = {
     }
   },
 };
+
+/**
+ * Trades a one-time login code for a fresh session without leaving the page: the response sets the session cookie
+ * and its body carries the new CSRF token. Nothing is stored but that token; the code is never kept.
+ */
+export async function signInWithCode(code: string): Promise<void> {
+  const response = await fetch("/api/auth/session", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new Error(`rh answered ${response.status}`);
+  const body: unknown = await response.json();
+  const csrf = typeof body === "object" && body !== null ? (body as { csrf?: unknown }).csrf : undefined;
+  if (typeof csrf !== "string" || csrf === "") throw new Error("rh sent no CSRF token");
+  try {
+    window.localStorage.setItem(CSRF_STORAGE_KEY, csrf);
+  } catch {
+    throw new Error("the CSRF token couldn't be stored");
+  }
+}

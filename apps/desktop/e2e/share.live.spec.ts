@@ -7,9 +7,12 @@
  *   SS10_NODES=/path/to/kit/nodes.json SS10_MEDIA=/path/to/screenshots \
  *     xvfb-run -a -s '-screen 0 1920x1080x24' pnpm --filter @rivethub/desktop exec playwright test share.live
  *
- * Each window signs in the way the desktop's main process will: it mints a
- * login code with the node's owner token and loads `/login#code=…`. The
- * renderer never sees the token. Screenshots land in SS10_MEDIA. Playwright's
+ * Each Electron window signs in through the app's own main process: it runs
+ * `rh auth token-path --json` (RIVETHUB_RH names the binary), reads the owner
+ * token, mints a login code and loads `/login#code=…`. Step-up goes through the
+ * real "Sign in again" button on a session the node has aged past
+ * `fresh_login_secs`. Only the plain-browser test mints a code itself, because
+ * no main process is there to do it. Screenshots land in SS10_MEDIA. Playwright's
  * own video capture doesn't work for Electron windows, so the spec records the
  * whole X screen with ffmpeg to SS10_MEDIA/share-live.mp4 (size the screen to
  * the window: -screen 0 1280x820x24).
@@ -25,6 +28,7 @@ import { _electron, chromium, expect, test, type ElectronApplication, type Page 
 interface Node {
   origin: string;
   home: string;
+  stateDir: string;
   ownerTokenFile: string;
   log: string;
 }
@@ -63,8 +67,8 @@ async function shot(page: Page, name: string): Promise<void> {
   await page.screenshot({ path: path.join(media, `${String(step).padStart(2, "0")}-${name}.png`) });
 }
 
-/** What the desktop's main process does: mint a code with the owner token, then load /login#code=. */
-async function signIn(page: Page, node: Node): Promise<void> {
+/** A plain browser has no main process, so this test-only helper stands in: mint a code with the owner token, then load /login#code=. */
+async function browserSignIn(page: Page, node: Node): Promise<void> {
   const token = readFileSync(node.ownerTokenFile, "utf8").trim();
   const response = await fetch(`${node.origin}/api/auth/login-codes`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
   expect(response.status).toBe(200);
@@ -82,12 +86,15 @@ async function openApp(node: Node, label: string): Promise<{ app: ElectronApplic
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined && key !== "ELECTRON_RUN_AS_NODE" && key !== "WAYLAND_DISPLAY") env[key] = value;
   env["RIVETHUB_DESKTOP_URL"] = node.origin;
+  env["RIVETHUB_RH"] = process.env["SS10_RH"] ?? "/home/phil/.cache/ss10/rt-target/debug/rh";
+  env["RIVETHUB_STATE_DIR"] = node.stateDir;
   const app = await _electron.launch({ executablePath: electronPath, args: [desktopDir, `--user-data-dir=${dir}`, "--ozone-platform=x11"], env });
   apps.push(app);
   const page = await app.firstWindow();
-  await page.waitForURL((url) => url.origin === node.origin);
-  await page.waitForLoadState("load");
-  await signIn(page, node);
+  await page.waitForFunction(() => window.localStorage.getItem("rh-csrf") !== null && location.pathname !== "/login", undefined, { timeout: 30_000 });
+  loginAt.set(page, Date.now());
+  await page.evaluate(() => window.localStorage.setItem("rivethub.welcomed", "1"));
+  await page.goto(`${node.origin}/`);
   return { app, page };
 }
 
@@ -118,7 +125,7 @@ test("the browser build shows no Share or Receive", async () => {
   const { A } = kit().nodes;
   const browser = await chromium.launch({ executablePath: process.env["CHROMIUM_PATH"] ?? "/usr/bin/chromium", args: ["--no-sandbox"] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-  await signIn(page, A);
+  await browserSignIn(page, A);
   await expect(page.getByRole("link", { name: "Review" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Share", exact: true })).toHaveCount(0);
   await page.goto(`${A.origin}/share`);
@@ -208,15 +215,8 @@ test("sender: pick, decide, sanitize, review flags, sign in to a team server, sh
   await expect(page.getByRole("alert")).toContainText("Confirm it's you first.");
   await shot(page, "share-step-up");
   await page.getByRole("button", { name: "Sign in again" }).click();
-  await page.waitForTimeout(1500);
-
-  await signIn(page, nodes.A);
-  await page.getByRole("link", { name: "Share", exact: true }).click();
-  await expect(page.getByText("You have an unfinished draft")).toBeVisible();
-  await shot(page, "share-resume-draft");
-  await page.getByRole("button", { name: "Resume it" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText(/Signed in again/)).toBeVisible();
+  await shot(page, "share-signed-in-again");
   await page.getByRole("button", { name: "Share", exact: true }).click();
 
   const output = page.getByRole("status", { name: "Share code" });
@@ -232,7 +232,7 @@ test("sender: pick, decide, sanitize, review flags, sign in to a team server, sh
   await app.close();
 });
 
-test("receiver: refuses a typo, holds flagged sessions, steps up, imports, trusts the sender", async () => {
+test("receiver: refuses a typo, trusts the sender, steps up on a flagged import, signs in again in place, imports", async () => {
   const { nodes, freshLoginSecs } = kit();
   expect(code).not.toBe("");
   const { app, page } = await openApp(nodes.B, "receiver");
@@ -253,6 +253,11 @@ test("receiver: refuses a typo, holds flagged sessions, steps up, imports, trust
   await expect(page.getByText(titleOf("secret"))).toHaveCount(0);
   await shot(page, "receive-report");
 
+  await page.getByLabel("The fingerprint matches").check();
+  await page.getByRole("button", { name: /^Trust .*'s key$/ }).click();
+  await expect(page.getByText(/Trusted\. Later bundles/)).toBeVisible();
+  await shot(page, "receive-trusted-sender");
+
   const held = page.getByRole("listitem", { name: new RegExp(titleOf("injection").slice(0, 20)) });
   await expect(held.getByLabel("Findings")).toBeVisible();
   await shot(page, "receive-held-session");
@@ -261,22 +266,16 @@ test("receiver: refuses a typo, holds flagged sessions, steps up, imports, trust
   await shot(page, "receive-decided");
   await page.waitForTimeout(Math.max(0, loginAt.get(page)! + (freshLoginSecs + 2) * 1000 - Date.now()));
   await page.getByRole("button", { name: "Import", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText(/Confirm it's you first|You're signed out/);
+  await expect(page.getByRole("alert")).toContainText("Confirm it's you first.");
   await shot(page, "receive-step-up");
 
-  await signIn(page, nodes.B);
-  await page.getByRole("link", { name: "Receive", exact: true }).click();
-  await page.getByLabel("Paste the code you were sent").fill(code);
-  await page.getByRole("button", { name: "Check the bundle" }).click();
-  await expect(page.getByText(/Reopened from this machine's inbox/)).toBeVisible();
-  await shot(page, "receive-report-from-inbox");
-  await page.getByLabel("The fingerprint matches").check();
-  await page.getByRole("button", { name: /^Trust .*'s key$/ }).click();
-  await expect(page.getByText(/Trusted\. Later bundles/)).toBeVisible();
-  await shot(page, "receive-trusted-sender");
-  const heldAgain = page.getByRole("listitem", { name: new RegExp(titleOf("injection").slice(0, 20)) });
-  await heldAgain.getByLabel("Hold spans").check({ force: true });
-  await shot(page, "receive-hold-spans");
+  const pageUrl = page.url();
+  await page.getByRole("button", { name: "Sign in again" }).click();
+  await expect(page.getByText(/Signed in again/)).toBeVisible();
+  expect(page.url()).toBe(pageUrl);
+  await expect(held.getByLabel("Import", { exact: true })).toBeChecked();
+  await expect(paste).toHaveCount(0);
+  await shot(page, "receive-signed-in-again");
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByRole("list", { name: "Imported sessions" })).toBeVisible();
   await expect(page.getByRole("list", { name: "Imported sessions" })).toContainText("verified");

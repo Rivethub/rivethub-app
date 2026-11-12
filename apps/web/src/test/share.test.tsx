@@ -62,15 +62,29 @@ function renderAt(path: string, share?: ShareClient) {
   return { user };
 }
 
-const bridge = (relogin = vi.fn(async () => {})): RivetHubDesktop => ({ relogin, updates: { getState: vi.fn(), onState: vi.fn(() => () => {}), setChannel: vi.fn(), restartToUpdate: vi.fn() } as never });
+const bridge = (relogin = vi.fn(async (): Promise<string | null> => "one-time-code")): RivetHubDesktop => ({ relogin, updates: { getState: vi.fn(), onState: vi.fn(() => () => {}), setChannel: vi.fn(), restartToUpdate: vi.fn() } as never });
+
+const exchange = vi.fn();
 
 beforeEach(() => {
   (window as { rivethub?: RivetHubDesktop }).rivethub = bridge();
+  exchange.mockReset().mockResolvedValue(new Response(JSON.stringify({ csrf: "csrf-fresh" }), { status: 200 }));
+  vi.stubGlobal("fetch", exchange);
 });
 afterEach(() => {
   delete (window as { rivethub?: RivetHubDesktop }).rivethub;
   sessionStorage.clear();
+  localStorage.clear();
+  vi.unstubAllGlobals();
 });
+
+const exchangedOnce = () => {
+  expect(exchange).toHaveBeenCalledOnce();
+  const [url, init] = exchange.mock.calls[0] as [string, RequestInit];
+  expect(url).toBe("/api/auth/session");
+  expect(init).toMatchObject({ method: "POST", credentials: "same-origin", body: JSON.stringify({ code: "one-time-code" }) });
+  expect(localStorage.getItem("rh-csrf")).toBe("csrf-fresh");
+};
 
 describe("Share", () => {
   it("walks from search to a code that is shown once and gone after Done", async () => {
@@ -134,12 +148,12 @@ describe("Share", () => {
     expect(document.body).not.toHaveTextContent("TOPSECRETKEY");
   });
 
-  it("asks for a fresh sign-in when sending needs one, then relogin keeps the draft", async () => {
-    const relogin = vi.fn(async () => {});
+  it("asks for a fresh sign-in when sending needs one, signs in in place, and shares without redoing a step", async () => {
+    const relogin = vi.fn(async () => "one-time-code");
     (window as { rivethub?: RivetHubDesktop }).rivethub = bridge(relogin);
-    const send = vi.fn().mockRejectedValue(new ReauthRequiredError("/api/share/drafts/d-1/send"));
-    sessionStorage.setItem("rivethub.share.draft", "d-1");
+    const send = vi.fn().mockRejectedValueOnce(new ReauthRequiredError("/api/share/drafts/d-1/send")).mockResolvedValue({ code: CODE, expiresAt: at("2026-11-19T10:00:00Z"), bytes: 2048, signed: "SHA256:abc" });
     const share = fakeShare({ draft: vi.fn(async () => flagged("keep")), send });
+    sessionStorage.setItem("rivethub.share.draft", "d-1");
     const { user } = renderAt("/share", share);
 
     await user.click(await screen.findByRole("button", { name: "Resume it" }));
@@ -150,9 +164,27 @@ describe("Share", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Confirm it's you first.");
     await user.click(screen.getByRole("button", { name: "Sign in again" }));
+    expect(await screen.findByText(/Signed in again/)).toBeInTheDocument();
     expect(relogin).toHaveBeenCalledOnce();
-    expect(sessionStorage.getItem("rivethub.share.draft")).toBe("d-1");
-    expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
+    exchangedOnce();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    expect(await screen.findByRole("status", { name: "Share code" })).toHaveTextContent(CODE);
+    expect(share.draft).toHaveBeenCalledOnce();
+  });
+
+  it("says so when it can't sign in again, and exchanges nothing", async () => {
+    (window as { rivethub?: RivetHubDesktop }).rivethub = bridge(vi.fn(async () => null));
+    const send = vi.fn().mockRejectedValue(new ReauthRequiredError("/api/share/drafts/d-1/send"));
+    sessionStorage.setItem("rivethub.share.draft", "d-1");
+    const { user } = renderAt("/share", fakeShare({ draft: vi.fn(async () => flagged("keep")), send }));
+    await user.click(await screen.findByRole("button", { name: "Resume it" }));
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("radio", { name: /127\.0\.0\.1:61522/ }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("button", { name: "Share" }));
+    await user.click(await screen.findByRole("button", { name: "Sign in again" }));
+    expect(await screen.findByText(/Couldn't sign in again/)).toBeInTheDocument();
+    expect(exchange).not.toHaveBeenCalled();
   });
 
   it("shows no Share or Receive outside the desktop app", async () => {
@@ -238,6 +270,28 @@ describe("Receive", () => {
     expect(within(imported).getAllByText(/from alex/)).toHaveLength(2);
     expect(within(imported).getByRole("link", { name: "Deploy notes" })).toHaveAttribute("href", "/sessions/import%3Atwo");
     expect(document.body).not.toHaveTextContent("TOPSECRETKEY");
+  });
+
+  it("signs in in place when a flagged import needs it, and the import goes through without the code or decisions again", async () => {
+    const importReceived = vi.fn().mockRejectedValueOnce(new ReauthRequiredError("/api/share/receive/import")).mockResolvedValue(result());
+    const share = fakeShare({ receive: vi.fn(async () => report()), importReceived });
+    const { user } = renderAt("/receive", share);
+    await user.type(await screen.findByLabelText("Paste the code you were sent"), CODE);
+    await user.click(screen.getByRole("button", { name: "Check the bundle" }));
+    await user.click(within(await screen.findByRole("listitem", { name: /Session 2/ })).getByRole("radio", { name: "Hold spans" }));
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Confirm it's you first.");
+    await user.click(screen.getByRole("button", { name: "Sign in again" }));
+    expect(await screen.findByText(/Signed in again/)).toBeInTheDocument();
+    exchangedOnce();
+    await user.click(screen.getByRole("button", { name: "Import" }));
+
+    expect(await screen.findByRole("list", { name: "Imported sessions" })).toBeInTheDocument();
+    expect(share.receive).toHaveBeenCalledOnce();
+    expect(importReceived).toHaveBeenCalledTimes(2);
+    expect(importReceived.mock.calls[1]).toEqual([CODE, { choices: [{ n: 1, decision: "import" }, { n: 2, decision: "hold_spans" }] }]);
+    expect(JSON.stringify({ ...localStorage, ...sessionStorage }) + location.href).not.toContain("TOPSECRETKEY");
   });
 
   it("says plainly that a code was already received", async () => {

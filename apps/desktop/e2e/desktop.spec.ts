@@ -128,19 +128,16 @@ test("the renderer has no Node and sees only rivethub.relogin and rivethub.updat
   await app.close();
 });
 
-test("relogin reopens the window on the node's origin", async () => {
+test("relogin hands back no code when there is no rh to mint one, and leaves the window where it is", async () => {
   const app = await launch();
   const page = await app.firstWindow();
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   await page.evaluate(() => history.pushState(null, "", "/review"));
 
-  await expect(page).toHaveURL(`${web.origin}/review`);
+  const code = await page.evaluate(() => (window as unknown as { rivethub: { relogin: () => Promise<string | null> } }).rivethub.relogin());
 
-  await page.evaluate(() => {
-    void (window as unknown as { rivethub: { relogin: () => Promise<void> } }).rivethub.relogin();
-  });
-  await expect(page).toHaveURL(`${web.origin}/?sample`);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned/);
+  expect(code).toBeNull();
+  await expect(page).toHaveURL(`${web.origin}/review`);
   await app.close();
 });
 

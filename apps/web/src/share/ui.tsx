@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { MainSidebar, Frame } from "../components/shell";
 import { Button, cx } from "../components/ui";
+import { signInWithCode } from "../client/auth";
 import { desktopBridge } from "../lib/desktop";
 import { useShareClient } from "../client/context";
 import type { Failure } from "./failure";
@@ -48,36 +49,53 @@ function Unavailable() {
   );
 }
 
-/** What went wrong, in a sentence, with a way back. A step-up failure carries the sign-in button. */
+/** What went wrong, in a sentence, with a way back. A step-up failure carries the sign-in button, and signing in again changes nothing else on the screen. */
 export function FailureNote({ failure, onDismiss }: { failure: Failure; onDismiss?: () => void }) {
+  const [signedIn, setSignedIn] = useState(false);
+  if (signedIn) {
+    return (
+      <div role="status" className="flex flex-wrap items-center gap-2 rounded-xl border border-border p-3.5">
+        <p className="m-0 text-[13px] text-foreground">Signed in again. Your place is kept; try that again.</p>
+        {onDismiss && <Button size="sm" variant="ghost" onClick={onDismiss}>Dismiss</Button>}
+      </div>
+    );
+  }
   return (
     <div role="alert" className="flex flex-col gap-1.5 rounded-xl border border-error/40 p-3.5">
       <p className="m-0 font-medium text-error">{failure.title}</p>
       {failure.detail && <p className="m-0 text-[13px] text-foreground">{failure.detail}</p>}
       <div className="flex flex-wrap gap-2 pt-1">
-        {failure.reauth && <ReloginButton />}
+        {failure.reauth && <ReloginButton onSignedIn={() => setSignedIn(true)} />}
         {onDismiss && <Button size="sm" variant="ghost" onClick={onDismiss}>Dismiss</Button>}
       </div>
     </div>
   );
 }
 
-/** Main mints a fresh login and reloads the window. The renderer never holds the owner token. */
-export function ReloginButton() {
+/** Main mints a one-time login code; this page trades it for a fresh session in place. The owner token never reaches the renderer. */
+export function ReloginButton({ onSignedIn }: { onSignedIn: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const bridge = desktopBridge();
   if (!bridge) return null;
+  const signInAgain = async () => {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const code = await bridge.relogin();
+      if (code === null) throw new Error("no login code");
+      await signInWithCode(code);
+      onSignedIn();
+    } catch {
+      setFailed(true);
+      setBusy(false);
+    }
+  };
   return (
-    <Button
-      variant="primary"
-      disabled={busy}
-      onClick={() => {
-        setBusy(true);
-        void bridge.relogin().finally(() => setBusy(false));
-      }}
-    >
-      Sign in again
-    </Button>
+    <>
+      <Button variant="primary" disabled={busy} onClick={() => void signInAgain()}>Sign in again</Button>
+      {failed && <p className="m-0 self-center text-[13px] text-error">Couldn't sign in again. Run `rh open`, or check that rh is running.</p>}
+    </>
   );
 }
 

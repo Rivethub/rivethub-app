@@ -15,7 +15,7 @@ import { Card, FailureNote, ShareScreen } from "../share/ui";
 const STEPS = ["Choose", "Decide", "Review flags", "Destination", "Confirm", "Share code"] as const;
 const AT: Record<SendStep, number> = { choose: 0, decide: 1, sanitizing: 1, review: 2, destination: 3, confirm: 4, sending: 4, shared: 5 };
 
-/** Only the draft's id survives a reload, so a step-up sign-in can pick the draft back up. rh keeps the draft; its text never reaches storage. */
+/** Only the draft's id survives a reload or a closed window, so the person can pick the draft back up. rh keeps the draft; its text never reaches storage. */
 const DRAFT_KEY = "rivethub.share.draft";
 const storedDraft = () => {
   try {

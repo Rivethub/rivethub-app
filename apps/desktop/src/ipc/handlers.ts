@@ -6,7 +6,7 @@ import { isNodeUrl } from "../window/navigation";
 import { RELOGIN_CHANNEL, UPDATE_GET_STATE_CHANNEL, UPDATE_RESTART_CHANNEL, UPDATE_SET_CHANNEL_CHANNEL } from "./channels";
 
 /** The renderer's IPC. Only a top-level frame on rh's origin may call it. */
-export function registerIpcHandlers(origin: string, openSignedIn: (window: BrowserWindow) => Promise<void>, updates: DesktopUpdates): void {
+export function registerIpcHandlers(origin: string, mintCode: () => Promise<string | null>, updates: DesktopUpdates): void {
   const callerWindow = (event: IpcMainInvokeEvent): BrowserWindow => {
     const frame = event.senderFrame;
     const window = BrowserWindow.fromWebContents(event.sender);
@@ -16,7 +16,10 @@ export function registerIpcHandlers(origin: string, openSignedIn: (window: Brows
     return window;
   };
 
-  ipcMain.handle(RELOGIN_CHANNEL, async (event) => openSignedIn(callerWindow(event)));
+  ipcMain.handle(RELOGIN_CHANNEL, (event) => {
+    callerWindow(event);
+    return mintCode();
+  });
   ipcMain.handle(UPDATE_GET_STATE_CHANNEL, (event) => {
     callerWindow(event);
     return updates.getState();
