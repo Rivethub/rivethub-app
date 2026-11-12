@@ -1,7 +1,11 @@
 # Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests both packages,
 # and uploads them, with electron-builder's latest-linux*.yml update manifests, as workflow
 # artifacts. The publish job copies them to get.rivethub.io/desktop/<channel>/, where installed
-# apps look for updates; it runs only when dispatched with publish=true and is off until enabled.
+# apps look for updates; it runs only when dispatched on main with publish=true.
+#
+# Every build is a nightly, x.y.z-nightly.YYYYMMDD.<run>, from apps/desktop/package.json's x.y.z,
+# unless dispatched with channel=stable, which builds x.y.z itself. Stable is for a release that a
+# fresh install can set up and run (capture and search) with as close to one click as we can get.
 name: Release desktop
 
 on:
@@ -11,6 +15,11 @@ on:
         description: Upload the packages and update manifests to get.rivethub.io/desktop
         type: boolean
         default: false
+      channel:
+        description: nightly (default) or stable. Stable builds the plain package.json version.
+        type: choice
+        options: [nightly, stable]
+        default: nightly
   pull_request:
     paths:
       - "apps/desktop/**"
@@ -29,8 +38,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # One version for both arches, so they can't straddle midnight UTC.
+  version:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.pick.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: apps/desktop/package.json
+          sparse-checkout-cone-mode: false
+      - id: pick
+        env:
+          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.channel || 'nightly' }}
+        run: |
+          set -euo pipefail
+          base=$(node -p 'require("./apps/desktop/package.json").version')
+          if [[ "${CHANNEL}" == stable ]]; then version="${base}"; else version="${base}-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"; fi
+          echo "Building ${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
   linux:
     name: linux-${{ matrix.arch }}
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -59,7 +89,7 @@ jobs:
           restore-keys: desktop-linux-${{ matrix.arch }}-
       - run: pnpm install --frozen-lockfile --filter "@rivethub/desktop..."
       - name: Build AppImage and .deb
-        run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release
+        run: pnpm dist:desktop:linux --arch ${{ matrix.arch }} --output-dir release --version ${{ needs.version.outputs.version }}
 
       # The AppImage must ship our AppRun, which refuses to start rather than add --no-sandbox.
       - name: Check the AppImage's AppRun
@@ -110,25 +140,16 @@ jobs:
   # from the self-hosted deploy runner. The channel comes from the version: x.y.z-nightly.YYYYMMDD.N
   # goes to nightly, anything else to stable.
   #
-  # TODO(Phil) before the first publish:
-  #   - Make the `rivethub-io` self-hosted runner available to this repo (it is registered to
-  #     Rivethub/rivethub-io only), or register another runner with that label.
-  #   - Create the `desktop-publish` environment with a required reviewer and deployments limited
-  #     to main, and add DEPLOY_SSH_KEY to it as an environment secret (not a repo secret).
-  #   - Make that a desktop-only key: in rivet's authorized_keys on the host, prefix it with
-  #     command="rrsync -wo /var/www/get.rivethub.io/desktop",restrict
-  #     so it can only write under desktop/ and can't touch the website. The paths below are
-  #     then relative to that root.
-  #   - Set the repository variable DEPLOY_KNOWN_HOSTS to the host's known_hosts line(s)
-  #     (ssh-keyscan once from a trusted machine, check the fingerprint).
-  #   - Create /var/www/get.rivethub.io/desktop/{stable,nightly} on the host, owned by rivet.
-  #   - Set the repository variable DESKTOP_PUBLISH_ENABLED=true.
+  # Setup (done 2026-11-12): the `rivethub-app` runner on the deploy box carries the rivethub-io
+  # label; the `desktop-publish` environment, limited to main, holds DEPLOY_SSH_KEY, a key whose
+  # authorized_keys entry is command="rrsync -wo /var/www/get.rivethub.io/desktop",restrict;
+  # repo variables DEPLOY_KNOWN_HOSTS (pinned host key) and DESKTOP_PUBLISH_ENABLED=true.
   publish:
     name: Publish to get.rivethub.io
-    needs: linux
+    needs: [version, linux]
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && vars.DESKTOP_PUBLISH_ENABLED == 'true' }}
     runs-on: [self-hosted, linux, x64, rivethub-io]
-    # A required reviewer on this environment gates the deploy key; a workflow edit can't skip it.
+    # The environment releases the deploy key only to runs on main, so a PR's workflow edit can't use it.
     environment: desktop-publish
     timeout-minutes: 15
     concurrency:
@@ -160,6 +181,8 @@ jobs:
           else
             channel=stable
           fi
+          test "${version}" = "${{ needs.version.outputs.version }}"
+          test "${channel}" = "${{ inputs.channel }}"
           echo "Publishing ${version} to ${channel}"
           echo "CHANNEL=${channel}" >> "$GITHUB_ENV"
 

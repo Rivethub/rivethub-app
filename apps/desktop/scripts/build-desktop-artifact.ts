@@ -1,4 +1,4 @@
-// pnpm dist:desktop:linux [--arch x64|arm64] [--output-dir <dir>]
+// pnpm dist:desktop:linux [--arch x64|arm64] [--output-dir <dir>] [--version <semver>]
 // Stages the pinned rh for the target arch, builds apps/web and apps/desktop, and packages
 // a Linux AppImage and .deb with electron-builder. Mirrors t3code's scripts/build-desktop-artifact.ts:
 // the app is staged in a temp dir with only its bundle and a generated package.json, and
@@ -152,17 +152,21 @@ function isLinuxArch(value: string): value is LinuxArch {
 }
 
 async function main(): Promise<void> {
-  const { values } = parseArgs({ options: { arch: { type: "string" }, "output-dir": { type: "string" } } });
+  const { values } = parseArgs({ options: { arch: { type: "string" }, "output-dir": { type: "string" }, version: { type: "string" } } });
   const arch = values.arch ?? process.arch;
   if (!isLinuxArch(arch)) throw new Error(`--arch must be one of ${LINUX_ARCHES.join(", ")}, got ${arch}`);
   // pnpm runs package scripts in the package dir; resolve a relative --output-dir against where the user ran pnpm.
   const outputDir = path.resolve(process.env["INIT_CWD"] ?? process.cwd(), values["output-dir"] ?? path.join(repoRoot, "release"));
 
+  // --version stamps a release version (CI passes x.y.z-nightly.YYYYMMDD.N); otherwise package.json's.
+  const desktopPackage = JSON.parse(await readFile(path.join(desktopDir, "package.json"), "utf8")) as { version: string };
+  const version = values.version ?? desktopPackage.version;
+  if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) throw new Error(`--version must be semver, got ${version}`);
+
   await run(process.execPath, [path.join(desktopDir, "scripts/fetch-rh.ts"), "--target", rhTargetFor("linux", arch)!], desktopDir);
   await run("pnpm", ["--filter", "@rivethub/desktop...", "build"], repoRoot);
 
-  const desktopPackage = JSON.parse(await readFile(path.join(desktopDir, "package.json"), "utf8")) as { version: string };
-  for (const artifact of await packageLinux({ arch, outputDir, version: desktopPackage.version, targets: LINUX_TARGETS })) console.log(artifact);
+  for (const artifact of await packageLinux({ arch, outputDir, version, targets: LINUX_TARGETS })) console.log(artifact);
 }
 
 /** Packages the already-built dist-electron, staged rh and apps/web build. Returns the artifact paths. */
