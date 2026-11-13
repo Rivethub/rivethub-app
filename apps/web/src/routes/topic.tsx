@@ -7,6 +7,7 @@ import { useAddDecision, useCreateTopic, useTopic, useChanges, useTopicTree, use
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, SidePanel, type Tab } from "../components/article";
 import { EditableText } from "../components/editable";
 import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library";
+import { articleBody, Markdown } from "../components/markdown";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, Chip, ErrorNote, Eyebrow, Loading, SampleBadge, Tags } from "../components/ui";
@@ -194,10 +195,11 @@ function TopicTab({ t, tab }: { t: TopicArticle; tab: TabId }) {
 function TopicOverview({ t }: { t: TopicArticle }) {
   const add = useAddDecision();
   const [draft, setDraft] = useState("");
+  const body = t.article ? articleBody(t.article, t.name) : "";
   return (
     <>
-      <p className="m-0">{t.lead}</p>
-      {t.current && <p className="m-0 text-muted-foreground">{t.current}</p>}
+      {body ? <Markdown source={body} /> : <p className="m-0">{t.lead}</p>}
+      {t.current && !body.includes(t.current) && <p className="m-0 text-muted-foreground">{t.current}</p>}
       <H2>Decisions</H2>
       <div className="flex flex-col gap-1 font-sans text-[14px]">
         {t.decisions.map((d) => (

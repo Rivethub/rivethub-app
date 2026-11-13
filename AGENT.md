@@ -8,6 +8,12 @@ Branch `redesign/memory-manager` redesigns `apps/web` (which `apps/desktop` show
 
 Checked for real against `rh` 0.8.3 on an empty standalone node: first launch, Today, the session list, a session's messages and summary states, search, creating a topic, filing a session, recording a decision, keep, and the refused rename. Sharing between hubs was not driven live; it is covered by unit tests and `apps/desktop/e2e/share.live.spec.ts`, which was updated for the new navigation but not run.
 
+## Entities and articles (2026-11-13, later)
+
+Topic and entity pages render the page's full article (`components/markdown.tsx`, no HTML ever set). Checked by running the renderer over all 138 real articles on Phil's hub: every construct they use is handled (headings, bullets, bold, tables on 15 pages, a few fences and links).
+
+This targets the entity worker in `rivethub-runtime` branch `feat/entity-worker` (on phildesk at `~/work/rh-ent-port`, five commits on 0.8.2, not pushed as of this note). That worker does not change the HTTP contract. It changes what is on the pages: an article per entity rewritten from every session that touches it, a summary, a "Current facts" list, one dated history line per session, and far more entities (200 to 600 pages from a few dozen sessions in the eval runs). The list, the sidebar and the page were sized for that.
+
 ## Decisions
 
 - **One sidebar everywhere.** The session list is the main column, not a second sidebar; the topic tree and entity kinds nest under their library row.
@@ -19,6 +25,8 @@ Checked for real against `rh` 0.8.3 on an empty standalone node: first launch, T
 ## Not done
 
 - `apps/mobile` has the new themes and gets the client fixes (stored transcripts, untitled sessions, search passages) for free, but not the new screens: Guide, Stats, Shared, the richer session list, search filters.
+- The runtime folds apps, CLIs, libraries, plug-ins and platforms into the one `software` type on the wire, so the entity list cannot split them. Finer types need the wire enum to grow.
+- `[[wiki links]]` in articles render as plain text (one occurrence in the real corpus).
 - Tag taxonomy, tidy batches as batches, wiki gaps and archive, trash candidates, per-session model calls and export have routes in `rh` and no screen yet.
 - Asks for the runtime: a route that reads one session's stored messages by session id; a memory-level session title; a session filter by visibility (Shared lists from the first page of sessions only).
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionId, TopicId } from "@rivethub/contracts";
+import type { EntityId, SessionId, TopicId } from "@rivethub/contracts";
 import { createRhClient } from "../src/rh/index.js";
 import { sessionSegment } from "../src/rh/util.js";
 import { HttpError, MalformedResponseError, RouteMissingError } from "../src/errors.js";
@@ -227,5 +227,23 @@ describe("the boundary", () => {
     });
     const live = await createRhClient({ baseUrl: "https://rh.test", fetch: fake.fetch }).probe();
     expect(live).toEqual({ topics: "live", "summary-tree": "live" });
+  });
+});
+
+describe("entity article", () => {
+  it("joins the entity's facts with the article and check date from its page", async () => {
+    const entity = { id: "e-1", title: "gpubox", type: "machine", sessionCount: 0, aliases: [], visibility: { kind: "private" }, lead: "An inference host.", facts: [], timeline: [], connected: [], sessions: [], tags: [], freshness: "live" };
+    const page = { topic: { id: "e-1", kind: "entity", slug: "gpubox", name: "gpubox", aliases: [] }, page: { slug: "gpubox", title: "gpubox", currentState: "An inference host.", article: "# gpubox\n\n### Services\n- one", lastVerified: "2026-10-28T05:09:49.702Z" }, mentions: [] };
+    const { client } = rh({ "GET /api/entities/e-1": entity, "GET /api/topics/e-1/page": page });
+    const got = await client.entity!("e-1" as EntityId);
+    expect(got).toMatchObject({ title: "gpubox", lead: "An inference host.", article: "# gpubox\n\n### Services\n- one", lastVerified: "2026-10-28T05:09:49.702Z" });
+  });
+
+  it("still loads an entity whose page cannot be read", async () => {
+    const entity = { id: "e-1", title: "gpubox", type: "machine", sessionCount: 0, aliases: [], visibility: { kind: "private" }, lead: "", facts: [], timeline: [], connected: [], sessions: [], tags: [], freshness: "live" };
+    const { client } = rh({ "GET /api/entities/e-1": entity, "GET /api/topics/e-1/page": { status: 500, body: { error: "boom" } } });
+    const got = await client.entity!("e-1" as EntityId);
+    expect(got.title).toBe("gpubox");
+    expect(got).not.toHaveProperty("article");
   });
 });

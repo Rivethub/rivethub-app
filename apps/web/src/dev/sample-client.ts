@@ -137,6 +137,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       aliases: x.aliases,
       visibility: { kind: "private" },
       lead: x.lead || `${node.name} collects ${node.sessionCount} sessions${node.children.length ? ` across ${node.children.length} subtopics` : ""}.`,
+      ...(x.article ? { article: x.article } : {}),
       decisions: x.decisions.map((d, i) => {
         const dec: TopicArticle["decisions"][number] = { id: `${id}-d${i}`, text: d.text, at: at(d.days, "14:00"), superseded: d.superseded ?? false };
         const src = d.source ? sessions.get(d.source) : undefined;
