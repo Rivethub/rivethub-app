@@ -97,6 +97,7 @@ export const topicTree = (): TopicNode[] => topicSeeds.map((s) => toNode(s));
 
 export interface TopicExtra {
   lead: string;
+  article?: string;
   current?: string;
   aliases: string[];
   folder?: string;
@@ -111,6 +112,20 @@ export const topicExtras: Record<string, TopicExtra> = {
     lead:
       "The release that turns the RivetHub runtime into a memory product: capture from every harness, manage what was captured, and serve it back as recall. Live sessions, chat, terminal and delegation moved to T3.",
     current: "Currently, the memory change stream is in and session visibility is moving off the live registry.",
+    article: [
+      "The release that turns the RivetHub runtime into a memory product: capture from every harness, manage what was captured, and serve it back as recall. Live sessions, chat, terminal and delegation moved to T3.",
+      "",
+      "### What stays",
+      "- Capture from every harness, through each tool's own hooks.",
+      "- Sessions, summaries, topics, entities and the wiki.",
+      "- Recall over MCP: `memory_search`, `memory_browse`, `wiki_read`.",
+      "",
+      "### What moved out",
+      "Chat, terminals, harness launch and delegation. A config that still names them loads with **one warning each**.",
+      "",
+      "### Still open",
+      "Session visibility is moving off the live registry and onto tenancy.",
+    ].join("\n"),
     aliases: ["memory cut", "rh 0.8"],
     folder: "~/rivethub-runtime",
     decisions: [
@@ -186,6 +201,29 @@ export function nas01(): EntityArticle {
     topic: { id: tid("backups"), path: ["Home lab", "Backups"] },
     visibility: { kind: "space", space: "household" },
     lead: "The home NAS that holds the memory store's backups. It receives a nightly pg_dump and a copy of the wiki pages, and keeps them for 14 days.",
+    lastVerified: at(0, "09:40"),
+    article: [
+      "# nas-01",
+      "",
+      "A two-disk mirror in the hall cupboard, reached as `nas-01.home.arpa`. It does one job: hold copies of the memory store.",
+      "",
+      "### Backups",
+      "- **Nightly dump:** `pg_dump` of `memory-db` at 03:00, about 4 GB, taking roughly four minutes.",
+      "- **Wiki pages:** copied after the dump finishes.",
+      "- **Retention:** 14 days, pruned by `backup.sh` with `find -mtime +14`.",
+      "",
+      "### Storage",
+      "The backup pool is a ZFS mirror with 1.8 TB free. Snapshots are read-only to the backup user.",
+      "",
+      "### Restoring",
+      "1. Stop the workers.",
+      "2. Restore the newest dump with `pg_restore --clean`.",
+      "3. Start the workers and check **Stats**.",
+      "",
+      "### Current facts",
+      "- **backup-time**: 03:00 nightly (as of today)",
+      "- **retention**: 14 days (as of Nov 11)",
+    ].join("\n"),
     facts: [
       { id: "f-role" as FactId, key: "Role", value: "Backup target for the memory store", since: at(7, "20:10"), pinned: false, sources: [{ session: nightly, at: at(7, "20:10"), value: "Backup target for the memory store" }] },
       { id: "f-status" as FactId, key: "Status", value: "Online", since: at(0, "09:40"), pinned: false, sources: [{ session: pg, at: at(0, "09:40"), value: "Online" }] },

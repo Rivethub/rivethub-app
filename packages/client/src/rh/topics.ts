@@ -126,6 +126,7 @@ export function topicArticle(
     folder: record.directory?.path,
     visibility: visibilityFromWire(record.visibility),
     lead: lead(page.page, record.name),
+    article: page.page?.article || undefined,
     current: page.page?.currentState === "" ? undefined : page.page?.currentState,
     decisions: mapped,
     subtopics: topics

@@ -118,6 +118,8 @@ export interface TopicArticle {
   folder?: string;
   visibility: Visibility;
   lead: string;
+  /** The page's full article as the workers wrote it, in Markdown. `lead` is its first paragraph. */
+  article?: string;
   current?: string;
   decisions: Decision[];
   subtopics: { id: TopicId; name: string; state: string }[];
@@ -168,7 +170,12 @@ export interface EntityArticle extends EntitySummary {
   aliases: string[];
   topic?: { id: TopicId; path: string[] };
   visibility: Visibility;
+  /** The page's summary: what this is, in a sentence or two. */
   lead: string;
+  /** The page's full article, in Markdown. The entity worker rewrites it from every session that touches the entity. */
+  article?: string;
+  /** When the page's content was last checked against a session. */
+  lastVerified?: IsoTime;
   facts: Fact[];
   timeline: { at: IsoTime; text: string; kind: ChangeKind; source?: { id: SessionId; title: string } }[];
   connected: { id: EntityId; title: string; sharedSessions: number }[];

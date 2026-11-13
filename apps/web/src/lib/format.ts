@@ -3,6 +3,20 @@ import type { ChangeKind, ReviewItem, SubjectRef } from "@rivethub/contracts";
 /** "1 session", "2 sessions". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
+const ACRONYMS = new Set(["ip", "os", "gpu", "gpus", "cpu", "cpus", "url", "ssh", "dns", "id", "api", "ram", "vm", "pr", "ui", "mcp", "tls", "nfs"]);
+
+/**
+ * A fact's key as a label. The entity worker writes keys as kebab-case attribute names and files
+ * one-off facts under `other-`: `ip` reads "IP", `other-incident-silent-stop` reads "Incident silent stop".
+ * A key a person typed with capitals or spaces is left as they wrote it.
+ */
+export function factLabel(key: string): string {
+  if (/[A-Z ]/.test(key)) return key;
+  const words = key.replace(/^other[-_]/, "").split(/[-_]+/).filter(Boolean);
+  if (!words.length) return key;
+  return words.map((w, i) => (ACRONYMS.has(w) ? w.replace(/s$/, "").toUpperCase() + (w.endsWith("s") && w.length > 2 && ACRONYMS.has(w.slice(0, -1)) ? "s" : "") : i === 0 ? w[0]!.toUpperCase() + w.slice(1) : w)).join(" ");
+}
+
 export function subjectHref(s: Pick<SubjectRef, "kind" | "id">): string {
   return s.kind === "topic" ? `/topics/${s.id}` : s.kind === "entity" ? `/entities/${s.id}` : `/sessions/${s.id}`;
 }

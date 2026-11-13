@@ -6,11 +6,13 @@ import { useChanges, useEntities, useEntity, useReviewQueue, useSetFact } from "
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, type Tab } from "../components/article";
 import { PinIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
+import { articleBody, Markdown } from "../components/markdown";
 import { Modal } from "../components/modal";
 import { PinButton } from "../components/pin";
+import { SearchIcon } from "../components/icons";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, plural } from "../lib/format";
+import { changeKind, factLabel, plural } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { EmptyLibrary, visibilityLabel } from "./topic";
 
@@ -20,6 +22,16 @@ const TYPE_ORDER: EntityType[] = ["machine", "service", "person", "repository", 
 
 function groupByType(list: EntitySummary[]) {
   return TYPE_ORDER.map((type) => ({ type, items: list.filter((e) => e.type === type) })).filter((g) => g.items.length);
+}
+
+const SIDEBAR_SHOWN = 14;
+
+/** A window of the list around the open entity, so its neighbors are one click away without listing hundreds. */
+function nearby(items: EntitySummary[], id: string): EntitySummary[] {
+  if (items.length <= SIDEBAR_SHOWN) return items;
+  const at = Math.max(0, items.findIndex((e) => e.id === id));
+  const start = Math.min(Math.max(0, at - Math.floor(SIDEBAR_SHOWN / 2)), items.length - SIDEBAR_SHOWN);
+  return items.slice(start, start + SIDEBAR_SHOWN);
 }
 
 function EntityKinds({ selected }: { selected?: EntitySummary }) {
@@ -33,49 +45,99 @@ function EntityKinds({ selected }: { selected?: EntitySummary }) {
             <span className="text-[12px] text-muted-foreground">{g.items.length}</span>
           </Link>
           {selected?.type === g.type &&
-            g.items.map((e) => (
+            nearby(g.items, selected.id).map((e) => (
               <Link
                 key={e.id}
                 to="/entities/$entityId"
                 params={{ entityId: e.id }}
                 aria-current={e.id === selected.id ? "page" : undefined}
-                className={cx("rounded-lg py-[5px] pr-2.5 pl-[22px] text-[13px] text-foreground hover:no-underline", e.id === selected.id ? "bg-selected" : "hover:bg-accent")}
+                className={cx("truncate rounded-lg py-[5px] pr-2.5 pl-[22px] text-[13px] text-foreground hover:no-underline", e.id === selected.id ? "bg-selected" : "hover:bg-accent")}
               >
                 {e.title}
               </Link>
             ))}
+          {selected?.type === g.type && g.items.length > SIDEBAR_SHOWN && (
+            <Link to="/entities" hash={g.type} className="py-[5px] pr-2.5 pl-[22px] text-[12px]">All {g.items.length} {entityTypes[g.type].many.toLowerCase()}</Link>
+          )}
         </div>
       ))}
     </>
   );
 }
 
+type EntitySort = "name" | "sessions";
+
 export function EntitiesIndex() {
   const phone = useIsPhone();
   const list = useEntities();
-  const groups = groupByType(list.data ?? []);
+  const [text, setText] = useState("");
+  const [only, setOnly] = useState<EntityType | "">("");
+  const [sort, setSort] = useState<EntitySort>("name");
+  const all = list.data ?? [];
+  const types = groupByType(all);
+  const needle = text.trim().toLowerCase();
+  const shown = all
+    .filter((e) => (!only || e.type === only) && (!needle || e.title.toLowerCase().includes(needle)))
+    .sort((x, y) => (sort === "sessions" ? y.sessionCount - x.sessionCount : 0) || x.title.localeCompare(y.title, undefined, { sensitivity: "base" }));
+  const groups = groupByType(shown);
+  const chip = (on: boolean) => cx("rounded-full border px-2.5 text-[12px]", phone ? "min-h-9 px-3" : "py-1", on ? "border-transparent bg-selected text-foreground" : "border-border bg-transparent text-muted-foreground hover:text-foreground");
+
+  const controls = all.length > 0 && (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className={cx("flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-muted-foreground", phone ? "min-h-11" : "py-1.5")}>
+          <SearchIcon size={14} />
+          <span className="sr-only">Filter entities</span>
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder={`Filter ${all.length.toLocaleString("en-US")} entities…`} className="min-w-0 flex-1 border-0 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
+        </label>
+        <label className="flex flex-col">
+          <span className="sr-only">Sort</span>
+          <select value={sort} onChange={(e) => setSort(e.target.value as EntitySort)} className={cx("appearance-none rounded-lg border border-input bg-card bg-[url(/icons/select-chevron.svg)] bg-[length:10px] bg-[right_10px_center] bg-no-repeat py-1.5 pr-7 pl-2.5 text-foreground", phone && "min-h-11")}>
+            <option value="name">A to Z</option>
+            <option value="sessions">Most sessions</option>
+          </select>
+        </label>
+      </div>
+      <div role="group" aria-label="Type" className="flex flex-wrap gap-1.5">
+        <button type="button" aria-pressed={only === ""} onClick={() => setOnly("")} className={chip(only === "")}>All {all.length.toLocaleString("en-US")}</button>
+        {types.map((g) => (
+          <button key={g.type} type="button" aria-pressed={only === g.type} onClick={() => setOnly(only === g.type ? "" : g.type)} className={chip(only === g.type)}>
+            {entityTypes[g.type].many} {g.items.length}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
   const rows = groups.map((g) => (
     <section key={g.type} id={g.type} aria-label={entityTypes[g.type].many} className="flex flex-col">
-      <span className="px-2 pt-3 pb-1 text-[12px] font-semibold text-muted-foreground uppercase">{entityTypes[g.type].many}</span>
+      <h2 className="m-0 px-2 pt-4 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">{entityTypes[g.type].many} <span className="font-normal">{g.items.length}</span></h2>
       {g.items.map((e) => (
         <Link key={e.id} to="/entities/$entityId" params={{ entityId: e.id }} className="flex min-h-12 items-center gap-2.5 border-b border-border px-3 text-foreground hover:bg-accent hover:no-underline md:min-h-10">
-          <span className="flex-1">{e.title}</span>
-          <span className="text-[12px] text-muted-foreground">{plural(e.sessionCount, "session")}</span>
+          <span className="min-w-0 flex-1 truncate">{e.title}</span>
+          {e.sessionCount > 0 && <span className="text-[12px] text-muted-foreground">{plural(e.sessionCount, "session")}</span>}
           <span className="text-muted-foreground">›</span>
         </Link>
       ))}
     </section>
   ));
+  const body = list.isPending ? <Loading /> : list.isError ? <ErrorNote error={list.error} /> : all.length === 0 ? <EmptyLibrary kind="entities" /> : shown.length === 0 ? (
+    <p className="m-0 px-2 py-6 text-muted-foreground">No entity matches. <button type="button" className="border-0 bg-transparent p-0 text-info hover:underline" onClick={() => { setText(""); setOnly(""); }}>Clear the filter</button></p>
+  ) : rows;
   return (
     <Frame sidebar={<MainSidebar><EntityKinds /></MainSidebar>} tabs>
       {phone ? (
-        <LibraryPhone kind="entities">{rows}</LibraryPhone>
+        <LibraryPhone kind="entities">
+          <div className="px-2 pt-1">{controls}</div>
+          {body}
+        </LibraryPhone>
       ) : (
         <div className="flex justify-center px-7 py-8">
-          <div className="flex max-w-[820px] flex-1 flex-col gap-2">
+          <div className="flex max-w-[820px] flex-1 flex-col gap-3">
             <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Entities <SampleBadge capability="entities" /></h1>
-            <p className="m-0 text-muted-foreground">Machines, services, people and the rest that your agents keep running into.</p>
-            {list.isPending ? <Loading /> : list.data?.length === 0 ? <EmptyLibrary kind="entities" /> : rows}
+            <p className="m-0 text-muted-foreground">The machines, services, people, repositories and tools your sessions touch. Each has a page with what is currently true about it.</p>
+            {controls}
+            <div className="flex flex-col">{body}</div>
           </div>
         </div>
       )}
@@ -136,6 +198,7 @@ export function EntityPage() {
               <>
                 <PhoneFacts e={e!} readOnly={!!asOf} />
                 <p className="m-0 font-serif text-[16px] leading-[1.6]">{e!.lead}</p>
+                <div className="font-serif text-[16px] leading-[1.6]"><EntityArticleBody e={e!} /></div>
                 <Timeline rows={e!.timeline} />
               </>
             ) : (
@@ -176,6 +239,7 @@ function EntityTitle({ e, phone }: { e: EntityArticle; phone?: boolean }) {
       <span className="font-sans text-[13px] text-muted-foreground">
         {entityTypes[e.type].one}
         {e.aliases.length > 0 && ` · also ${e.aliases.map((a) => `“${a}”`).join(", ")}`}
+        {e.lastVerified && ` · last checked ${shortDate(e.lastVerified)}`}
         {e.topic && (
           <>
             {" · in "}
@@ -185,6 +249,16 @@ function EntityTitle({ e, phone }: { e: EntityArticle; phone?: boolean }) {
       </span>
     </div>
   );
+}
+
+/**
+ * The article the entity worker wrote. It ends with a "Current facts" list; when the facts themselves are
+ * on the page, that list is dropped so the two cannot disagree.
+ */
+function EntityArticleBody({ e }: { e: EntityArticle }) {
+  if (!e.article) return null;
+  const body = articleBody(e.article, e.title, { dropFacts: e.facts.length > 0, dropLead: e.lead });
+  return body ? <Markdown source={body} /> : null;
 }
 
 interface TimelineRow {
@@ -233,7 +307,7 @@ function EntityTab({ e, tab }: { e: EntityArticle; tab: TabId }) {
             <ul className="m-0 flex list-none flex-col gap-1.5 p-0 font-sans text-[14px]">
               {previous.map((f) => (
                 <li key={f.id}>
-                  <b className="font-medium">{f.key}</b> was {f.previous!.value} until {shortDate(f.previous!.until)}
+                  <b className="font-medium">{factLabel(f.key)}</b> was {f.previous!.value} until {shortDate(f.previous!.until)}
                 </li>
               ))}
             </ul>
@@ -245,6 +319,7 @@ function EntityTab({ e, tab }: { e: EntityArticle; tab: TabId }) {
   return (
     <>
       <p className="m-0">{e.lead}</p>
+      <EntityArticleBody e={e} />
       <Timeline rows={e.timeline} />
       {e.connected.length > 0 && (
         <>
@@ -339,7 +414,7 @@ function StatePanel({ e, steps, asOf, onAsOf, focusSlider, startAdding }: { e: E
             className="grid grid-cols-[88px_minmax(0,1fr)_18px] items-start gap-2 border-t border-border px-3.5 py-2"
             style={f.conflict ? { background: "color-mix(in srgb, var(--warning) 7%, transparent)" } : undefined}
           >
-            <span className="text-muted-foreground">{f.key}</span>
+            <span className="text-muted-foreground">{factLabel(f.key)}</span>
             <span className="flex min-w-0 flex-col gap-0.5">
               {asOf ? (
                 <span>{f.value}</span>
@@ -465,7 +540,7 @@ function PhoneFacts({ e, readOnly }: { e: EntityArticle; readOnly: boolean }) {
           className="grid min-h-12 w-full grid-cols-[96px_minmax(0,1fr)_14px] items-center gap-2 border-0 border-b border-border px-3.5 py-2 text-left text-foreground last:border-b-0 disabled:opacity-100"
           style={f.conflict ? { background: "color-mix(in srgb, var(--warning) 8%, transparent)" } : undefined}
         >
-          <span className="text-[13px] text-muted-foreground">{f.key}</span>
+          <span className="text-[13px] text-muted-foreground">{factLabel(f.key)}</span>
           <span className="flex flex-col">
             <span style={{ color: f.conflict ? "var(--warning)" : /^online$/i.test(f.value) ? "var(--success)" : undefined }}>
               {f.value}

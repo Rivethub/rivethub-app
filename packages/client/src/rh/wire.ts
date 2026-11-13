@@ -59,6 +59,7 @@ export const wikiPage = z.object({
   entities: z.array(z.string()).default([]),
   tags: z.array(z.string()).default([]),
   updatedAt: nullish(timeSchema),
+  lastVerified: nullish(timeSchema),
 });
 
 export const topicMention = z.object({ topicId: z.string(), name: z.string() });

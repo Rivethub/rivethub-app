@@ -46,7 +46,17 @@ export function entitiesApi(http: Http) {
     },
 
     async entity(id: EntityId, asOf?: IsoTime): Promise<EntityArticle> {
-      return mapEntityArticle(await http.get(`/api/entities/${encodeURIComponent(id)}`, wire.entityArticle, { asOf }));
+      // The entity route carries the page's summary and facts. The article the entity worker writes is on the
+      // page itself, which every entity has as a topic of its own. An entity with no page yet has no article.
+      const [article, page] = await Promise.all([
+        http.get(`/api/entities/${encodeURIComponent(id)}`, wire.entityArticle, { asOf }),
+        http.get(`/api/topics/${encodeURIComponent(id)}/page`, wire.topicPage).then(
+          (found) => found.page,
+          () => undefined,
+        ),
+      ]);
+      const verified = page?.lastVerified ?? page?.updatedAt;
+      return strip<EntityArticle>({ ...mapEntityArticle(article), article: page?.article || undefined, lastVerified: verified });
     },
 
     async setFact(entity: EntityId, fact: { id?: FactId; key: string; value: string; pinned: boolean }): Promise<void> {

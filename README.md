@@ -33,7 +33,7 @@ One navigation on every screen, so nothing moves when you change section:
 | **Today** | What your agents did, what needs a decision, one line if capture or a model is failing, and the single next step from the guide. |
 | **Review** | Everything memory is unsure of, decided from the keyboard. |
 | **Sessions** | Every captured session with its gist, tool, topic and state. Filter by text, tool, unfiled, kept or trash; J, K and Enter move and open. A session opens on its summary, then the messages. |
-| **Topics**, **Entities** | The organized view: articles, decisions and facts. Topics can be created by hand, so filing works before any model is set. |
+| **Topics**, **Entities** | The organized view. Each page shows the whole article the workers wrote, rendered from Markdown, with decisions (topics) or current facts and a timeline (entities) beside it. The entity list filters by text and type and sorts by name or sessions. Topics can be created by hand, so filing works before any model is set. |
 | **Shared** | What is shared with each space on this hub, and sending to or receiving from another RivetHub. |
 | **Search** (`/` or Ctrl K) | Ctrl K jumps to a topic, entity or session. The Search page lists every match inside sessions, with time chips and filters for messages or summaries and for how to match. |
 | **Stats** | What is in memory and whether the workers are keeping up, with failed jobs to retry or dismiss. |
@@ -44,6 +44,7 @@ The default theme is RivetHub's own palette, taken from `rivethub-desktop`, in d
 Two things the app does because of how `rh` 0.8 behaves, both in `packages/client`:
 
 - **A session's messages.** The detailed transcript comes from the tool's own files, which exist only on the machine that ran the session, and `rh` answers an empty transcript elsewhere. The client then reads what memory stored, by browsing the session's time span for its tool (`storedTranscript`). `rh` has no route that reads one session's stored messages, so a span holding more than 200 messages comes back short.
+- **An entity's article.** `/api/entities/{id}` carries the page's summary and facts but not its article. Every entity is also a topic, so the client reads the article from `/api/topics/{id}/page` and joins the two. The entity worker ends its article with a "Current facts" list; the page drops that list when the facts themselves are shown.
 - **Renaming.** `rh` renames only Claude Code and Grok Build sessions, in the tool's own store. For any other session the app says the title was not changed.
 
 The desktop app:
