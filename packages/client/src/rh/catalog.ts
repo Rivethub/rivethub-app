@@ -2,17 +2,12 @@ import type { Change, EntityId, Page, SessionDetail, SessionId, SessionQuery, Se
 import type { Http } from "../http.js";
 import { RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
-import { sessionId, sessionSegment, strip, topicId, visibilityFromWire } from "./util.js";
+import { displayTitle, sessionId, sessionSegment, strip, topicId, visibilityFromWire } from "./util.js";
 
 const PAGE_SIZE = 50;
 
 type RowFields = Omit<wire.CatalogRow, "visibility" | "parentId" | "childCount"> & Partial<Pick<wire.CatalogRow, "parentId" | "childCount">>;
 
-/** rh falls back to the harness's own session id when nothing titled the session. */
-function displayTitle(title: string, id: string): string {
-  const native = id.slice(id.indexOf(":") + 1);
-  return title.trim() === "" || title === id || title === native ? "Untitled session" : title;
-}
 
 export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRow {
   return strip<SessionSummaryRow>({

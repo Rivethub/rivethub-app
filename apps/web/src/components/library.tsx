@@ -4,7 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { usePins, useTopicTree } from "../client/queries";
 import { subjectHref } from "../lib/format";
-import { MobileHeader, SidebarSection } from "./shell";
+import { MobileHeader } from "./shell";
 import { cx } from "./ui";
 
 export type LibraryKind = "topics" | "entities" | "sessions";
@@ -125,9 +125,5 @@ export function TopicTree({ selected, phone }: { selected?: string; phone?: bool
 }
 
 export function TopicTreeSection({ selected }: { selected?: string }) {
-  return (
-    <SidebarSection title="Topics">
-      <TopicTree {...(selected ? { selected } : {})} />
-    </SidebarSection>
-  );
+  return <TopicTree {...(selected ? { selected } : {})} />;
 }

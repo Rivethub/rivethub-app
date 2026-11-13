@@ -12,7 +12,7 @@ import type {
   Visibility,
 } from "@rivethub/contracts";
 import type { Http } from "../http.js";
-import { NotFoundError, RouteMissingError } from "../errors.js";
+import { NetworkError, NotFoundError, RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
 import { harnessOf, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import { indexTopics, sessionRow, topicPath, type TopicIndex } from "./topics.js";
@@ -173,9 +173,18 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
     },
 
     async transcript(id: SessionId, range?: [number, number]): Promise<TranscriptTurn[]> {
-      const response = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse);
-      const turns = mapTranscript(response, EPOCH);
-      return range ? turns.slice(range[0], range[1] + 1) : turns;
+      // The harness's own file has the most detail (tool calls and results), but it exists only on the machine
+      // that ran the session. Anywhere else, and for sessions that reached memory another way, read what the hub stored.
+      const turns = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
+        (response) => mapTranscript(response, EPOCH),
+        async (error: unknown) => {
+          if (error instanceof NetworkError) throw error;
+          const stored = await storedTranscript(http, id);
+          if (stored.length === 0) throw error;
+          return stored;
+        },
+      );
+      return range ? turns.filter((turn) => turn.index >= range[0] && turn.index <= range[1]) : turns;
     },
 
     async summaryTree(id: SessionId): Promise<SummaryNode> {
@@ -203,6 +212,39 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
     },
   };
 }
+
+const STORED_PAGE = 200;
+
+/**
+ * A session's messages as memory stored them. rh has no route that reads one session's messages, so this
+ * browses the session's own time span for its harness and keeps the messages that belong to it. A span
+ * holding more than one page of messages comes back short; the harness transcript has no such limit.
+ */
+export async function storedTranscript(http: Http, id: SessionId): Promise<TranscriptTurn[]> {
+  const span = await http.get(`/api/sessions/${sessionSegment(id)}`, wire.sessionSpan).catch(() => undefined);
+  const pad = (iso: string, ms: number) => new Date(new Date(iso).getTime() + ms).toISOString();
+  const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
+    limit: STORED_PAGE,
+    agent: harnessOf(id),
+    ...(span ? { since: pad(span.startedAt, -1000), before: pad(span.endedAt ?? new Date().toISOString(), 1000) } : {}),
+  });
+  const mine = page.messages.filter((message) => message.sessionId === id);
+  const ordered = mine.map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
+  return ordered.map(({ message }, i) => {
+    const tool = message.role === "tool" || message.toolName !== undefined;
+    return {
+      index: i + 1,
+      role: message.role === "user" ? "user" : "assistant",
+      at: message.createdAt ?? EPOCH,
+      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${message.content}` : message.content) } : { kind: "text", text: message.content }],
+    } satisfies TranscriptTurn;
+  });
+}
+
+const oneLine = (text: string) => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 160 ? `${flat.slice(0, 157)}...` : flat;
+};
 
 function matches(row: SessionSummaryRow, query: SessionQuery): boolean {
   if (query.harness !== undefined && row.harness !== query.harness) return false;

@@ -1,9 +1,10 @@
 import { localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { useDecide, useReviewQueue, useToday, useTopicTree } from "../client/queries";
+import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
+import { NextStep } from "../components/journey";
 import { Frame, MainSidebar, MobileHeader } from "../components/shell";
-import { Button, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
+import { Button, Dot, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
 import { changeKind, reviewKindLabel, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
@@ -41,6 +42,34 @@ function Lede({ digest, phone }: { digest: TodayDigest; phone?: boolean }) {
       </p>
       {phone && <SampleBadge capability="today" />}
     </div>
+  );
+}
+
+/**
+ * One line, only when memory is not being fed or worked on properly: a tool
+ * stopped sending sessions, nothing is connected, or a model job is failing.
+ * Silent when all is well.
+ */
+function Health({ phone }: { phone?: boolean }) {
+  const harnesses = useHarnesses().data;
+  const jobs = useModelJobs().data;
+  if (!harnesses) return null;
+  const stale = harnesses.filter((h) => h.capture.state === "stale");
+  const none = !harnesses.some((h) => h.capture.state !== "not-connected");
+  const failing = (jobs ?? []).filter((j) => j.health === "failing");
+  const problems = [
+    none ? "No tool is sending sessions yet" : "",
+    stale.length ? `${stale.map((h) => h.name).join(" and ")} stopped sending sessions` : "",
+    failing.length ? `the ${failing.map((j) => j.role).join(" and ")} model is failing` : "",
+  ].filter(Boolean);
+  if (!problems.length) return null;
+  const text = problems.join(", and ");
+  return (
+    <p role="status" className={phone ? "m-0 flex items-center gap-2.5 rounded-xl border border-warning/50 bg-card p-3 text-[14px]" : "m-0 flex items-center gap-2.5 rounded-xl border border-warning/50 bg-card px-3.5 py-2.5"}>
+      <Dot color="var(--warning)" />
+      <span className="min-w-0 flex-1">{text[0]!.toUpperCase() + text.slice(1)}.</span>
+      <Link to="/settings/$section" params={{ section: "connections" }} className="shrink-0 font-medium">Fix</Link>
+    </p>
   );
 }
 
@@ -110,6 +139,7 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
     <div className="flex justify-center px-7 py-8">
       <div className="flex min-w-0 max-w-[820px] flex-1 flex-col gap-[26px]">
         <Lede digest={digest} />
+        <Health />
         {digest.needsYou.length > 0 && (
           <section aria-labelledby="needs-you" className="flex flex-col gap-2.5">
             <div className="flex items-baseline gap-2.5">
@@ -123,9 +153,10 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
             </div>
           </section>
         )}
+        <NextStep />
         <section aria-labelledby="changed" className="flex flex-col gap-3.5">
           <h2 id="changed" className="m-0 border-b border-border pb-2 text-[15px] font-semibold">What changed {digest.date === localDay(new Date()) ? "today" : "this day"}</h2>
-          {digest.entries.length === 0 && <p className="text-muted-foreground">Nothing was captured.</p>}
+          {digest.entries.length === 0 && <p className="m-0 text-muted-foreground">Nothing was captured this day. Sessions appear here as your connected tools finish them.</p>}
           {digest.entries.map(({ session, changes }) => (
             <div key={session.id} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
               <span className="pt-0.5 text-[12px] text-muted-foreground">{whenLabel(session.startedAt)}</span>
@@ -159,6 +190,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
   return (
     <div className="flex flex-col gap-[18px] px-4 pb-4 text-[15px]">
       <Lede digest={digest} phone />
+      <Health phone />
       {digest.needsYou.length > 0 && (
         <section aria-labelledby="needs-you-m" className="flex flex-col gap-2">
           <div className="flex items-baseline">
@@ -184,6 +216,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
           </div>
         </section>
       )}
+      <NextStep phone />
       <section aria-labelledby="changed-m" className="flex flex-col gap-3">
         <h2 id="changed-m" className="m-0 text-[15px] font-semibold">What changed</h2>
         {digest.entries.map(({ session, changes }) => (
@@ -220,7 +253,6 @@ function shiftMonth(day: string, by: number): string {
 }
 
 function TodayAside({ digest }: { digest: TodayDigest }) {
-  const tree = useTopicTree().data;
   const first = parseDay(digest.activityByDay[0]?.date ?? digest.date);
   const month = first.toLocaleDateString("en-US", { month: "long" });
   const now = localDay(new Date());
@@ -264,17 +296,6 @@ function TodayAside({ digest }: { digest: TodayDigest }) {
             <Link key={s.id} to={subjectHref(s)} className="flex flex-col gap-px text-foreground hover:no-underline">
               <span className="font-medium">{s.title}</span>
               <span className="text-[12px] text-muted-foreground">{subjectKindLabel[s.kind]}</span>
-            </Link>
-          ))}
-        </section>
-      )}
-      {tree && tree.length > 0 && (
-        <section aria-labelledby="browse" className="flex flex-col gap-2">
-          <h2 id="browse" className="m-0 text-[12px] font-semibold text-muted-foreground uppercase">Browse</h2>
-          {tree.map((t) => (
-            <Link key={t.id} to="/topics/$topicId" params={{ topicId: t.id }} className="flex justify-between rounded-lg border border-border bg-card px-2.5 py-2 text-foreground hover:no-underline">
-              <span>{t.name}</span>
-              <span className="text-[12px] text-muted-foreground">{t.sessionCount}</span>
             </Link>
           ))}
         </section>

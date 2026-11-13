@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from "react";
 
 export const THEMES = [
-  { id: "everforest", label: "Everforest", hint: "Warm green on charcoal. The default." },
+  { id: "rivethub", label: "RivetHub", hint: "Emerald on near-black. The default." },
+  { id: "rivethub-light", label: "RivetHub light", hint: "The same emerald on a light page." },
+  { id: "everforest", label: "Everforest", hint: "Warm green on charcoal, with serif headings." },
   { id: "t3-dark", label: "T3 dark", hint: "Black with blue accents, like T3 Code." },
   { id: "t3-light", label: "T3 light", hint: "Light grey with blue accents." },
 ] as const;
@@ -9,7 +11,7 @@ export const THEMES = [
 export type ThemeId = (typeof THEMES)[number]["id"];
 
 const KEY = "rivethub.theme";
-const DEFAULT: ThemeId = "everforest";
+const DEFAULT: ThemeId = "rivethub";
 const listeners = new Set<() => void>();
 
 function isTheme(value: unknown): value is ThemeId {

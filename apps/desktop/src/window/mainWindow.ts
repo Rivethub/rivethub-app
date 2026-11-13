@@ -22,7 +22,7 @@ export function createMainWindow({ preloadPath, origin, windowStateFile, onLeftN
     show: false,
     autoHideMenuBar: true,
     title: "RivetHub",
-    backgroundColor: "#2d353b",
+    backgroundColor: "#0f1512",
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -74,7 +74,7 @@ export function createMainWindow({ preloadPath, origin, windowStateFile, onLeftN
 /** The page main shows when the node can't be loaded. Static, no script; the only non-node page the window keeps. */
 export function unreachablePage(origin: string): string {
   const html = `<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-<title>RivetHub</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#2d353b;color:#d3c6aa;font:15px system-ui,sans-serif">
+<title>RivetHub</title><body style="margin:0;display:grid;place-items:center;height:100vh;background:#0f1512;color:#dee4df;font:15px system-ui,sans-serif">
 <main><h1 style="font-size:20px">Can't reach your RivetHub node</h1><p>RivetHub couldn't open ${escapeHtml(origin)}. Check that <code>rh local</code> is running, then reopen RivetHub.</p></main>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }

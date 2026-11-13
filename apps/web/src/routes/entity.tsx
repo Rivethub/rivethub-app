@@ -8,11 +8,11 @@ import { PinIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
 import { PinButton } from "../components/pin";
-import { Frame, MainSidebar, SidebarSection } from "../components/shell";
+import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind } from "../lib/format";
 import { useIsPhone } from "../lib/media";
-import { visibilityLabel } from "./topic";
+import { EmptyLibrary, visibilityLabel } from "./topic";
 
 const route = getRouteApi("/entities/$entityId");
 type TabId = "overview" | "sessions" | "history";
@@ -25,7 +25,7 @@ function groupByType(list: EntitySummary[]) {
 function EntityKinds({ selected }: { selected?: EntitySummary }) {
   const list = useEntities().data ?? [];
   return (
-    <SidebarSection title="Entities">
+    <>
       {groupByType(list).map((g) => (
         <div key={g.type} className="flex flex-col">
           <Link to="/entities" hash={g.type} className="flex justify-between rounded-lg px-2.5 py-[5px] text-foreground hover:bg-accent hover:no-underline">
@@ -46,7 +46,7 @@ function EntityKinds({ selected }: { selected?: EntitySummary }) {
             ))}
         </div>
       ))}
-    </SidebarSection>
+    </>
   );
 }
 
@@ -75,7 +75,7 @@ export function EntitiesIndex() {
           <div className="flex max-w-[820px] flex-1 flex-col gap-2">
             <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Entities <SampleBadge capability="entities" /></h1>
             <p className="m-0 text-muted-foreground">Machines, services, people and the rest that your agents keep running into.</p>
-            {list.isPending ? <Loading /> : rows}
+            {list.isPending ? <Loading /> : list.data?.length === 0 ? <EmptyLibrary kind="entities" /> : rows}
           </div>
         </div>
       )}

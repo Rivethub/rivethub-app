@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearch } from "../client/queries";
 import { subjectHref } from "../lib/format";
+import { markStep } from "../lib/journey";
 import { setTheme, THEMES } from "../theme";
 import { SearchIcon } from "./icons";
 import { Modal } from "./modal";
@@ -51,6 +52,9 @@ export function usePaletteGroups(text: string, onDone: () => void = () => {}): P
             { key: "topics", icon: "T", label: "Topics", run: go("/topics") },
             { key: "entities", icon: "E", label: "Entities", run: go("/entities") },
             { key: "sessions", icon: "S", label: "Sessions", run: go("/sessions") },
+            { key: "shared", icon: "⇄", label: "Shared", run: go("/shared") },
+            { key: "stats", icon: "#", label: "Stats", hint: "What is in memory and whether it is keeping up", run: go("/stats") },
+            { key: "guide", icon: "✓", label: "Guide", hint: "What to set up next, and the shortcuts", run: go("/guide") },
             { key: "settings", icon: "⚙", label: "Settings", run: go("/settings") },
           ],
         },
@@ -93,7 +97,7 @@ export function usePaletteGroups(text: string, onDone: () => void = () => {}): P
     }
     groups.push({
       title: "Ask",
-      items: [{ key: "ask", icon: "?", label: query.endsWith("?") ? query : `What do we know about ${query}?`, hint: "Search everything in memory", run: go(`/search?q=${encodeURIComponent(query)}`) }],
+      items: [{ key: "ask", icon: "?", label: `Search every session for "${query}"`, hint: "All matches, with filters", run: go(`/search?q=${encodeURIComponent(query)}`) }],
     });
     return groups;
   }, [query, search.data, navigate, onDone]);
@@ -187,16 +191,27 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
 
 export function PaletteProvider({ children }: { children: ReactNode }) {
   const [isOpen, setOpen] = useState(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (isOpen) markStep("palette");
+  }, [isOpen]);
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setOpen((o) => !o);
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+      if (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        void navigate({ to: "/search" });
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [navigate]);
   const value = useMemo(() => ({ open: () => setOpen(true) }), []);
   return (
     <PaletteContext.Provider value={value}>

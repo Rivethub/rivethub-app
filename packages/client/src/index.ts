@@ -3,6 +3,7 @@ export { createRhClient, type RhClient, type RhOptions } from "./rh/index.js";
 export { createSampleClient, type SampleClientOptions } from "./sample/client.js";
 export type { AuthSeam, FetchLike } from "./http.js";
 export { createShareClient, type ShareClientOptions } from "./share/index.js";
+export { createUpkeepClient, type UpkeepClientOptions } from "./upkeep/index.js";
 export {
   ClientError,
   HttpError,

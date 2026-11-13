@@ -64,7 +64,7 @@ export function WelcomePage() {
         )}
         {step === 2 && (
           <div className="flex flex-col items-center gap-3 text-center">
-            <p className="m-0 max-w-[520px] font-serif text-[18px] leading-[1.6]">You're set. Use any connected harness as usual. When a session ends, RivetHub summarizes it, files it, and shows what it learned on Today.</p>
+            <p className="m-0 max-w-[520px] font-serif text-[18px] leading-[1.6]">You're set. Use any connected harness as usual. When a session ends, RivetHub summarizes it, files it, and shows what it learned on Today. Today also shows one next step at a time, for when you want more out of it.</p>
             <Link to="/" onClick={markWelcomed} className="rounded-[10px] bg-primary px-[22px] py-2.5 font-semibold text-primary-foreground hover:no-underline">Open Today</Link>
           </div>
         )}

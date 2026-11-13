@@ -178,7 +178,7 @@ describe("search", () => {
   it("returns topic hits then session hits and skips results without a session", async () => {
     const { client } = rh({
       "GET /api/topics/search?q=stream&limit=8": body.topicSearchBody,
-      "GET /api/memory/search?q=stream&limit=12": body.memorySearchBody,
+      "GET /api/memory/search?q=stream&limit=30": body.memorySearchBody,
     });
     const results = await client.search!("  stream ");
     expect(results.goTo.map((hit) => [hit.subject.kind, hit.subject.title])).toEqual([

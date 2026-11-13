@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createClient, createShareClient } from "@rivethub/client";
+import { createClient, createShareClient, createUpkeepClient } from "@rivethub/client";
 import { App } from "./app";
 import { sessionAuth } from "./client/auth";
 import { createSampleClient } from "./dev/sample-client";
@@ -18,7 +18,7 @@ applyStoredTheme();
 
 const sampleOnly = new URLSearchParams(window.location.search).has("sample");
 const live = { baseUrl: window.location.origin, fetch: window.fetch.bind(window), auth: sessionAuth };
-const client = sampleOnly ? createSampleClient({ latencyMs: 60 }) : { ...createClient(live), share: createShareClient(live) };
+const client = sampleOnly ? createSampleClient({ latencyMs: 60 }) : { ...createClient(live), share: createShareClient(live), upkeep: createUpkeepClient(live) };
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

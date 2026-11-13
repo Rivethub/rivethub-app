@@ -17,6 +17,24 @@ type TabId = "overview" | "sessions" | "history";
 
 export const visibilityLabel = (v: Visibility) => (v.kind === "private" ? "Private" : v.space);
 
+/** Why a library section is empty on a new hub, and what fills it. */
+export function EmptyLibrary({ kind }: { kind: "topics" | "entities" }) {
+  return (
+    <div className="flex max-w-[62ch] flex-col gap-2 rounded-xl border border-dashed border-input p-4 text-[14px] leading-[1.55]">
+      <span className="font-semibold">{kind === "topics" ? "No topics yet" : "No entities yet"}</span>
+      <span className="text-muted-foreground">
+        {kind === "topics"
+          ? "Topics appear when sessions are filed. With a model set, RivetHub files each session for you and asks in Review when it is unsure. Without one, your sessions are all under Sessions and fully searchable."
+          : "Entities are the machines, services, people and repositories your sessions mention. RivetHub picks them out once a model is set, and keeps a page of facts for each."}
+      </span>
+      <span className="flex flex-wrap gap-x-4 gap-y-1">
+        <Link to="/settings/$section" params={{ section: "connections" }}>Choose a model</Link>
+        <Link to="/sessions">Open Sessions</Link>
+      </span>
+    </div>
+  );
+}
+
 export function TopicsIndex() {
   const phone = useIsPhone();
   const tree = useTopicTree();
@@ -32,6 +50,7 @@ export function TopicsIndex() {
           <div className="flex max-w-[820px] flex-1 flex-col gap-4">
             <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Topics <SampleBadge capability="topics" /></h1>
             <p className="m-0 text-muted-foreground">Every session is filed under a topic. Open one to read what your agents worked out there.</p>
+            {tree.data?.length === 0 && <EmptyLibrary kind="topics" />}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5">
               {tree.data?.map((t) => (
                 <Link key={t.id} to="/topics/$topicId" params={{ topicId: t.id }} className="flex flex-col gap-1 rounded-[10px] border border-border bg-card p-3.5 text-foreground hover:no-underline">
