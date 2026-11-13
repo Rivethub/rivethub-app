@@ -1,7 +1,8 @@
-# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests both packages,
-# and uploads them, with electron-builder's latest-linux*.yml update manifests, as workflow
-# artifacts. The publish job copies them to get.rivethub.io/desktop/<channel>/, where installed
-# apps look for updates; it runs only when dispatched on main with publish=true.
+# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64 and smoke-tests both packages.
+# A dispatched run also uploads them, with electron-builder's latest-linux*.yml update manifests,
+# as workflow artifacts; a pull request's build is checked and not kept. The publish job copies
+# the artifacts to get.rivethub.io/desktop/<channel>/, where installed apps look for updates; it
+# runs only when dispatched on main with publish=true.
 #
 # Builds are nightly-versioned, x.y.z-nightly.YYYYMMDD.<run>, from apps/desktop/package.json's x.y.z,
 # unless dispatched with channel=stable, which builds x.y.z itself. Stable is for a release that a
