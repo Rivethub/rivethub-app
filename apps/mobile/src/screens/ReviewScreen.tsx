@@ -144,7 +144,7 @@ export function ReviewScreen() {
             </>
           ) : (
             <View style={{ paddingTop: 48, gap: 8 }}>
-              <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 26, fontWeight: "600" }}>You're caught up</Text>
+              <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }}>You're caught up</Text>
               <Text style={{ color: palette.muted, fontSize: 15, lineHeight: 22 }}>Nothing in this pile is waiting on you.</Text>
             </View>
           )}

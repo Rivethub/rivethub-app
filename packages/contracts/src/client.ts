@@ -14,6 +14,7 @@ import type {
   ReviewDecision,
   ReviewItem,
   ReviewItemId,
+  SearchOptions,
   SearchResults,
   SessionDetail,
   SessionId,
@@ -75,6 +76,8 @@ export interface MemoryClient {
   topicTree(): Promise<TopicNode[]>;
   topic(id: TopicId): Promise<TopicArticle>;
   updateTopic(id: TopicId, patch: { name?: string; aliases?: string[]; parentId?: TopicId | null; folder?: string | null }): Promise<void>;
+  /** Creates a topic by hand, at the top level or inside `parentId`. Absent on a client that cannot write topics. */
+  createTopic?(name: string, parentId?: TopicId): Promise<TopicId>;
   addDecision(id: TopicId, text: string): Promise<void>;
   placeSession(session: SessionId, topic: TopicId | null): Promise<void>;
 
@@ -94,7 +97,8 @@ export interface MemoryClient {
   restore(ids: SessionId[]): Promise<void>;
   tag(id: SessionId, key: string, value: string, op: "add" | "remove" | "accept" | "reject"): Promise<void>;
 
-  search(text: string): Promise<SearchResults>;
+  /** `options` narrows where and how to look. A client may ignore options it cannot honor. */
+  search(text: string, options?: SearchOptions): Promise<SearchResults>;
 
   harnesses(): Promise<HarnessStatus[]>;
   /** With `dryRun` nothing is written: the diff is what connecting would change, and `backupPath` is empty. */

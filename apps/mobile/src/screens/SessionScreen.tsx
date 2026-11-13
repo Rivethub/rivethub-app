@@ -67,7 +67,7 @@ export function SessionScreen({ route, navigation }: Props) {
       ) : (
         <View style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 24 }}>
-            <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 26, fontWeight: "600" }}>{detail.title}</Text>
+            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }}>{detail.title}</Text>
             {detail.changed.length > 0 ? (
               <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
                 <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
@@ -237,7 +237,7 @@ function Summary({ id, state, onLeaf }: { id: SessionId; state: SessionDetail["m
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
         <KindTag label="Root" color={palette.primary} />
         <Text style={{ color: palette.foreground, fontWeight: "600" }}>{root.title ?? "Whole session"}</Text>
-        <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 24 }}>{root.text}</Text>
+        <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }}>{root.text}</Text>
       </View>
       {root.children.map((branch, index) => (
         <Branch key={`${branch.messageRange[0]}:${index}`} node={branch} onLeaf={onLeaf} />

@@ -1,21 +1,74 @@
 import { dayLabel, shortDate, time, whenLabel } from "@rivethub/client-runtime/format";
 import type { TopicArticle, TopicId, Visibility } from "@rivethub/contracts";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAddDecision, useTopic, useChanges, useTopicTree, useUpdateTopic } from "../client/queries";
+import { useClient } from "../client/context";
+import { useAddDecision, useCreateTopic, useTopic, useChanges, useTopicTree, useUpdateTopic } from "../client/queries";
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, SidePanel, type Tab } from "../components/article";
 import { EditableText } from "../components/editable";
 import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
-import { Chip, ErrorNote, Eyebrow, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind } from "../lib/format";
+import { Button, Chip, ErrorNote, Eyebrow, Loading, SampleBadge, Tags } from "../components/ui";
+import { changeKind, plural } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/topics/$topicId");
 type TabId = "overview" | "sessions" | "history";
 
 export const visibilityLabel = (v: Visibility) => (v.kind === "private" ? "Private" : v.space);
+
+/** Creates a top-level topic by name and opens it. Shown only where the client can create topics. */
+export function NewTopic() {
+  const client = useClient();
+  const create = useCreateTopic();
+  const navigate = useNavigate();
+  const [name, setName] = useState<string | null>(null);
+  if (!client.createTopic) return null;
+  if (name === null) return <Button size="md" onClick={() => setName("")}>New topic</Button>;
+  const save = () => {
+    const trimmed = name.trim();
+    if (!trimmed) return setName(null);
+    create.mutate({ name: trimmed }, { onSuccess: (id) => { setName(null); void navigate({ to: "/topics/$topicId", params: { topicId: id } }); } });
+  };
+  return (
+    <span className="flex items-center gap-2">
+      <input
+        autoFocus
+        aria-label="New topic name"
+        placeholder="Topic name"
+        value={name}
+        disabled={create.isPending}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setName(null);
+        }}
+        className="w-56 rounded-lg border border-input bg-background px-2.5 py-1.5 text-foreground outline-none focus:border-primary"
+      />
+      <Button variant="primary" size="md" disabled={create.isPending || !name.trim()} onClick={save}>Create</Button>
+      {create.isError && <span role="alert" className="text-[13px] text-error">{create.error instanceof Error ? create.error.message : "Could not create it."}</span>}
+    </span>
+  );
+}
+
+/** Why a library section is empty on a new hub, and what fills it. */
+export function EmptyLibrary({ kind }: { kind: "topics" | "entities" }) {
+  return (
+    <div className="flex max-w-[62ch] flex-col gap-2 rounded-xl border border-dashed border-input p-4 text-[14px] leading-[1.55]">
+      <span className="font-semibold">{kind === "topics" ? "No topics yet" : "No entities yet"}</span>
+      <span className="text-muted-foreground">
+        {kind === "topics"
+          ? "Topics appear when sessions are filed. With a model set, RivetHub files each session for you and asks in Review when it is unsure. Without one, create topics yourself and file sessions from each session's page; everything stays searchable either way."
+          : "Entities are the machines, services, people and repositories your sessions mention. RivetHub picks them out once a model is set, and keeps a page of facts for each."}
+      </span>
+      <span className="flex flex-wrap gap-x-4 gap-y-1">
+        <Link to="/settings/$section" params={{ section: "connections" }}>Choose a model</Link>
+        <Link to="/sessions">Open Sessions</Link>
+      </span>
+    </div>
+  );
+}
 
 export function TopicsIndex() {
   const phone = useIsPhone();
@@ -30,14 +83,18 @@ export function TopicsIndex() {
       ) : (
         <div className="flex justify-center px-7 py-8">
           <div className="flex max-w-[820px] flex-1 flex-col gap-4">
-            <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Topics <SampleBadge capability="topics" /></h1>
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="m-0 flex flex-1 items-center gap-2 font-serif text-[34px] font-semibold">Topics <SampleBadge capability="topics" /></h1>
+              <NewTopic />
+            </div>
             <p className="m-0 text-muted-foreground">Every session is filed under a topic. Open one to read what your agents worked out there.</p>
+            {tree.data?.length === 0 && <EmptyLibrary kind="topics" />}
             <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5">
               {tree.data?.map((t) => (
                 <Link key={t.id} to="/topics/$topicId" params={{ topicId: t.id }} className="flex flex-col gap-1 rounded-[10px] border border-border bg-card p-3.5 text-foreground hover:no-underline">
                   <span className="font-semibold">{t.name}</span>
                   <span className="text-[12px] text-muted-foreground">
-                    {t.sessionCount} sessions · {t.children.length} subtopics{t.lastActivity ? ` · ${whenLabel(t.lastActivity)}` : ""}
+                    {plural(t.sessionCount, "session")} · {plural(t.children.length, "subtopic")}{t.lastActivity ? ` · ${whenLabel(t.lastActivity)}` : ""}
                   </span>
                 </Link>
               ))}
@@ -122,7 +179,7 @@ function TopicTitle({ t, phone }: { t: TopicArticle; phone?: boolean }) {
         <SampleBadge capability="topics" />
       </span>
       <span className="font-sans text-[13px] text-muted-foreground">
-        {t.sessionCount} sessions{last ? ` · last activity ${dayLabel(last) === "Today" ? `today ${time(last)}` : dayLabel(last)}` : ""}
+        {plural(t.sessionCount, "session")}{last ? ` · last activity ${dayLabel(last) === "Today" ? `today ${time(last)}` : dayLabel(last)}` : ""}
       </span>
     </div>
   );

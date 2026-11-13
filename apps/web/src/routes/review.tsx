@@ -263,7 +263,7 @@ function Quote({ e, accent, surface = "var(--card)" }: { e: ReviewItem["evidence
 function Evidence({ item }: { item: ReviewItem }) {
   const sorted = [...item.evidence].sort((a, b) => (a.at < b.at ? 1 : -1));
   return (
-    <aside aria-label="Evidence" className="flex w-[360px] min-w-0 flex-col gap-4 border-l border-border bg-sidebar px-[18px] py-[22px]">
+    <aside aria-label="Evidence" className="flex w-[360px] min-w-0 flex-col gap-4 border-l border-border px-[18px] py-[22px]">
       <span className="text-[12px] font-semibold text-muted-foreground">EVIDENCE</span>
       {sorted.map((e, i) => (
         <div key={`${e.session.id}-${i}`} className="flex flex-col gap-1.5 text-[13px]">

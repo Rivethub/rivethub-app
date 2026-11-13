@@ -65,6 +65,7 @@ export function createRhClient(options: RhOptions): RhClient {
       topicTree: topics.topicTree,
       topic: topics.topic,
       updateTopic: topics.updateTopic,
+      createTopic: topics.createTopic,
       addDecision: topics.addDecision,
       placeSession: sessions.placeSession,
       sessions: viaCatalog(catalog.sessions, sessions.sessions),

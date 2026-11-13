@@ -48,11 +48,11 @@ export function TopicScreen({ route, navigation }: Props) {
         <Loading label={topic.isError ? "This topic did not load." : "Loading topic…"} />
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
-          <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.name}</Text>
+          <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.name}</Text>
           {article.path.length > 1 ? (
             <Text style={{ color: palette.muted, fontSize: 13 }}>{article.path.map((part) => part.name).join(" › ")}</Text>
           ) : null}
-          {article.lead ? <RichText text={article.lead} style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+          {article.lead ? <RichText text={article.lead} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
           {article.current ? <RichText text={article.current} style={{ color: palette.foreground, fontSize: 15, lineHeight: 22 }} /> : null}
           <Section title="Decisions">
             {article.decisions.length === 0 ? <Muted>No decisions yet.</Muted> : article.decisions.map((decision) => (

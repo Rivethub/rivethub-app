@@ -90,9 +90,14 @@ test("the web app loads under the hub's CSP without a violation", async () => {
   await expect(page.getByRole("button", { name: "Copy resume" })).toBeVisible();
   await page.goto(`${web.origin}/?sample`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned \d+ things/);
-  const serif = () =>
-    page.evaluate(() => [...document.fonts].some((face) => face.family.replace(/["']/g, "") === "Source Serif 4 Variable" && face.status === "loaded"));
-  await expect.poll(serif).toBe(true);
+  // The default theme reads in Inter; the serif belongs to the Everforest theme. Both are bundled faces the CSP must let load.
+  const loaded = (family: string) =>
+    page.evaluate((name) => [...document.fonts].some((face) => face.family.replace(/["']/g, "") === name && face.status === "loaded"), family);
+  await expect.poll(() => loaded("Inter")).toBe(true);
+  await page.evaluate(() => localStorage.setItem("rivethub.theme", "everforest"));
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned \d+ things/);
+  await expect.poll(() => loaded("Source Serif 4 Variable")).toBe(true);
   expect(refused).toEqual([]);
   await app.close();
 });

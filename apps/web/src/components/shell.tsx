@@ -3,13 +3,13 @@ import { canSwitchTo, currentHubSummary } from "@rivethub/client-runtime/hub-lis
 import type { Hub } from "@rivethub/contracts";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useShareClient } from "../client/context";
-import { useAccount, useHarnesses, useHubs, useLibraryCounts, useModelJobs, usePins, useReviewQueue } from "../client/queries";
+import { useAccount, useHarnesses, useHubs, useLibraryCounts, useMemoryStats, useModelJobs, usePins, useReviewQueue } from "../client/queries";
 import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
 import { useTheme, THEMES } from "../theme";
 import { GearIcon, LibraryIcon, ReviewIcon, SearchIcon, TodayIcon } from "./icons";
 import { Modal } from "./modal";
+import { GuideRow } from "./journey";
 import { usePalette } from "./palette";
 import { cx, Dot } from "./ui";
 
@@ -29,13 +29,15 @@ export function Frame({ sidebar, aside, tabs, children }: { sidebar: ReactNode; 
     );
   }
   return (
-    <div className="flex h-dvh bg-background text-foreground">
+    <div className="flex h-dvh bg-sidebar text-foreground">
       {sidebar}
-      <main id="main" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-        {children}
-        {aside && !wide && <div className="flex border-t border-border">{aside}</div>}
-      </main>
-      {aside && wide && <div className="flex shrink-0 overflow-y-auto">{aside}</div>}
+      <div className={cx("my-2 mr-2 flex min-w-0 flex-1 overflow-hidden rounded-[18px] border border-border bg-background", !sidebar && "ml-2")}>
+        <main id="main" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+          {children}
+          {aside && !wide && <div className="flex border-t border-border">{aside}</div>}
+        </main>
+        {aside && wide && <div className="flex shrink-0 overflow-y-auto">{aside}</div>}
+      </div>
     </div>
   );
 }
@@ -74,86 +76,92 @@ export function Logo({ size = 22 }: { size?: number }) {
 
 export function SidebarShell({ children, label = "Sidebar", className }: { children: ReactNode; label?: string; className?: string }) {
   return (
-    <nav aria-label={label} className={cx("flex w-[244px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border bg-sidebar px-2 py-2.5", className)}>
+    <nav aria-label={label} className={cx("flex w-[244px] shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-2 py-2.5", className)}>
       {children}
     </nav>
   );
 }
 
-/** The main sidebar. `children` is the page's own section: library links, the topic tree, or entity kinds. */
+/** Stats, with a dot when a worker is failing so trouble is visible from any screen. */
+function StatsRow({ active }: { active: boolean }) {
+  const stats = useMemoryStats().data;
+  if (stats === null) return null;
+  const failing = stats?.workers.some((w) => w.failing > 0) ?? false;
+  return (
+    <Link to="/stats" className={cx(navRow, "text-[13px]", active && "bg-selected")} aria-current={active ? "page" : undefined}>
+      <span className="flex-1">Stats</span>
+      {failing && <span className="flex items-center gap-1.5 text-[12px] text-warning"><Dot color="var(--warning)" size={7} />needs a look</span>}
+    </Link>
+  );
+}
+
+const LIBRARY = [
+  { label: "Sessions", to: "/sessions", key: "sessions" },
+  { label: "Topics", to: "/topics", key: "topics" },
+  { label: "Entities", to: "/entities", key: "entities" },
+] as const;
+
+/**
+ * The main sidebar, the same on every screen: search, Today, Review, the
+ * library, sharing and pins. `children` is the open library section's own
+ * list (the topic tree, the entity kinds) and nests under its row.
+ */
 export function MainSidebar({ children }: { children?: ReactNode }) {
   const palette = usePalette();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const counts = useLibraryCounts().data;
+  const pins = usePins().data;
+  const at = (to: string) => (to === "/" ? path === "/" : path === to || path.startsWith(`${to}/`));
+  const row = (to: string) => cx(navRow, at(to) && "bg-selected");
+  const current = (to: string) => (at(to) ? ("page" as const) : undefined);
+  const sharing = at("/shared") || at("/share") || at("/receive");
   return (
     <SidebarShell>
       <Link to="/" className="flex items-center gap-2 px-2 pt-1 pb-2.5 text-foreground hover:no-underline">
         <Logo />
         <span className="font-semibold">Rivet<span className="font-normal text-muted-foreground">Hub</span></span>
       </Link>
-      <button type="button" onClick={palette.open} className="mb-2 flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-[7px] text-left text-muted-foreground hover:text-foreground">
+      <button type="button" onClick={palette.open} className="mb-2 flex items-center gap-2 rounded-full border border-border bg-card px-3 py-[7px] text-left text-muted-foreground hover:text-foreground">
         <SearchIcon size={14} />
         <span className="flex-1">Search or jump to…</span>
         <kbd>⌘K</kbd>
       </button>
-      <Link to="/" className={cx(navRow, path === "/" && "bg-selected")} aria-current={path === "/" ? "page" : undefined}>
+      <Link to="/" className={row("/")} aria-current={current("/")}>
         <span className="flex-1">Today</span>
       </Link>
-      <Link to="/review" className={cx(navRow, path === "/review" && "bg-selected")} aria-current={path === "/review" ? "page" : undefined}>
+      <Link to="/review" className={row("/review")} aria-current={current("/review")}>
         <span className="flex-1">Review</span>
         <ReviewBadge />
       </Link>
-      <ShareLinks path={path} />
-      {children ?? <LibraryAndPins />}
-      <div className="flex-1" />
-      <SidebarFooter />
-    </SidebarShell>
-  );
-}
-
-/** Share and Receive exist only in the desktop app, where the person's own rh and sign-in are. */
-function ShareLinks({ path }: { path: string }) {
-  if (useShareClient() === null) return null;
-  return (
-    <>
-      <Link to="/share" className={cx(navRow, path === "/share" && "bg-selected")} aria-current={path === "/share" ? "page" : undefined}>
-        <span className="flex-1">Share</span>
-      </Link>
-      <Link to="/receive" className={cx(navRow, path === "/receive" && "bg-selected")} aria-current={path === "/receive" ? "page" : undefined}>
-        <span className="flex-1">Receive</span>
-      </Link>
-    </>
-  );
-}
-
-function LibraryAndPins() {
-  const counts = useLibraryCounts().data;
-  const pins = usePins().data;
-  const rows = [
-    { label: "Topics", to: "/topics", n: counts?.topics },
-    { label: "Entities", to: "/entities", n: counts?.entities },
-    { label: "Sessions", to: "/sessions", n: counts?.sessions },
-  ];
-  return (
-    <>
       <SidebarSection title="Library">
-        {rows.map((r) => (
-          <Link key={r.to} to={r.to} className="flex justify-between rounded-lg px-2.5 py-1.5 text-foreground hover:bg-accent hover:no-underline">
-            <span>{r.label}</span>
-            {r.n !== undefined && <span className="text-[12px] text-muted-foreground">{count(r.n)}</span>}
-          </Link>
+        {LIBRARY.map((r) => (
+          <div key={r.key} className="flex flex-col gap-0.5">
+            <Link to={r.to} className={row(r.to)} aria-current={path === r.to ? "page" : undefined}>
+              <span className="flex-1">{r.label}</span>
+              {counts?.[r.key] !== undefined && <span className="text-[12px] text-muted-foreground">{count(counts[r.key])}</span>}
+            </Link>
+            {children && at(r.to) && <div className="mb-1 ml-3 flex flex-col gap-0.5 border-l border-border pl-1.5">{children}</div>}
+          </div>
         ))}
+        <Link to="/shared" className={cx(navRow, sharing && "bg-selected")} aria-current={path === "/shared" ? "page" : undefined}>
+          <span className="flex-1">Shared</span>
+        </Link>
       </SidebarSection>
       {pins && pins.length > 0 && (
         <SidebarSection title="Pinned">
           {pins.map((p) => (
             <Link key={p.id} to={subjectHref(p)} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-foreground hover:bg-accent hover:no-underline">
               <Dot color="var(--muted-foreground)" size={6} />
-              {p.title}
+              <span className="truncate">{p.title}</span>
             </Link>
           ))}
         </SidebarSection>
       )}
-    </>
+      <div className="flex-1" />
+      <StatsRow active={at("/stats")} />
+      <GuideRow />
+      <SidebarFooter />
+    </SidebarShell>
   );
 }
 
@@ -308,6 +316,17 @@ function HubSheet({ hubs, onClose }: { hubs: Hub[]; onClose: () => void }) {
       <Link to="/settings/$section" params={{ section: "server" }} onClick={onClose} className="flex min-h-12 items-center px-3 text-muted-foreground">
         + Connect to a hub…
       </Link>
+      <span className="my-1 h-px bg-border" />
+      {[
+        { label: "Shared", to: "/shared" },
+        { label: "Stats", to: "/stats" },
+        { label: "Guide", to: "/guide" },
+      ].map((r) => (
+        <Link key={r.to} to={r.to} onClick={onClose} className="flex min-h-[52px] items-center gap-3 rounded-xl px-3 text-foreground hover:no-underline">
+          <span className="flex-1">{r.label}</span>
+          <span className="text-muted-foreground">›</span>
+        </Link>
+      ))}
       <span className="my-1 h-px bg-border" />
       {rows.map((r) => (
         <Link key={r.section} to="/settings/$section" params={{ section: r.section }} onClick={onClose} className="flex min-h-[52px] items-center gap-3 rounded-xl px-3 text-foreground hover:no-underline">

@@ -34,7 +34,7 @@ function useSections() {
 
 function SettingsSidebar({ active }: { active: SettingsSection }) {
   return (
-    <nav aria-label="Settings" className="flex w-[236px] shrink-0 flex-col gap-0.5 border-r border-border bg-sidebar px-2 py-3">
+    <nav aria-label="Settings" className="flex w-[236px] shrink-0 flex-col gap-0.5 bg-sidebar px-2 py-3">
       <Link to="/" className="px-2.5 py-[7px] text-muted-foreground">‹ Back</Link>
       <span className="px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">SETTINGS</span>
       {useSections().map((s) => (
@@ -230,10 +230,15 @@ export function Connections({ phone }: { phone: boolean }) {
   const harnesses = useHarnesses();
   const jobs = useModelJobs();
   const [connecting, setConnecting] = useState<{ h: HarnessStatus; part: "capture" | "recall" } | null>(null);
+  const [showAll, setShowAll] = useState(false);
   if (harnesses.isPending || jobs.isPending) return <Loading />;
   if (harnesses.isError) return <ErrorNote error={harnesses.error} />;
   if (jobs.isError) return <ErrorNote error={jobs.error} />;
-  const hs = harnesses.data;
+  const every = harnesses.data;
+  // Lead with the tools that are on this machine or already wired up. The rest stay one click away.
+  const here = every.filter((h) => h.found || h.canConnect || h.capture.state !== "not-connected" || h.recall.state === "connected");
+  const hs = showAll || here.length === 0 ? every : here;
+  const hidden = every.length - hs.length;
   const js = jobs.data;
   const stale = hs.filter((h) => h.capture.state === "stale");
   const slow = js.filter((j) => j.health !== "healthy");
@@ -258,7 +263,7 @@ export function Connections({ phone }: { phone: boolean }) {
       <section aria-labelledby="harnesses-h" className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
           <h2 id="harnesses-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "HARNESSES · CAPTURE · RECALL" : "Harnesses"}</h2>
-          {!phone && <span className="text-[12px] text-muted-foreground">{hs.filter((h) => h.found).length} found on this machine</span>}
+          {!phone && <span className="text-[12px] text-muted-foreground">{every.filter((h) => h.found).length} found on this machine</span>}
           <Button size="xs" onClick={() => void harnesses.refetch()}>Rescan</Button>
         </div>
         {phone ? (
@@ -320,12 +325,22 @@ export function Connections({ phone }: { phone: boolean }) {
           </div>
         )}
         {!phone && <span className="text-[12px] text-muted-foreground">Connect adds rh's hook and MCP entry only if they are missing, shows the change, and keeps a backup.</span>}
+        {(hidden > 0 || (showAll && here.length > 0 && here.length < every.length)) && (
+          <button type="button" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)} className="w-fit border-0 bg-transparent p-0 text-[13px] text-info hover:underline">
+            {showAll ? "Show only the tools on this machine" : `Show ${hidden} more ${hidden === 1 ? "tool" : "tools"} RivetHub can capture from`}
+          </button>
+        )}
       </section>
       <section aria-labelledby="jobs-h" className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
           <h2 id="jobs-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "WHO DOES THE WORK" : "Who does the work"}</h2>
           {!phone && <span className="text-[12px] text-muted-foreground">Jobs with no model of their own use Default</span>}
         </div>
+        {js.length === 0 && (
+          <p className="m-0 max-w-[70ch] rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.55] text-muted-foreground">
+            <span className="font-semibold text-foreground">No model is set.</span> Capture, the session list and word search work without one. Summaries, topics, entities and the wiki need a chat model, and search by meaning needs an embedding model; both can run on this machine. Set them under <code className="rounded bg-code px-1 py-px font-mono text-[12px]">memory.models</code> in <code className="rounded bg-code px-1 py-px font-mono text-[12px]">~/.rivethub/config.yaml</code>, then restart <code className="rounded bg-code px-1 py-px font-mono text-[12px]">rh</code>.
+          </p>
+        )}
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
             {js.filter((j) => j.role !== "default").map((j) => (

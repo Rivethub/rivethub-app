@@ -1,8 +1,12 @@
 import type { DraftReport } from "@rivethub/contracts";
+import { getRouteApi } from "@tanstack/react-router";
+import type { SessionId } from "@rivethub/contracts";
 import { useEffect, useReducer, useState } from "react";
 import { useShareClient } from "../client/context";
-import { Button } from "../components/ui";
-import { Choose } from "../share/choose";
+import { useSession, useTranscript } from "../client/queries";
+import { Button, Loading } from "../components/ui";
+import { markStep } from "../lib/journey";
+import { Choose, type ShareSeed } from "../share/choose";
 import { Confirm } from "../share/confirm";
 import { Decide } from "../share/decide";
 import { Destination } from "../share/destination";
@@ -33,8 +37,29 @@ const storeDraft = (id: string | null) => {
   }
 };
 
+const route = getRouteApi("/share");
+
+/**
+ * What to search for to find one session again in the share search, which matches on text.
+ * A titled session is found by its title; an untitled one by its gist or its first message.
+ */
+function useSeed(id: string | undefined): { seed?: ShareSeed; pending: boolean } {
+  const session = useSession((id ?? "") as SessionId, id !== undefined);
+  const untitled = session.data?.title === "Untitled session";
+  const transcript = useTranscript((id ?? "") as SessionId, id !== undefined && untitled && !session.data?.gist);
+  if (id === undefined || session.isError) return { pending: false };
+  if (session.isPending) return { pending: true };
+  const d = session.data;
+  const firstMessage = transcript.data?.find((t) => t.role === "user")?.parts.find((p) => p.kind === "text");
+  if (untitled && !d.gist && transcript.isPending) return { pending: true };
+  const text = (untitled ? (d.gist ?? (firstMessage?.kind === "text" ? firstMessage.text : "")) : d.title).replace(/\s+/g, " ").trim().slice(0, 80);
+  return text ? { seed: { text, agent: d.harness, startedAt: d.startedAt }, pending: false } : { pending: false };
+}
+
 export function SharePage() {
   const share = useShareClient();
+  const { session: from } = route.useSearch();
+  const { seed, pending: seeding } = useSeed(share ? from : undefined);
   const [state, dispatch] = useReducer(sendReducer, initialSend);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -89,6 +114,7 @@ export function SharePage() {
     dispatch({ type: "sending" });
     share.send(report.draft, { server, signed: state.signed, confirm: confirmCounts(report) }).then((sent) => {
       storeDraft(null);
+      markStep("share");
       dispatch({ type: "sent", sent });
     }, failed);
   };
@@ -109,7 +135,8 @@ export function SharePage() {
           </div>
         </Card>
       )}
-      {state.step === "choose" && <Choose picked={state.picked} onToggle={(session) => dispatch({ type: "toggle", session })} onContinue={() => dispatch({ type: "to-decide" })} />}
+      {state.step === "choose" && seeding && <Loading label="Finding that session" />}
+      {state.step === "choose" && !seeding && <Choose picked={state.picked} onToggle={(session) => dispatch({ type: "toggle", session })} onContinue={() => dispatch({ type: "to-decide" })} {...(seed ? { seed } : {})} />}
       {(state.step === "decide" || state.step === "sanitizing") && (
         <Decide rows={state.rows} decide={state.decide} busy={state.step === "sanitizing"} onDecideModel={(on) => dispatch({ type: "decide-model", on })} onChoose={(id, choice) => dispatch({ type: "decide", id, choice })} onConfirm={sanitize} onBack={() => dispatch({ type: "back" })} />
       )}

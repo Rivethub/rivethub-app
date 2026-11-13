@@ -49,6 +49,8 @@ export type TopicSummary = z.infer<typeof topicSummary>;
 
 export const topicList = z.object({ topics: z.array(topicSummary) });
 
+export const createdTopic = z.object({ id: z.string() });
+
 export const wikiPage = z.object({
   slug: z.string(),
   title: z.string(),
@@ -177,8 +179,28 @@ export const memorySearch = z.object({
       createdAt: nullish(timeSchema),
       sessionId: nullish(z.string()),
       title: nullish(z.string()),
+      role: nullish(z.string()),
     }),
   ),
+  degraded: nullish(z.union([z.boolean(), z.string(), z.object({ reason: nullish(z.string()), effect: nullish(z.string()) })])),
+  fallback: nullish(z.string()),
+});
+
+export const sessionSpan = z.object({ startedAt: timeSchema, endedAt: nullish(timeSchema) });
+
+export const memoryBrowse = z.object({
+  messages: z
+    .array(
+      z.object({
+        id: z.union([z.string(), z.number()]).transform(String),
+        role: z.string().default("assistant"),
+        content: z.string().default(""),
+        createdAt: nullish(timeSchema),
+        sessionId: nullish(z.string()),
+        toolName: nullish(z.string()),
+      }),
+    )
+    .default([]),
 });
 
 export const catalogRow = z.object({

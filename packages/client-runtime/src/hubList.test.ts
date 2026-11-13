@@ -11,7 +11,7 @@ describe("currentHubSummary", () => {
   });
 
   it("counts receiving harnesses on a local hub and shows a team hub's detail", () => {
-    expect(currentHubSummary([hub({ current: true })], 2).meta).toBe("Local hub · 2 harnesses");
+    expect(currentHubSummary([hub({ current: true })], 2).meta).toBe("Local hub · 2 tools sending");
     expect(currentHubSummary([hub({ current: true })], undefined).meta).toBe("Local hub");
     expect(currentHubSummary([hub({ current: true, kind: "team", detail: "team.example" })], 2)).toEqual({ name: "desk", meta: "team.example", online: true });
   });

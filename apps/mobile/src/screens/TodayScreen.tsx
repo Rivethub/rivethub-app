@@ -21,8 +21,8 @@ export function TodayScreen() {
         {digest ? (
           <View style={{ paddingHorizontal: 16, gap: 18 }}>
             <View style={{ gap: 8 }}>
-              <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 27, fontWeight: "600", lineHeight: 34 }}>{digest.headline}</Text>
-              <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 25 }}>{digest.summary}</Text>
+              <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 27, fontWeight: "600", lineHeight: 34 }}>{digest.headline}</Text>
+              <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 25 }}>{digest.summary}</Text>
             </View>
             <View style={{ gap: 8 }}>
               <View style={{ flexDirection: "row", alignItems: "baseline" }}>

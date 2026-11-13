@@ -1,11 +1,14 @@
 import { createRootRoute, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
 import { PaletteProvider } from "./components/palette";
 import { EntitiesIndex, EntityPage } from "./routes/entity";
+import { GuidePage } from "./routes/guide";
 import { ReceivePage } from "./routes/receive";
 import { ReviewPage } from "./routes/review";
 import { SearchPage } from "./routes/search";
 import { SessionPage, SessionsIndex } from "./routes/session";
 import { SharePage } from "./routes/share";
+import { SharedPage } from "./routes/shared";
+import { StatsPage } from "./routes/stats";
 import { SettingsIndex, SettingsPage } from "./routes/settings";
 import { TodayPage } from "./routes/today";
 import { TopicPage, TopicsIndex } from "./routes/topic";
@@ -63,7 +66,7 @@ const session = createRoute({
   validateSearch: (s: Raw) => clean({ tab: oneOf(s.tab, ["summary", "transcript"] as const), from: num(s.from), to: num(s.to), view: oneOf(s.view, ["all", "unfiled", "kept", "trash"] as const) }),
   component: SessionPage,
 });
-const search = createRoute({ getParentRoute: () => rootRoute, path: "/search", validateSearch: (s: Raw) => clean({ q: str(s.q) }), component: SearchPage });
+const search = createRoute({ getParentRoute: () => rootRoute, path: "/search", validateSearch: (s: Raw) => clean({ q: str(s.q), when: oneOf(s.when, ["today", "yesterday", "last_7d", "last_14d"] as const), where: oneOf(s.where, ["messages", "summaries"] as const), match: oneOf(s.match, ["words", "fuzzy", "meaning", "pattern"] as const) }), component: SearchPage });
 const settingsIndex = createRoute({ getParentRoute: () => rootRoute, path: "/settings", component: SettingsIndex });
 const settings = createRoute({
   getParentRoute: () => rootRoute,
@@ -74,11 +77,14 @@ const settings = createRoute({
   component: SettingsPage,
 });
 const library = createRoute({ getParentRoute: () => rootRoute, path: "/library", beforeLoad: () => { throw redirect({ to: "/topics" }); } });
-const share = createRoute({ getParentRoute: () => rootRoute, path: "/share", component: SharePage });
+const share = createRoute({ getParentRoute: () => rootRoute, path: "/share", validateSearch: (s: Raw) => clean({ session: str(s.session) }), component: SharePage });
 const receive = createRoute({ getParentRoute: () => rootRoute, path: "/receive", component: ReceivePage });
+const shared = createRoute({ getParentRoute: () => rootRoute, path: "/shared", component: SharedPage });
+const stats = createRoute({ getParentRoute: () => rootRoute, path: "/stats", component: StatsPage });
+const guide = createRoute({ getParentRoute: () => rootRoute, path: "/guide", component: GuidePage });
 const welcome = createRoute({ getParentRoute: () => rootRoute, path: "/welcome", component: WelcomePage });
 
-const routeTree = rootRoute.addChildren([today, review, topics, topic, entities, entity, sessions, session, search, settingsIndex, settings, library, welcome, share, receive]);
+const routeTree = rootRoute.addChildren([today, review, topics, topic, entities, entity, sessions, session, search, settingsIndex, settings, library, welcome, share, receive, shared, guide, stats]);
 
 export function makeRouter(history?: RouterHistory) {
   return createRouter({ routeTree, defaultPreload: "intent", scrollRestoration: true, ...(history ? { history } : {}) });

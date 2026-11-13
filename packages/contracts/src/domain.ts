@@ -214,9 +214,34 @@ export interface SearchHit {
   context?: string;
 }
 
+/** One place the words were found: a message or a summary inside a session. */
+export interface SearchPassage {
+  id: string;
+  session: { id: SessionId; title: string };
+  source: "message" | "summary";
+  text: string;
+  at?: IsoTime;
+  role?: "user" | "assistant" | "tool" | "system";
+}
+
 export interface SearchResults {
   goTo: SearchHit[];
   actions: { id: string; label: string; hint?: string }[];
+  /** Every match, in rank order. A client that cannot list them leaves this out. */
+  passages?: SearchPassage[];
+  /** Set when the hub fell back to a simpler search, with the reason in plain words. */
+  degraded?: string;
+}
+
+export type SearchWindow = "today" | "yesterday" | "last_7d" | "last_14d";
+export type SearchScope = "messages" | "summaries";
+/** `best` blends every method. The rest are for people who know what they want. */
+export type SearchMode = "best" | "words" | "fuzzy" | "meaning" | "pattern";
+
+export interface SearchOptions {
+  window?: SearchWindow;
+  scope?: SearchScope;
+  mode?: SearchMode;
 }
 
 export type CaptureMethod = "hook" | "plugin" | "store-scan" | "client-push";

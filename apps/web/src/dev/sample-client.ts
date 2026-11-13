@@ -7,8 +7,10 @@ import type {
   EntitySummary,
   Fact,
   FactId,
+  FlaggedGroup,
   IsoTime,
   ReviewItem,
+  SearchPassage,
   SessionDetail,
   SessionId,
   SessionSummaryRow,
@@ -267,6 +269,14 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
 
     topicTree: () => wait(tree),
     topic: (id) => wait(article(id)),
+    async createTopic(name, parentId) {
+      const id = `t-${name.toLowerCase().replace(/\W+/g, "-")}-${Date.now().toString(36)}` as TopicId;
+      const node: TopicNode = { id, name, sessionCount: 0, status: "open", children: [], ...(parentId ? { parentId } : {}) };
+      const parent = parentId ? topicById().get(parentId) : undefined;
+      if (parent) parent.children.push(node);
+      else tree.push(node);
+      return wait(id);
+    },
     async updateTopic(id, patch) {
       const node = topicById().get(id);
       if (!node) throw new Error(`No topic ${id}`);
@@ -407,9 +417,24 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       return wait(undefined);
     },
 
-    search(text) {
+    search(text, options = {}) {
       const t = text.trim().toLowerCase();
       if (!t) return wait({ goTo: [], actions: [] });
+      const cutoff = options.window ? Date.now() - { today: 1, yesterday: 2, last_7d: 7, last_14d: 14 }[options.window] * 86_400_000 : 0;
+      const passages: SearchPassage[] = [];
+      for (const s of sessionRows()) {
+        if (s.trashed || new Date(s.startedAt).getTime() < cutoff) continue;
+        const session = { id: s.id, title: s.title };
+        if (options.scope !== "messages" && s.gist?.toLowerCase().includes(t)) passages.push({ id: `${s.id}:sum`, session, source: "summary", text: s.gist, at: s.endedAt ?? s.startedAt });
+        if (options.scope === "summaries") continue;
+        const turns = s.id === "s-retention" ? data.retentionTranscript() : [{ index: 1, role: "user" as const, at: s.startedAt, parts: [{ kind: "text" as const, text: s.title }] }];
+        for (const turn of turns) {
+          for (const part of turn.parts) {
+            const body = part.kind === "text" ? part.text : part.summary;
+            if (body.toLowerCase().includes(t)) passages.push({ id: `${s.id}:${turn.index}`, session, source: "message", text: body, at: turn.at, role: part.kind === "tool" ? "tool" : turn.role });
+          }
+        }
+      }
       const hits = [
         ...[...entities.values()].filter((e) => e.title.toLowerCase().includes(t) || e.aliases.some((a) => a.toLowerCase().includes(t))).map((e) => ({
           subject: { kind: "entity", id: e.id, title: e.title } as SubjectRef,
@@ -435,7 +460,8 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
         actions.push({ id: `/entities/${top.subject.id}?asOf=pick`, label: `Show ${top.subject.title} as of…`, hint: "Pick a date on the State panel" });
         actions.push({ id: `/entities/${top.subject.id}?addFact=1`, label: `Add a fact to ${top.subject.title}` });
       }
-      return wait({ goTo: hits, actions });
+      const degraded = options.mode === "meaning" ? "Meaning search needs an embedding model. Showing word matches instead." : undefined;
+      return wait({ goTo: hits, actions, passages: passages.slice(0, 30), ...(degraded ? { degraded } : {}) });
     },
 
     harnesses: () => wait(data.harnesses),
@@ -466,6 +492,37 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       return wait(undefined);
     },
     libraryCounts: () => wait({ topics: 64, entities: 148, sessions: 1284 }),
+    upkeep: (() => {
+      let flagged: FlaggedGroup[] = [
+        { id: "j-401", task: "Summarize session", cause: "The summarizer model answered 401: the API key was rotated.", count: 3, lastFailedAt: data.at(0, "11:58") },
+      ];
+      const drop = (id: string) => {
+        flagged = flagged.filter((g) => g.id !== id);
+        return wait(undefined);
+      };
+      return {
+        stats: () =>
+          wait({
+            sessions: 1284,
+            messages: 48210,
+            toolCalls: 19644,
+            summaries: 3907,
+            searchable: { embedded: 48012, waiting: 198, failed: 0 },
+            filing: { byCategorizer: 1102, byYou: 141, notFiled: 4, leftOut: 37, correctionsLastWeek: 6 },
+            wiki: { topicPages: 64, entities: 148, entityTypes: [{ name: "machines", count: 41 }, { name: "services", count: 38 }, { name: "people", count: 22 }, { name: "repositories", count: 19 }], loosePages: 2 },
+            workers: [
+              { id: "embedder" as const, lastFinishedAt: data.at(0, "14:03"), failing: 0 },
+              { id: "summarizer" as const, lastFinishedAt: data.at(0, "11:52"), failing: flagged.length ? 3 : 0 },
+              { id: "categorizer" as const, lastFinishedAt: data.at(0, "14:04"), failing: 0 },
+              { id: "wiki-builder" as const, lastFinishedAt: data.at(0, "14:06"), failing: 0 },
+            ],
+            toTidy: queue.length,
+          }),
+        flagged: () => wait(flagged),
+        retry: drop,
+        dismiss: drop,
+      };
+    })(),
     lastCrashReport: () => wait({ report: crash, sentAt: at(1, "03:12") }),
     async changes(query) {
       const topic = query.subject && topicById().has(query.subject) ? article(query.subject as TopicId) : undefined;

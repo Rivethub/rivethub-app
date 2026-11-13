@@ -35,3 +35,13 @@ export function toRow(detail: SessionDetail): SessionSummaryRow {
   const { cwd: _cwd, resumeCommand: _resume, changed: _changed, entities: _entities, tags: _tags, ...row } = detail;
   return row;
 }
+
+/**
+ * rh titles a session nobody named after its id: the id itself, the harness's own id, or "Session <id>".
+ * None of those mean anything to a person, so they read as `fallback`.
+ */
+export function displayTitle(title: string, id: string, fallback = "Untitled session"): string {
+  const native = id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
+  const bare = title.trim().replace(/^Session\s+/i, "");
+  return bare === "" || bare === id || bare === native ? fallback : title;
+}

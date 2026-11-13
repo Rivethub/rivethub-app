@@ -14,7 +14,7 @@ interface ThemeApi {
 const ThemeContext = createContext<ThemeApi | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [id, setId] = useState<ThemeId>("everforest");
+  const [id, setId] = useState<ThemeId>("rivethub");
 
   useEffect(() => {
     void AsyncStorage.getItem(KEY).then((stored) => {

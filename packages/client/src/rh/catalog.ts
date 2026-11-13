@@ -2,17 +2,12 @@ import type { Change, EntityId, Page, SessionDetail, SessionId, SessionQuery, Se
 import type { Http } from "../http.js";
 import { RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
-import { sessionId, sessionSegment, strip, topicId, visibilityFromWire } from "./util.js";
+import { displayTitle, sessionId, sessionSegment, strip, topicId, visibilityFromWire } from "./util.js";
 
 const PAGE_SIZE = 50;
 
 type RowFields = Omit<wire.CatalogRow, "visibility" | "parentId" | "childCount"> & Partial<Pick<wire.CatalogRow, "parentId" | "childCount">>;
 
-/** rh falls back to the harness's own session id when nothing titled the session. */
-function displayTitle(title: string, id: string): string {
-  const native = id.slice(id.indexOf(":") + 1);
-  return title.trim() === "" || title === id || title === native ? "Untitled session" : title;
-}
 
 export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRow {
   return strip<SessionSummaryRow>({
@@ -43,7 +38,7 @@ export function mapCatalogDetail(detail: ReturnType<typeof wire.catalogDetail.pa
   const at = row.endedAt ?? row.startedAt;
   const changed: Change[] = detail.changed.map((change) => ({
     kind: "fact",
-    subject: { kind: "session", id: row.id, title: row.title },
+    subject: { kind: "session", id: row.id, title: displayTitle(row.title, row.id) },
     text: change.summary,
     at,
     actor: { kind: "summarizer" },

@@ -9,7 +9,7 @@ import type {
 import type { Http } from "../http.js";
 import { NotFoundError } from "../errors.js";
 import * as wire from "./wire.js";
-import { harnessOf, sessionId, strip, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
+import { displayTitle, harnessOf, sessionId, strip, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import type { Visibility } from "@rivethub/contracts";
 import type { z } from "zod";
 
@@ -72,7 +72,7 @@ export function sessionRow(
   const when = entry.lastActive ?? entry.at;
   return strip<SessionSummaryRow>({
     id: sessionId(entry.sessionId),
-    title: entry.title ?? entry.sessionId,
+    title: displayTitle(entry.title ?? "", entry.sessionId),
     harness: harnessOf(entry.sessionId),
     startedAt: (when ?? new Date(0).toISOString()) as SessionSummaryRow["startedAt"],
     endedAt: when,
@@ -170,6 +170,11 @@ export function topicsApi(http: Http) {
         directory: patch.folder === undefined ? undefined : patch.folder === null ? null : { kind: "shared", path: patch.folder },
       });
       await http.send("PATCH", `/api/topics/${key(id)}`, body);
+    },
+
+    async createTopic(name: string, parentId?: TopicId): Promise<TopicId> {
+      const created = await http.sendFor("POST", "/api/topics", wire.createdTopic, strip<Record<string, unknown>>({ kind: "work", name, parent: parentId }));
+      return topicId(created.id);
     },
 
     async addDecision(id: TopicId, text: string): Promise<void> {

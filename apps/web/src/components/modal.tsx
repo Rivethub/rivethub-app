@@ -65,7 +65,7 @@ export function Modal({
           aria-label={label}
           tabIndex={-1}
           className={cx(
-            "pointer-events-auto flex max-h-[85vh] w-full flex-col overflow-auto border border-input bg-sidebar shadow-[0_24px_60px_rgba(0,0,0,.35)] outline-none",
+            "pointer-events-auto flex max-h-[85vh] w-full flex-col overflow-auto border border-input bg-card shadow-[0_24px_60px_rgba(0,0,0,.35)] outline-none",
             placement === "sheet" ? "rounded-t-[20px] border-x-0 border-b-0 pb-[max(env(safe-area-inset-bottom),20px)]" : "max-w-[640px] rounded-[14px]",
             className,
           )}

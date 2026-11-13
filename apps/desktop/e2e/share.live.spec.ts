@@ -137,8 +137,9 @@ test("the browser build shows no Share or Receive", async () => {
 test("sender: pick, decide, sanitize, review flags, sign in to a team server, share", async () => {
   const { nodes, team, freshLoginSecs } = kit();
   const { app, page } = await openApp(nodes.A, "sender");
-  await expect(page.getByRole("link", { name: "Share", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Share", exact: true }).click();
+  // Sharing lives on one screen now: Shared in the sidebar, then the action.
+  await page.getByRole("link", { name: "Shared", exact: true }).click();
+  await page.getByRole("link", { name: "Share sessions", exact: true }).click();
   await shot(page, "share-choose-empty");
 
   const search = page.getByRole("searchbox", { name: /Find sessions to share/ });
@@ -236,7 +237,8 @@ test("receiver: refuses a typo, trusts the sender, steps up on a flagged import,
   const { nodes, freshLoginSecs } = kit();
   expect(code).not.toBe("");
   const { app, page } = await openApp(nodes.B, "receiver");
-  await page.getByRole("link", { name: "Receive", exact: true }).click();
+  await page.getByRole("link", { name: "Shared", exact: true }).click();
+  await page.getByRole("link", { name: "Enter a code", exact: true }).click();
   await shot(page, "receive-paste");
 
   const paste = page.getByLabel("Paste the code you were sent");

@@ -2,15 +2,18 @@ import { count, dayLabel, harnessNames, longDay, localDay, shortDate, time } fro
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useClient, useShareClient } from "../client/context";
+import { useCreateTopic, useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
 import { ArticleBar, ArticleTabs, Crumbs, MobileBack } from "../components/article";
 import { EditableText } from "../components/editable";
-import { FolderIcon, KeepIcon, ShareIcon, TrashIcon } from "../components/icons";
+import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
-import { Frame, Logo } from "../components/shell";
+import { Frame, MainSidebar } from "../components/shell";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, subjectHref } from "../lib/format";
+import { changeKind, plural, subjectHref } from "../lib/format";
+import { markStep } from "../lib/journey";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/sessions/$sessionId");
@@ -21,50 +24,81 @@ function flattenTopics(nodes: TopicNode[], trail: string[] = []): { id: TopicId;
   return nodes.flatMap((n) => [{ id: n.id, label: [...trail, n.name].join(" › ") }, ...flattenTopics(n.children, [...trail, n.name])]);
 }
 
-function SessionList({ view, text, selected, phone }: { view: View; text: string; selected?: string; phone?: boolean }) {
-  const list = useSessions({ view, ...(text ? { text } : {}) });
-  const groups = useMemo(() => {
-    const out: { day: string; items: SessionSummaryRow[] }[] = [];
-    for (const s of list.data?.items ?? []) {
-      const day = localDay(new Date(s.startedAt));
-      const last = out.at(-1);
-      if (last?.day === day) last.items.push(s);
-      else out.push({ day, items: [s] });
-    }
-    return out;
-  }, [list.data]);
-  if (list.isPending) return <Loading />;
-  if (!groups.length) return <p className="px-2.5 py-4 text-[13px] text-muted-foreground">No sessions here.</p>;
+const selectCls =
+  "w-full appearance-none rounded-lg border border-input bg-card bg-[length:10px] bg-[right_10px_center] bg-no-repeat py-1.5 pr-7 pl-2.5 text-foreground bg-[url(/icons/select-chevron.svg)]";
+
+const dayHeading = (day: string) => (dayLabel(`${day}T12:00`) === "Today" ? "Today" : longDay(day).split(", ").slice(1).join(", "));
+
+const stateNote: Partial<Record<SessionSummaryRow["memoryState"], { label: string; color: string; long: string }>> = {
+  capturing: { label: "Capturing", color: "var(--info)", long: "This session is still being captured." },
+  queued: { label: "Not summarized yet", color: "var(--muted-foreground)", long: "This session is waiting to be summarized." },
+  flagged: { label: "Summary failed", color: "var(--error)", long: "Summarizing this session failed." },
+};
+
+/** Pages of the session list. Older pages load on request and stay loaded. */
+function useSessionPages(query: SessionQuery) {
+  const client = useClient();
+  return useInfiniteQuery({
+    queryKey: ["sessions", "pages", query],
+    queryFn: ({ pageParam }) => client.sessions({ ...query, ...(pageParam ? { cursor: pageParam } : {}) }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next,
+  });
+}
+
+function groupByDay(items: SessionSummaryRow[]) {
+  const out: { day: string; items: SessionSummaryRow[] }[] = [];
+  for (const s of items) {
+    const day = localDay(new Date(s.startedAt));
+    const last = out.at(-1);
+    if (last?.day === day) last.items.push(s);
+    else out.push({ day, items: [s] });
+  }
+  return out;
+}
+
+function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: View; active: boolean; phone?: boolean }) {
+  const state = stateNote[s.memoryState];
+  const ref = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView?.({ block: "nearest" });
+  }, [active]);
   return (
-    <>
-      {groups.map((g) => (
-        <section key={g.day} aria-label={longDay(g.day)} className="flex flex-col gap-0.5">
-          <span className="px-2.5 pt-2 pb-0.5 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            {dayLabel(`${g.day}T12:00`) === "Today" ? "Today" : longDay(g.day).split(", ").slice(1).join(", ")}
-          </span>
-          {g.items.map((s) => (
-            <Link
-              key={s.id}
-              to="/sessions/$sessionId"
-              params={{ sessionId: s.id }}
-              search={view === "all" ? {} : { view }}
-              aria-current={s.id === selected ? "page" : undefined}
-              className={cx("flex flex-col gap-0.5 rounded-lg px-2.5 py-2 text-foreground hover:no-underline", s.id === selected ? "bg-selected" : "hover:bg-accent", phone && "min-h-14")}
-            >
-              <span className="flex justify-between text-[12px] text-muted-foreground"><span>{s.harness}</span><span>{time(s.startedAt)}</span></span>
-              <span className="truncate">{s.title}</span>
-              {s.childCount ? <span className="text-[12px] text-muted-foreground">{subagents(s.childCount)}</span> : null}
-              <span className="text-[12px]" style={{ color: s.topic ? "var(--muted-foreground)" : "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
-            </Link>
-          ))}
-        </section>
-      ))}
-    </>
+    <Link
+      ref={ref}
+      to="/sessions/$sessionId"
+      params={{ sessionId: s.id }}
+      search={view === "all" ? {} : { view }}
+      data-active={active || undefined}
+      className={cx(
+        "grid items-baseline gap-x-3 border-b border-border text-foreground hover:bg-accent hover:no-underline data-active:bg-selected",
+        phone ? "min-h-14 grid-cols-[minmax(0,1fr)] px-3 py-2.5" : "grid-cols-[48px_minmax(0,1fr)_auto] px-2 py-2.5",
+      )}
+    >
+      {!phone && <span className="text-[12px] text-muted-foreground">{time(s.startedAt)}</span>}
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium">{s.title}</span>
+          {s.kept && <KindTag label="Kept" color="var(--primary)" />}
+          {state && <KindTag label={state.label} color={state.color} />}
+        </span>
+        {s.gist && <span className="line-clamp-2 text-[13px] leading-[1.45] text-muted-foreground">{s.gist}</span>}
+        <span className="flex flex-wrap gap-x-2 text-[12px] text-muted-foreground">
+          {phone && <span>{time(s.startedAt)} · {harnessNames[s.harness] ?? s.harness}</span>}
+          <span style={s.topic ? undefined : { color: "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
+          <span>· {plural(s.messageCount, "message")}</span>
+          {s.childCount ? <span>· {subagents(s.childCount)}</span> : null}
+          {s.visibility.kind === "space" && <span>· shared with {s.visibility.space}</span>}
+        </span>
+      </span>
+      {!phone && <span className="font-mono text-[11px] text-muted-foreground">{harnessNames[s.harness] ?? s.harness}</span>}
+    </Link>
   );
 }
 
-function SessionFilters({ view, onView, text, onText, phone }: { view: View; onView: (v: View) => void; text: string; onText: (t: string) => void; phone?: boolean }) {
+function SessionFilters({ view, onView, text, onText, harness, onHarness, phone }: { view: View; onView: (v: View) => void; text: string; onText: (t: string) => void; harness: string; onHarness: (h: string) => void; phone?: boolean }) {
   const unfiled = useSessions({ view: "unfiled" }).data?.items.length;
+  const harnesses = (useHarnesses().data ?? []).filter((h) => h.capture.state !== "not-connected");
   const views: { id: View; label: string }[] = [
     { id: "all", label: "All" },
     { id: "unfiled", label: `Unfiled${unfiled ? ` ${unfiled}` : ""}` },
@@ -72,69 +106,128 @@ function SessionFilters({ view, onView, text, onText, phone }: { view: View; onV
     { id: "trash", label: "Trash" },
   ];
   return (
-    <>
-      <label className={cx("flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-muted-foreground", phone ? "min-h-11" : "py-1.5")}>
+    <div className="flex flex-wrap items-center gap-2">
+      <label className={cx("flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-muted-foreground", phone ? "min-h-11" : "py-1.5")}>
+        <SearchIcon size={14} />
         <span className="sr-only">Filter sessions</span>
-        <input value={text} onChange={(e) => onText(e.target.value)} placeholder="Filter by title, harness, topic…" className="min-w-0 flex-1 border-0 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
+        <input value={text} onChange={(e) => onText(e.target.value)} placeholder="Filter by title or topic…" className="min-w-0 flex-1 border-0 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" />
       </label>
-      <div role="group" aria-label="Show" className="flex flex-wrap gap-1 px-0.5 py-1.5">
+      {harnesses.length > 1 && (
+        <label className="flex flex-col">
+          <span className="sr-only">Tool</span>
+          <select value={harness} onChange={(e) => onHarness(e.target.value)} className={cx(selectCls, "w-auto", phone && "min-h-11")}>
+            <option value="">Every tool</option>
+            {harnesses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        </label>
+      )}
+      <div role="group" aria-label="Show" className="flex flex-wrap gap-1">
         {views.map((v) => (
-          <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => onView(v.id)} className={cx("rounded-full border border-border px-2 text-[12px] text-foreground", phone ? "min-h-9 px-3" : "py-[3px]", view === v.id ? "bg-selected" : "bg-transparent")}>
+          <button key={v.id} type="button" aria-pressed={view === v.id} onClick={() => onView(v.id)} className={cx("rounded-full border border-border px-2.5 text-[12px] text-foreground", phone ? "min-h-9 px-3" : "py-1", view === v.id ? "bg-selected" : "bg-transparent")}>
             {v.label}
           </button>
         ))}
       </div>
-    </>
+    </div>
   );
 }
 
-function SessionsSidebar({ selected, view }: { selected?: string; view: View }) {
+const emptyNote: Record<View, string> = {
+  all: "No sessions match. A session shows up here when a connected tool finishes a turn.",
+  unfiled: "Every session has a topic.",
+  kept: "Nothing is kept. Keep a session to protect it from clean-up.",
+  trash: "The trash is empty.",
+};
+
+/** The list, with its filters. J and K move, Enter opens. */
+function SessionBrowser({ view, phone }: { view: View; phone?: boolean }) {
   const navigate = useNavigate();
   const [text, setText] = useState("");
-  const listed = useSessions({ view: "all" }).data?.items.length;
-  const total = useLibraryCounts().data?.sessions ?? listed;
+  const [harness, setHarness] = useState("");
+  const [active, setActive] = useState(-1);
+  const pages = useSessionPages({ view, ...(text ? { text } : {}), ...(harness ? { harness } : {}) });
+  const items = useMemo(() => pages.data?.pages.flatMap((p) => p.items) ?? [], [pages.data]);
+  const groups = useMemo(() => groupByDay(items), [items]);
+  useEffect(() => setActive(-1), [view, text, harness]);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (e.key === "j") setActive((a) => Math.min(a + 1, items.length - 1));
+      else if (e.key === "k") setActive((a) => Math.max(a - 1, 0));
+      else if (e.key === "Enter" && items[active]) void navigate({ to: "/sessions/$sessionId", params: { sessionId: items[active].id }, search: view === "all" ? {} : { view } });
+      else return;
+      e.preventDefault();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [items, active, navigate, view]);
+  let n = -1;
   return (
-    <nav aria-label="Sessions" className="flex w-[300px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-sidebar px-2 py-2.5">
-      <div className="flex items-center gap-2 px-2 pt-1 pb-2.5">
-        <Link to="/" aria-label="Back to Today" className="hover:no-underline"><Logo /></Link>
-        <span className="flex-1 font-semibold">Sessions</span>
-        {total !== undefined && <span className="text-[12px] text-muted-foreground">{count(total)}</span>}
-      </div>
-      <SessionFilters view={view} text={text} onText={setText} onView={(v) => void navigate({ to: selected ? "/sessions/$sessionId" : "/sessions", params: { sessionId: selected ?? "" }, search: { view: v } })} />
-      <SessionList view={view} text={text} {...(selected ? { selected } : {})} />
-    </nav>
+    <>
+      <SessionFilters view={view} text={text} onText={setText} harness={harness} onHarness={setHarness} onView={(v) => void navigate({ to: "/sessions", search: v === "all" ? {} : { view: v } })} {...(phone ? { phone } : {})} />
+      {pages.isPending ? <Loading /> : pages.isError ? <ErrorNote error={pages.error} /> : groups.length === 0 ? (
+        <p className="m-0 py-6 text-muted-foreground">{text || harness ? "No sessions match these filters." : emptyNote[view]}</p>
+      ) : (
+        <div className="flex flex-col">
+          {groups.map((g) => (
+            <section key={g.day} aria-label={longDay(g.day)} className="flex flex-col">
+              <h2 className="m-0 px-2 pt-4 pb-1.5 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">{dayHeading(g.day)}</h2>
+              {g.items.map((s) => {
+                n += 1;
+                return <SessionRow key={s.id} s={s} view={view} active={n === active} {...(phone ? { phone } : {})} />;
+              })}
+            </section>
+          ))}
+          {pages.hasNextPage && (
+            <Button className="mt-4 self-center" size="md" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
+              {pages.isFetchingNextPage ? "Loading…" : "Show older sessions"}
+            </Button>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
 export function SessionsIndex() {
   const { view = "all" } = indexRoute.useSearch();
-  const navigate = useNavigate();
   const phone = useIsPhone();
-  const [text, setText] = useState("");
+  const total = useLibraryCounts().data?.sessions;
   if (phone) {
     return (
       <Frame sidebar={null} tabs>
         <LibraryPhone kind="sessions">
-          <div className="px-2">
-            <SessionFilters phone view={view} text={text} onText={setText} onView={(v) => void navigate({ to: "/sessions", search: { view: v } })} />
-          </div>
-          <SessionList phone view={view} text={text} />
+          <div className="flex flex-col px-2"><SessionBrowser view={view} phone /></div>
         </LibraryPhone>
       </Frame>
     );
   }
   return (
-    <Frame sidebar={<SessionsSidebar view={view} />}>
-      <div className="m-auto flex max-w-md flex-col items-center gap-2 p-8 text-center">
-        <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">Sessions <SampleBadge capability="sessions" /></h1>
-        <p className="m-0 text-muted-foreground">Every conversation your agents had, as captured. Pick one to read its summary or the full transcript.</p>
+    <Frame sidebar={<MainSidebar />}>
+      <div className="flex justify-center px-7 py-8">
+        <div className="flex min-w-0 max-w-[900px] flex-1 flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <h1 className="m-0 flex items-baseline gap-2.5 font-serif text-[32px] font-semibold">
+              Sessions
+              {total !== undefined && <span className="font-sans text-[13px] font-normal text-muted-foreground">{count(total)}</span>}
+              <SampleBadge capability="sessions" />
+            </h1>
+            <p className="m-0 text-muted-foreground">Every conversation your agents had, as captured. Open one to read its summary, then the messages behind it.</p>
+          </div>
+          <SessionBrowser view={view} />
+        </div>
       </div>
     </Frame>
   );
 }
 
-const selectCls =
-  "w-full appearance-none rounded-lg border border-input bg-card bg-[length:10px] bg-[right_10px_center] bg-no-repeat py-1.5 pr-7 pl-2.5 text-foreground bg-[url(/icons/select-chevron.svg)]";
+/** The sessions on either side of this one in the list it was opened from. */
+function useNeighbors(id: string, view: View) {
+  const items = useSessions({ view }).data?.items ?? [];
+  const i = items.findIndex((s) => s.id === id);
+  return { newer: i > 0 ? items[i - 1] : undefined, older: i >= 0 ? items[i + 1] : undefined };
+}
 
 const visibilityKey = (v: Visibility) => (v.kind === "private" ? "private" : `space:${v.space}`);
 
@@ -142,8 +235,12 @@ export function SessionPage() {
   const { sessionId } = route.useParams();
   const search = route.useSearch();
   const phone = useIsPhone();
-  const tab = search.tab ?? (phone ? "transcript" : "summary");
   const s = useSession(sessionId as SessionId);
+  // Lead with the summary when there is one; otherwise the messages are all there is.
+  const tab = search.tab ?? (!s.data || s.data.memoryState === "summarized" ? "summary" : "transcript");
+  const view = search.view ?? "all";
+  const near = useNeighbors(sessionId, view);
+  const canSend = useShareClient() !== null;
   const keep = useKeep();
   const trash = useTrash();
   const restore = useRestore();
@@ -151,8 +248,8 @@ export function SessionPage() {
   const range: [number, number] | undefined = search.from !== undefined ? [search.from, search.to ?? search.from] : undefined;
   const d = s.data;
   const tabs = [
-    { id: "transcript" as const, label: "Transcript", count: d?.messageCount ?? 0 },
     { id: "summary" as const, label: "Summary" },
+    { id: "transcript" as const, label: "Transcript", count: d?.messageCount ?? 0 },
   ];
   const fallback = s.isPending ? <Loading /> : s.isError ? <ErrorNote error={s.error} /> : null;
   const doTrash = () => {
@@ -178,6 +275,7 @@ export function SessionPage() {
                 </summary>
                 <div className="flex flex-col gap-1.5 px-3.5 pb-3"><Changes d={d!} /></div>
               </details>
+              <StateNote d={d!} />
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
               {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} phone />}
             </div>
@@ -189,12 +287,17 @@ export function SessionPage() {
   }
 
   return (
-    <Frame sidebar={<SessionsSidebar selected={sessionId} view={search.view ?? "all"} />} aside={d && <SessionSide d={d} />}>
+    <Frame sidebar={<MainSidebar />} aside={d && <SessionSide d={d} />}>
       {fallback ?? (
         <>
-          <ArticleBar crumbs={<Crumbs items={[{ label: "Sessions", to: "/sessions" }, { label: d!.title }]} />}>
+          <ArticleBar crumbs={<Crumbs items={[{ label: view === "all" ? "Sessions" : `Sessions · ${view}`, to: view === "all" ? "/sessions" : `/sessions?view=${view}` }, { label: d!.title }]} />}>
+            <span className="mr-2 flex gap-1 text-[12px]">
+              {near.newer ? <Link to="/sessions/$sessionId" params={{ sessionId: near.newer.id }} search={view === "all" ? {} : { view }} title={near.newer.title} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-accent hover:no-underline">‹ Newer</Link> : null}
+              {near.older ? <Link to="/sessions/$sessionId" params={{ sessionId: near.older.id }} search={view === "all" ? {} : { view }} title={near.older.title} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-accent hover:no-underline">Older ›</Link> : null}
+            </span>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined })} />
-            <Button className="ml-2" aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
+            {canSend && <Link to="/share" search={{ session: d!.id }} className="ml-2 rounded-lg border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-accent hover:no-underline">Share…</Link>}
+            <Button className={canSend ? "" : "ml-2"} aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
             {d!.trashed ? (
               <Button onClick={() => restore.mutate([d!.id])} disabled={restore.isPending}>Restore</Button>
             ) : (
@@ -203,6 +306,7 @@ export function SessionPage() {
           </ArticleBar>
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
+            <StateNote d={d!} />
             {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} />}
           </div>
         </>
@@ -222,9 +326,10 @@ function SessionHeader({ d }: { d: SessionDetail }) {
           <EditableText label="Session title" value={d.title} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
           <SampleBadge capability="sessions" />
         </h1>
+        {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
         <span className="text-[13px] text-muted-foreground">
           {harnessNames[d.harness] ?? d.harness} · {shortDate(d.startedAt)}, {time(d.startedAt)}
-          {d.endedAt ? `–${time(d.endedAt)}` : ""} · {d.messageCount} messages{d.cwd ? ` · ` : ""}
+          {d.endedAt ? `–${time(d.endedAt)}` : ""} · {plural(d.messageCount, "message")}{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
         </span>
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
@@ -232,7 +337,9 @@ function SessionHeader({ d }: { d: SessionDetail }) {
       {d.resumeCommand && (
         <>
           <code className="rounded-md bg-code px-2 py-1 font-mono text-[12px]">{d.resumeCommand}</code>
-          <CopyButton text={d.resumeCommand} label="Copy resume" className="rounded-md bg-primary px-2.5 py-1 text-[12px] text-primary-foreground" />
+          <span title={`Paste in a terminal to pick this session back up in ${harnessNames[d.harness] ?? d.harness}`}>
+            <CopyButton text={d.resumeCommand} label="Copy resume command" className="rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground" />
+          </span>
         </>
       )}
     </div>
@@ -260,11 +367,36 @@ function CopyButton({ text, label, className }: { text: string; label: string; c
   );
 }
 
+/** Says why there is no summary to lead with, and what to do about it. */
+function StateNote({ d }: { d: SessionDetail }) {
+  const state = stateNote[d.memoryState];
+  if (!state) return null;
+  return (
+    <p className="m-0 rounded-lg border border-border px-3 py-2 text-[13px] text-muted-foreground">
+      <span style={{ color: state.color }}>{state.long}</span>{" "}
+      {d.memoryState === "capturing" ? "The messages so far are below." : <>Summaries need a model. <Link to="/settings/$section" params={{ section: "connections" }}>Check the models</Link></>}
+    </p>
+  );
+}
+
 function SummaryView({ id }: { id: SessionId }) {
   const tree = useSummaryTree(id);
+  useEffect(() => {
+    if (tree.data) markStep("summary");
+  }, [tree.data]);
   const [open, setOpen] = useState<Set<number>>(new Set([0]));
   if (tree.isPending) return <Loading />;
-  if (tree.isError) return <ErrorNote error={tree.error} />;
+  if (tree.isError) {
+    return (
+      <section aria-label="Session summary" className="flex flex-col gap-1.5 rounded-xl border border-dashed border-input px-[18px] py-4">
+        <span className="font-semibold">No summary yet</span>
+        <span className="text-[13px] leading-[1.5] text-muted-foreground">
+          A summary is written after a session ends, by the model set for summaries. Every message is still here.{" "}
+          <Link to="." search={{ tab: "transcript" } as never}>Read the transcript</Link>
+        </span>
+      </section>
+    );
+  }
   const root = tree.data;
   const leaves = root.children.reduce((n, b) => n + b.children.length, 0);
   return (
@@ -302,7 +434,7 @@ function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boo
       </button>
       {expanded &&
         node.children.map((l, i) => (
-          <div key={i} className="ml-[18px] grid grid-cols-[70px_minmax(0,1fr)_auto] items-baseline gap-2.5 border-l-2 border-border px-2.5 py-1.5">
+          <div key={i} className="ml-[18px] flex flex-col gap-1 border-l-2 border-border px-2.5 py-1.5 md:grid md:grid-cols-[70px_minmax(0,1fr)_auto] md:items-baseline md:gap-2.5">
             <span className="text-[11px] font-semibold text-muted-foreground">Leaf · {rangeLabel(l.messageRange)}</span>
             <span className="leading-[1.5]">{l.text}</span>
             <Link to="." search={{ tab: "transcript", from: l.messageRange[0], to: l.messageRange[1] } as never} className="text-[12px]">View in transcript</Link>
@@ -318,8 +450,19 @@ function TranscriptView({ id, range, phone }: { id: SessionId; range: [number, n
   useEffect(() => {
     first.current?.scrollIntoView?.({ block: "start" });
   }, [range?.[0], transcript.data]);
-  if (transcript.isPending) return <Loading />;
-  if (transcript.isError) return <ErrorNote error={transcript.error} />;
+  if (transcript.isPending) return <Loading label="Loading the messages" />;
+  if (transcript.isError || transcript.data.length === 0) {
+    return (
+      <div role="alert" className="flex flex-col gap-2 rounded-xl border border-dashed border-input px-[18px] py-4">
+        <span className="font-semibold">The messages could not be read</span>
+        <span className="text-[13px] leading-[1.5] text-muted-foreground">
+          {transcript.isError && transcript.error instanceof Error ? `${transcript.error.message}. ` : ""}
+          The session is still in memory and still searchable. Its full transcript is read from the tool's own files, which may be on another machine.
+        </span>
+        <Button className="w-fit" size="md" onClick={() => void transcript.refetch()}>Try again</Button>
+      </div>
+    );
+  }
   const inRange = (t: TranscriptTurn) => !!range && t.index >= range[0] && t.index <= range[1];
   const hit0 = (t: TranscriptTurn) => !!range && t.index === range[0];
   return (
@@ -397,16 +540,50 @@ function Changes({ d }: { d: SessionDetail }) {
   );
 }
 
+const NEW_TOPIC = "__new__";
+
 function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?: string; onPicked?: () => void }) {
+  const client = useClient();
   const tree = useTopicTree().data ?? [];
   const place = usePlaceSession();
+  const create = useCreateTopic();
+  const [name, setName] = useState<string | null>(null);
   const options = flattenTopics(tree);
+  const save = () => {
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return setName(null);
+    create.mutate({ name: trimmed }, { onSuccess: (id) => { place.mutate({ session: d.id, topic: id }); setName(null); onPicked?.(); } });
+  };
+  if (name !== null) {
+    return (
+      <span className="flex flex-col gap-1.5">
+        <span className="flex gap-1.5">
+          <input
+            autoFocus
+            aria-label="New topic name"
+            placeholder="Topic name"
+            value={name}
+            disabled={create.isPending}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setName(null);
+            }}
+            className={cx("min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-foreground outline-none focus:border-primary", className)}
+          />
+          <Button variant="primary" size="md" disabled={create.isPending || !name.trim()} onClick={save}>File</Button>
+        </span>
+        {create.isError && <span role="alert" className="text-[12px] text-error">{create.error instanceof Error ? create.error.message : "Could not create the topic."}</span>}
+      </span>
+    );
+  }
   return (
-    <label className="flex flex-col">
+    <label className="flex flex-col gap-1">
       <span className="sr-only">Filed under</span>
       <select
         value={d.topic?.id ?? ""}
         onChange={(e) => {
+          if (e.target.value === NEW_TOPIC) return setName("");
           place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null });
           onPicked?.();
         }}
@@ -414,7 +591,9 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
       >
         <option value="">Unfiled</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        {client.createTopic && <option value={NEW_TOPIC}>New topic…</option>}
       </select>
+      {place.isError && <span role="alert" className="text-[12px] text-error">The session was not moved{place.error instanceof Error ? `: ${place.error.message}` : ""}.</span>}
     </label>
   );
 }
@@ -430,6 +609,7 @@ function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; classN
         onChange={(e) => {
           const v = e.target.value;
           set.mutate({ id: d.id, visibility: v === "private" ? { kind: "private" } : { kind: "space", space: v.slice(6) } });
+          if (v !== "private") markStep("share");
           onPicked?.();
         }}
         className={cx(selectCls, className)}
@@ -474,8 +654,9 @@ function TagEditor({ d }: { d: SessionDetail }) {
 }
 
 function SessionSide({ d }: { d: SessionDetail }) {
+  const canSend = useShareClient() !== null;
   return (
-    <aside aria-label="What this session changed" className="flex w-[320px] min-w-0 flex-col gap-[18px] border-l border-border bg-sidebar px-4 py-5 text-[13px]">
+    <aside aria-label="What this session changed" className="flex w-[320px] min-w-0 flex-col gap-[18px] border-l border-border px-4 py-5 text-[13px]">
       <section className="flex flex-col gap-1.5">
         <Eyebrow>What it changed</Eyebrow>
         <Changes d={d} />
@@ -487,6 +668,10 @@ function SessionSide({ d }: { d: SessionDetail }) {
       <section className="flex flex-col gap-1.5">
         <Eyebrow>Shared with</Eyebrow>
         <VisibilityPicker d={d} />
+        <span className="text-[12px] leading-[1.45] text-muted-foreground">
+          {d.visibility.kind === "private" ? "Only you can see this session." : `Everyone in ${d.visibility.space} can find it.`}{" "}
+          {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
+        </span>
       </section>
       {d.entities.length > 0 && (
         <section className="flex flex-col gap-1.5">

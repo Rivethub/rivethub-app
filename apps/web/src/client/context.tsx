@@ -1,4 +1,4 @@
-import type { CrashReport, IsoTime, MemoryClient, ShareClient, SubjectRef } from "@rivethub/contracts";
+import type { CrashReport, IsoTime, MemoryClient, ShareClient, SubjectRef, UpkeepClient } from "@rivethub/contracts";
 import { createContext, useContext, type ReactNode } from "react";
 import { desktopBridge } from "../lib/desktop";
 
@@ -14,6 +14,8 @@ export interface MemoryClientExtras {
   lastCrashReport?(): Promise<{ report: CrashReport; sentAt: IsoTime } | null>;
   /** Sharing sessions and receiving them. Present only for a client wired to the local rh. */
   share?: ShareClient;
+  /** The hub's counts, worker state and failed jobs, for the Stats screen. */
+  upkeep?: UpkeepClient;
 }
 
 export type AppClient = MemoryClient & MemoryClientExtras;
