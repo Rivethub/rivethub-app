@@ -52,7 +52,7 @@ export function EntityScreen({ route, navigation }: Props) {
       ) : (
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, gap: 12 }}>
-            <Text style={{ fontFamily: "serif", color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.title}</Text>
+            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.title}</Text>
             <Segment
               value={tab}
               onChange={(id) => setTab(id as Tab)}
@@ -74,7 +74,7 @@ export function EntityScreen({ route, navigation }: Props) {
                     </Pressable>
                   </View>
                 ) : null}
-                {article.lead ? <RichText text={article.lead} style={{ fontFamily: "serif", color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+                {article.lead ? <RichText text={article.lead} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
                 <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 10 }}>
                   <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>STATE</Text>
                   {article.facts.length === 0 ? <Text style={{ color: palette.muted }}>No facts yet.</Text> : null}

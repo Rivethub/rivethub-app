@@ -1,5 +1,7 @@
 export const THEMES = [
-  { id: "everforest", label: "Everforest", hint: "Warm green on charcoal. The default." },
+  { id: "rivethub", label: "RivetHub", hint: "Emerald on near-black. The default." },
+  { id: "rivethub-light", label: "RivetHub light", hint: "The same emerald on a light page." },
+  { id: "everforest", label: "Everforest", hint: "Warm green on charcoal, with serif headings." },
   { id: "t3-dark", label: "T3 dark", hint: "Black with blue accents, like T3 Code." },
   { id: "t3-light", label: "T3 light", hint: "Light grey with blue accents." },
 ] as const;
@@ -25,11 +27,58 @@ export interface Palette {
   info: string;
   message: string;
   code: string;
+  /** The face for headlines and reading text. Undefined is the system sans. */
+  reading: string | undefined;
   scheme: "dark" | "light";
 }
 
 /** Same semantic colors as the web app. oklch tokens are hex so React Native can paint them. */
 export const PALETTES: Record<ThemeId, Palette> = {
+  // RivetHub's own palette, from rivethub-desktop's crates/model/src/palette.rs, as the web app uses it.
+  rivethub: {
+    background: "#181e1b",
+    sidebar: "#0f1512",
+    card: "#1f2622",
+    raised: "#2b332e",
+    foreground: "#dee4df",
+    muted: "#a7b2ab",
+    border: "#2b332e",
+    input: "#414a45",
+    accent: "#1d2420",
+    selected: "#1f4535",
+    primary: "#6cdbac",
+    primaryForeground: "#003825",
+    success: "#6cdbac",
+    warning: "#f5c56b",
+    error: "#ffb4ab",
+    info: "#8ecbff",
+    message: "#1f4535",
+    code: "#111714",
+    reading: undefined,
+    scheme: "dark",
+  },
+  "rivethub-light": {
+    background: "#fbfdfb",
+    sidebar: "#e9f0eb",
+    card: "#f2f7f3",
+    raised: "#e4ebe6",
+    foreground: "#171d1a",
+    muted: "#56615b",
+    border: "#d9e1db",
+    input: "#c6d0c9",
+    accent: "#edf2ee",
+    selected: "#c4ecd8",
+    primary: "#006c4c",
+    primaryForeground: "#ffffff",
+    success: "#006c4c",
+    warning: "#8a5100",
+    error: "#ba1a1a",
+    info: "#0b57d0",
+    message: "#c4ecd8",
+    code: "#edf2ee",
+    reading: undefined,
+    scheme: "light",
+  },
   everforest: {
     background: "#2d353b",
     sidebar: "#232a2e",
@@ -49,6 +98,7 @@ export const PALETTES: Record<ThemeId, Palette> = {
     info: "#7fbbb3",
     message: "#466662",
     code: "#272e33",
+    reading: "serif",
     scheme: "dark",
   },
   "t3-dark": {
@@ -70,6 +120,7 @@ export const PALETTES: Record<ThemeId, Palette> = {
     info: "#51a2ff",
     message: "#1e1e1e",
     code: "rgba(255, 255, 255, 0.05)",
+    reading: "serif",
     scheme: "dark",
   },
   "t3-light": {
@@ -91,6 +142,7 @@ export const PALETTES: Record<ThemeId, Palette> = {
     info: "#155dfc",
     message: "#ebebed",
     code: "#f4f4f5",
+    reading: "serif",
     scheme: "light",
   },
 };

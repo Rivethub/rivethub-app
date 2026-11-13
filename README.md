@@ -24,6 +24,28 @@ pnpm --filter @rivethub/web dev
 
 The web and mobile apps both run on sample data until you pair them with a hub. Each app's README covers its own build and deploy steps.
 
+## How the app is laid out
+
+One navigation on every screen, so nothing moves when you change section:
+
+| Where | What it is for |
+| --- | --- |
+| **Today** | What your agents did, what needs a decision, one line if capture or a model is failing, and the single next step from the guide. |
+| **Review** | Everything memory is unsure of, decided from the keyboard. |
+| **Sessions** | Every captured session with its gist, tool, topic and state. Filter by text, tool, unfiled, kept or trash; J, K and Enter move and open. A session opens on its summary, then the messages. |
+| **Topics**, **Entities** | The organized view: articles, decisions and facts. Topics can be created by hand, so filing works before any model is set. |
+| **Shared** | What is shared with each space on this hub, and sending to or receiving from another RivetHub. |
+| **Search** (`/` or Ctrl K) | Ctrl K jumps to a topic, entity or session. The Search page lists every match inside sessions, with time chips and filters for messages or summaries and for how to match. |
+| **Stats** | What is in memory and whether the workers are keeping up, with failed jobs to retry or dismiss. |
+| **Guide** | Ten steps in five stages (capture, recall, understand, curate, share) and the shortcuts. A step is done when the hub's state says so, or when you did it once in this browser; nothing about it is stored on the hub. |
+
+The default theme is RivetHub's own palette, taken from `rivethub-desktop`, in dark and light. Everforest and the two T3 themes are still in Settings.
+
+Two things the app does because of how `rh` 0.8 behaves, both in `packages/client`:
+
+- **A session's messages.** The detailed transcript comes from the tool's own files, which exist only on the machine that ran the session, and `rh` answers an empty transcript elsewhere. The client then reads what memory stored, by browsing the session's time span for its tool (`storedTranscript`). `rh` has no route that reads one session's stored messages, so a span holding more than 200 messages comes back short.
+- **Renaming.** `rh` renames only Claude Code and Grok Build sessions, in the tool's own store. For any other session the app says the title was not changed.
+
 The desktop app:
 
 ```sh
@@ -57,7 +79,7 @@ The app's version is independent of rh's. Each app build ships the rh pinned in 
 
 ### Sharing sessions
 
-The desktop app can share sessions with someone else and receive theirs (Share and Receive in the sidebar). They are routes in `apps/web` that appear only when the Electron bridge (`window.rivethub`) is present, so the plain browser build and mobile don't show them. They call rh's local `/api/share/**` routes (rivethub-runtime CONTRACT notes 151 and 152) through `createShareClient` in `packages/client`; `packages/contracts` has the types.
+The desktop app can share sessions with someone else and receive theirs. Both start from **Shared** in the sidebar, which also lists what is shared with each space on this hub, and a session's own **Share…** button opens the flow with that session already found and ticked. The send and receive routes in `apps/web` work only when the Electron bridge (`window.rivethub`) is present, so the plain browser build and mobile explain sharing but don't offer the two actions. They call rh's local `/api/share/**` routes (rivethub-runtime CONTRACT notes 151 and 152) through `createShareClient` in `packages/client`; `packages/contracts` has the types.
 
 - **Share.** Search sessions, then approve, redact (exact terms, optionally drop tool outputs) or deny each one in a single table. Nothing is sanitized until you confirm that table. Walk the sanitizer's flags (keep, redact or map), choose rivethub.cloud or a team server, confirm the counts rh checks, and get a one-time code to send privately.
 - **Receive.** Paste the code into a masked field. rh downloads the bundle and checks it, and the screen shows who sent it, whether that verified, and what was held per session. Each held session is imported, skipped or held span by span. A sender's key can be trusted after a fingerprint check, and Settings has the node's own key and the trusted senders (Share keys).
