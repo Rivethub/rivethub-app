@@ -47,15 +47,18 @@ export function Chip({ children, to, dashed }: { children: ReactNode; to?: strin
   return to ? <Link to={to} className={cls}>{children}</Link> : <span className={cls}>{children}</span>;
 }
 
+/** `project: rivethub` reads as written; a tag with no key of its own (rh files those under "tag") reads as its value. */
+const tagLabel = (t: TagAssignment) => (t.key === "tag" ? t.value : `${t.key}: ${t.value}`);
+
 export function Tags({ tags, onAccept, onReject }: { tags: TagAssignment[]; onAccept?: (t: TagAssignment) => void; onReject?: (t: TagAssignment) => void }) {
   return (
     <span className="flex flex-wrap gap-1.5 text-[12px]">
       {tags.map((t) =>
         t.state === "applied" ? (
-          <span key={`${t.key}:${t.value}`} className="rounded-md border border-border px-2 py-0.5">{t.key}: {t.value}</span>
+          <span key={`${t.key}:${t.value}`} className="rounded-md border border-border px-2 py-0.5">{tagLabel(t)}</span>
         ) : (
           <span key={`${t.key}:${t.value}`} className="inline-flex items-center gap-1 rounded-md border border-dashed border-warning px-2 py-0.5 text-warning">
-            {t.key}: {t.value}
+            {tagLabel(t)}
             {onAccept && <button type="button" aria-label={`Accept tag ${t.key}: ${t.value}`} className="px-0.5" onClick={() => onAccept(t)}>✓</button>}
             {onReject && <button type="button" aria-label={`Reject tag ${t.key}: ${t.value}`} className="px-0.5" onClick={() => onReject(t)}>✕</button>}
           </span>

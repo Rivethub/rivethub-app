@@ -38,3 +38,34 @@ describe("search passages", () => {
     expect(mapSearch([], wire.memorySearch.parse({ results: [] })).degraded).toBeUndefined();
   });
 });
+
+describe("search finds entities", () => {
+  it("offers an entity as an entity, a topic as a topic, and never a type", () => {
+    const topics = wire.topicList.parse({
+      topics: [
+        { id: "e-1", kind: "entity", slug: "gpubox", name: "gpubox", aliases: ["gpubox-2"], parent: "t-hosts" },
+        { id: "t-hosts", kind: "type", slug: "hosts", name: "Hosts", aliases: [] },
+        { id: "t-1", kind: "work", slug: "home-lab", name: "Home lab", aliases: [], sessionCount: 3 },
+      ],
+    }).topics;
+    const { goTo } = mapSearch(topics, wire.memorySearch.parse({ results: [] }));
+    expect(goTo.map((hit) => [hit.subject.kind, hit.subject.title, hit.context])).toEqual([
+      ["entity", "gpubox", "Entity · Also known as gpubox-2"],
+      ["topic", "Home lab", "Topic · 3 sessions"],
+    ]);
+  });
+});
+
+describe("search ranks names", () => {
+  it("puts the thing named exactly what was typed first, then names that start with it", () => {
+    const topics = wire.topicList.parse({
+      topics: [
+        { id: "e-2", kind: "entity", slug: "ds41", name: "ds41-serve.service", aliases: [] },
+        { id: "e-3", kind: "entity", slug: "gpubox-dash", name: "gpubox dashboard", aliases: [] },
+        { id: "e-1", kind: "entity", slug: "gpubox", name: "gpubox", aliases: [] },
+      ],
+    }).topics;
+    const { goTo } = mapSearch(topics, wire.memorySearch.parse({ results: [] }), "GPUbox ");
+    expect(goTo.map((hit) => hit.subject.title)).toEqual(["gpubox", "gpubox dashboard", "ds41-serve.service"]);
+  });
+});

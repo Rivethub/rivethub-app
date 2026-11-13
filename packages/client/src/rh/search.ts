@@ -1,4 +1,4 @@
-import type { SearchHit, SearchMode, SearchOptions, SearchPassage, SearchResults } from "@rivethub/contracts";
+import type { EntityId, SearchHit, SearchMode, SearchOptions, SearchPassage, SearchResults } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { z } from "zod";
@@ -17,11 +17,28 @@ const clip = (text: string) => {
   return flat.length > SNIPPET ? `${flat.slice(0, SNIPPET - 3)}...` : flat;
 };
 
-export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof wire.memorySearch.parse>): SearchResults {
-  const goTo: SearchHit[] = topics.map((topic) => ({
-    subject: { kind: "topic", id: topicId(topic.id), title: topic.name },
-    snippet: topic.aliases.length > 0 ? `Also known as ${topic.aliases.slice(0, 3).join(", ")}` : `${topic.sessionCount} ${topic.sessionCount === 1 ? "session" : "sessions"}`,
-  }));
+/** How well a name answers the words typed: the name itself, then a name that starts with them, then the rest. */
+function nameRank(title: string, query: string): number {
+  const name = title.trim().toLowerCase();
+  if (name === query) return 0;
+  return name.startsWith(query) ? 1 : 2;
+}
+
+export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof wire.memorySearch.parse>, query = ""): SearchResults {
+  // rh keeps topics, entities and entity types in one tree. A type ("Hosts") is not somewhere to go.
+  const goTo: SearchHit[] = topics
+    .filter((topic) => topic.kind !== "type")
+    .map((topic) => {
+      const also = topic.aliases.length > 0 ? `Also known as ${topic.aliases.slice(0, 3).join(", ")}` : undefined;
+      if (topic.kind === "entity") {
+        return { subject: { kind: "entity", id: topic.id as EntityId, title: topic.name }, snippet: also ?? "", context: also ? `Entity · ${also}` : "Entity" };
+      }
+      const sessions = `${topic.sessionCount} ${topic.sessionCount === 1 ? "session" : "sessions"}`;
+      return { subject: { kind: "topic", id: topicId(topic.id), title: topic.name }, snippet: also ?? sessions, context: `Topic · ${also ?? sessions}` };
+    });
+  // rh ranks by how much a page says about the words. Someone typing a name wants the thing with that name first.
+  const typed = query.trim().toLowerCase();
+  if (typed) goTo.sort((a, b) => nameRank(a.subject.title, typed) - nameRank(b.subject.title, typed));
   const seen = new Set<string>();
   for (const hit of memory.results) {
     // The jump list stays short; every match is in `passages`.
@@ -32,7 +49,7 @@ export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof
     goTo.push({
       subject: { kind: "session", id: sessionId(hit.sessionId), title: hit.title ?? snippet.slice(0, 60) },
       snippet,
-      ...(hit.source === undefined ? {} : { context: hit.source }),
+      context: hit.source === "summary" ? "Session · found in its summary" : "Session · found in a message",
     });
   }
   const passages: SearchPassage[] = [];
@@ -72,7 +89,7 @@ export function searchApi(http: Http) {
       const q = text.trim();
       if (q === "") return { goTo: [], actions: [] };
       const [topics, memory] = await Promise.all([
-        http.get("/api/topics/search", wire.topicList, { q, limit: 8 }),
+        http.get("/api/topics/search", wire.topicList, { q, limit: 8, kind: "all" }),
         http.get("/api/memory/search", wire.memorySearch, {
           q,
           limit: 30,
@@ -81,7 +98,7 @@ export function searchApi(http: Http) {
           ...(options.mode && options.mode !== "best" ? { mode: MODES[options.mode] } : {}),
         }),
       ]);
-      const results = mapSearch(topics.topics, memory);
+      const results = mapSearch(topics.topics, memory, q);
       // A standalone node's hits carry no session title. One catalog read fills them in; without it the snippet stands in.
       const untitled = new Set(memory.results.filter((hit) => hit.sessionId !== undefined && hit.title === undefined).map((hit) => hit.sessionId!));
       if (untitled.size > 0) {

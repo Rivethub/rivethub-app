@@ -69,6 +69,19 @@ async function errorBody(response: Response): Promise<Failure> {
   return { message: text || response.statusText };
 }
 
+/**
+ * Lets go of a response whose body nobody will read. Until a body is read or cancelled the browser keeps
+ * its connection busy, and it opens only six per hub, so a dozen unread probes stall every real request
+ * behind them until their timeouts fire.
+ */
+async function release(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // already read or already closed: nothing is held
+  }
+}
+
 export function createHttp(options: HttpOptions): Http {
   const base = options.baseUrl.replace(/\/+$/, "");
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
@@ -121,14 +134,14 @@ export function createHttp(options: HttpOptions): Http {
       return parse(await request("GET", full), full, schema);
     },
     async send(method, path, body) {
-      await request(method, path, body);
+      await release(await request(method, path, body));
     },
     async sendFor(method, path, schema, body) {
       return parse(await request(method, path, body), path, schema);
     },
     async answers(path) {
       try {
-        await request("GET", path, undefined, PROBE_TIMEOUT_MS);
+        await release(await request("GET", path, undefined, PROBE_TIMEOUT_MS));
         return true;
       } catch (error) {
         if (error instanceof HttpError) return true;

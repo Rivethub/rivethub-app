@@ -1,4 +1,5 @@
 import type { Capability, MemoryClient } from "@rivethub/contracts";
+import { RouteMissingError } from "../errors.js";
 import { createHttp, type AuthSeam, type FetchLike } from "../http.js";
 import { accountApi } from "./account.js";
 import { catalogApi } from "./catalog.js";
@@ -16,6 +17,8 @@ export interface RhClient {
   methods: Partial<LiveMethods>;
   /** Whether this runtime has the session catalog, so lists, details and trash are served by it. */
   catalog(): Promise<boolean>;
+  /** Whether one capability's routes answer. Asked once per capability and remembered. */
+  live(capability: Capability): Promise<boolean>;
   /** Capabilities whose rh routes answered right now. */
   probe(): Promise<Partial<Record<Capability, "live">>>;
 }
@@ -56,6 +59,20 @@ export function createRhClient(options: RhOptions): RhClient {
   const today = todayApi(http);
   const account = accountApi(http);
 
+  /** One probe per capability, started when first asked for and remembered. No capability waits on another's routes. */
+  const probes = new Map<Capability, Promise<boolean>>();
+  const live = (capability: Capability): Promise<boolean> => {
+    let probe = probes.get(capability);
+    if (!probe) {
+      probe = Promise.all((PROBES[capability] ?? []).map((path) => http.answers(path))).then(
+        (answers) => answers.some(Boolean),
+        () => false,
+      );
+      probes.set(capability, probe);
+    }
+    return probe;
+  };
+
   /** The catalog serves a call when this runtime has it; otherwise the client-side merge does. */
   const viaCatalog = <A extends unknown[], R>(fromCatalog: (...a: A) => Promise<R>, merged: (...a: A) => Promise<R>) =>
     async (...args: A): Promise<R> => ((await catalog.catalog()) ? fromCatalog(...args) : merged(...args));
@@ -68,7 +85,20 @@ export function createRhClient(options: RhOptions): RhClient {
       createTopic: topics.createTopic,
       addDecision: topics.addDecision,
       placeSession: sessions.placeSession,
-      sessions: viaCatalog(catalog.sessions, sessions.sessions),
+      // The list is the first thing a screen asks for, so it asks the catalog directly: its own answer says
+      // whether the catalog is there, without a probe of the same route first.
+      sessions: async (query) => {
+        if (catalog.settled() !== undefined) return catalog.settled() ? catalog.sessions(query) : sessions.sessions(query);
+        try {
+          const page = await catalog.sessions(query);
+          catalog.note(true);
+          return page;
+        } catch (error) {
+          if (!(error instanceof RouteMissingError)) throw error;
+          catalog.note(false);
+          return sessions.sessions(query);
+        }
+      },
       session: viaCatalog(catalog.session, sessions.session),
       trash: catalog.trash,
       restore: catalog.restore,
@@ -97,10 +127,9 @@ export function createRhClient(options: RhOptions): RhClient {
       hubs: account.hubs,
     },
     catalog: catalog.catalog,
+    live,
     async probe() {
-      const entries = await Promise.all(
-        Object.entries(PROBES).map(async ([capability, paths]) => [capability, (await Promise.all(paths.map((path) => http.answers(path)))).some(Boolean)] as const),
-      );
+      const entries = await Promise.all(Object.keys(PROBES).map(async (capability) => [capability, await live(capability as Capability)] as const));
       return Object.fromEntries(entries.filter(([, ok]) => ok).map(([capability]) => [capability, "live" as const]));
     },
   };

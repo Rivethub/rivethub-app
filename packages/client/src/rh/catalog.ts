@@ -59,7 +59,12 @@ export function catalogApi(http: Http) {
 
   /** The new list route answers with a well-formed page. Anything else means this runtime still needs the client-side merge. */
   let present: Promise<boolean> | undefined;
-  const catalog = () => (present ??= http.get("/api/sessions", wire.catalogPage, { limit: 1 }).then(() => true, () => false));
+  let known: boolean | undefined;
+  const catalog = () =>
+    (present ??= http.get("/api/sessions", wire.catalogPage, { limit: 1 }).then(
+      () => (known = true),
+      () => (known = false),
+    ));
 
   async function need(): Promise<void> {
     if (!(await catalog())) throw new RouteMissingError("/api/sessions");
@@ -67,6 +72,13 @@ export function catalogApi(http: Http) {
 
   return {
     catalog,
+    /** Whether the catalog is known to be there, when something has already found out. */
+    settled: () => known,
+    /** Records what a real call found, so nothing probes for it afterwards. */
+    note(found: boolean) {
+      known = found;
+      present = Promise.resolve(found);
+    },
 
     async sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>> {
       const page = await http.get("/api/sessions", wire.catalogPage, {

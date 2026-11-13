@@ -14,6 +14,17 @@ Topic and entity pages render the page's full article (`components/markdown.tsx`
 
 This targets the entity worker in `rivethub-runtime` branch `feat/entity-worker` (on phildesk at `~/work/rh-ent-port`, five commits on 0.8.2, not pushed as of this note). That worker does not change the HTTP contract. It changes what is on the pages: an article per entity rewritten from every session that touches it, a summary, a "Current facts" list, one dated history line per session, and far more entities (200 to 600 pages from a few dozen sessions in the eval runs). The list, the sidebar and the page were sized for that.
 
+## Run against Phil's real hub (2026-11-13, evening)
+
+The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entities, 75 topics, thousands of sessions) through an SSH tunnel. It found what sample data and an empty node could not:
+
+- **Load time.** Probes never read their response bodies, so each held one of the browser's six connections until its 2.5 s timeout; every call also waited for all 13 probes, and the session list probed its own route first. Now a body nobody reads is cancelled, each capability is probed on its own, a read is sent at once and its answer counts as the probe, and the session list asks the catalog directly. Time to content on that hub: Sessions 2.4 s to 0.9 s, Entities 1.4 s to 0.28 s, Topics 1.4 s to 0.2 s, Today 1.9 s to 1.5 s (`/api/today` itself takes 0.85 s there).
+- **Writes** had the same leak: an unread body held a connection for up to 30 s.
+- **Today** showed one filing card per filing proposal, three identical cards.
+- **Empty sessions.** Tools open sessions that never get a message. They are hidden in the list until asked for and left out of Today; their page says nothing was said.
+- **Search** asked for work topics only, so no entity was ever offered. It now asks for every kind, drops types, and puts an exact name match first.
+- **Stats** named jobs by rh's internal names and showed a blank cause.
+
 ## Decisions
 
 - **One sidebar everywhere.** The session list is the main column, not a second sidebar; the topic tree and entity kinds nest under their library row.
