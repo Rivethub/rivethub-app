@@ -36,6 +36,21 @@ describe("a session's messages", () => {
     expect(browse.get("before")).not.toBeNull();
   });
 
+  it("come from what the hub stored when rh answers an empty transcript, as 0.8.3 does", async () => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: "2026-11-13T20:36:21.596Z" },
+      "GET /api/memory/browse": stored,
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(turns).toHaveLength(3);
+  });
+
+  it("is an empty list, not a failure, for a session with no messages anywhere", async () => {
+    const rh = fakeRh({ [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] }, "GET /api/memory/browse": { messages: [] } });
+    await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).resolves.toEqual([]);
+  });
+
   it("keeps the original failure when memory has nothing for the session either", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { status: 400, body: { error: "invalid session id" } },

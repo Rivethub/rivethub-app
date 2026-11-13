@@ -1,5 +1,8 @@
 import type { ChangeKind, ReviewItem, SubjectRef } from "@rivethub/contracts";
 
+/** "1 session", "2 sessions". */
+export const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+
 export function subjectHref(s: Pick<SubjectRef, "kind" | "id">): string {
   return s.kind === "topic" ? `/topics/${s.id}` : s.kind === "entity" ? `/entities/${s.id}` : `/sessions/${s.id}`;
 }

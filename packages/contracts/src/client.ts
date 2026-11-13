@@ -76,6 +76,8 @@ export interface MemoryClient {
   topicTree(): Promise<TopicNode[]>;
   topic(id: TopicId): Promise<TopicArticle>;
   updateTopic(id: TopicId, patch: { name?: string; aliases?: string[]; parentId?: TopicId | null; folder?: string | null }): Promise<void>;
+  /** Creates a topic by hand, at the top level or inside `parentId`. Absent on a client that cannot write topics. */
+  createTopic?(name: string, parentId?: TopicId): Promise<TopicId>;
   addDecision(id: TopicId, text: string): Promise<void>;
   placeSession(session: SessionId, topic: TopicId | null): Promise<void>;
 

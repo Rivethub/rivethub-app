@@ -38,7 +38,7 @@ export function mapCatalogDetail(detail: ReturnType<typeof wire.catalogDetail.pa
   const at = row.endedAt ?? row.startedAt;
   const changed: Change[] = detail.changed.map((change) => ({
     kind: "fact",
-    subject: { kind: "session", id: row.id, title: row.title },
+    subject: { kind: "session", id: row.id, title: displayTitle(row.title, row.id) },
     text: change.summary,
     at,
     actor: { kind: "summarizer" },

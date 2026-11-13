@@ -91,7 +91,7 @@ export function searchApi(http: Http) {
         );
         const titled = (id: string, fallback: string) => (untitled.has(id) ? displayTitle(titles.get(id) ?? "", id, fallback) : fallback);
         for (const hit of results.goTo) if (hit.subject.kind === "session") hit.subject.title = titled(hit.subject.id, hit.subject.title);
-        for (const passage of results.passages ?? []) passage.session.title = titled(passage.session.id, passage.session.title);
+        for (const passage of results.passages ?? []) if (untitled.has(passage.session.id)) passage.session.title = displayTitle(titles.get(passage.session.id) ?? "", passage.session.id);
       }
       return results;
     },

@@ -336,6 +336,11 @@ export function Connections({ phone }: { phone: boolean }) {
           <h2 id="jobs-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "WHO DOES THE WORK" : "Who does the work"}</h2>
           {!phone && <span className="text-[12px] text-muted-foreground">Jobs with no model of their own use Default</span>}
         </div>
+        {js.length === 0 && (
+          <p className="m-0 max-w-[70ch] rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.55] text-muted-foreground">
+            <span className="font-semibold text-foreground">No model is set.</span> Capture, the session list and word search work without one. Summaries, topics, entities and the wiki need a chat model, and search by meaning needs an embedding model; both can run on this machine. Set them under <code className="rounded bg-code px-1 py-px font-mono text-[12px]">memory.models</code> in <code className="rounded bg-code px-1 py-px font-mono text-[12px]">~/.rivethub/config.yaml</code>, then restart <code className="rounded bg-code px-1 py-px font-mono text-[12px]">rh</code>.
+          </p>
+        )}
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
             {js.filter((j) => j.role !== "default").map((j) => (

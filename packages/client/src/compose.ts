@@ -76,6 +76,11 @@ export function createClient(options: ClientOptions): MemoryClient {
     topicTree: choose("topics", "topicTree"),
     topic: choose("topics", "topic"),
     updateTopic: choose("topics", "updateTopic"),
+    async createTopic(name, parentId) {
+      const create = rh.methods.createTopic;
+      if (!create || !(await live("topics"))) throw new Error("This hub cannot create topics.");
+      return create(name, parentId);
+    },
     addDecision: choose("topics", "addDecision"),
     placeSession: choose("topics", "placeSession"),
 

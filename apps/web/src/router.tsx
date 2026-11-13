@@ -77,7 +77,7 @@ const settings = createRoute({
   component: SettingsPage,
 });
 const library = createRoute({ getParentRoute: () => rootRoute, path: "/library", beforeLoad: () => { throw redirect({ to: "/topics" }); } });
-const share = createRoute({ getParentRoute: () => rootRoute, path: "/share", component: SharePage });
+const share = createRoute({ getParentRoute: () => rootRoute, path: "/share", validateSearch: (s: Raw) => clean({ session: str(s.session) }), component: SharePage });
 const receive = createRoute({ getParentRoute: () => rootRoute, path: "/receive", component: ReceivePage });
 const shared = createRoute({ getParentRoute: () => rootRoute, path: "/shared", component: SharedPage });
 const stats = createRoute({ getParentRoute: () => rootRoute, path: "/stats", component: StatsPage });

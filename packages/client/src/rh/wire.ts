@@ -49,6 +49,8 @@ export type TopicSummary = z.infer<typeof topicSummary>;
 
 export const topicList = z.object({ topics: z.array(topicSummary) });
 
+export const createdTopic = z.object({ id: z.string() });
+
 export const wikiPage = z.object({
   slug: z.string(),
   title: z.string(),

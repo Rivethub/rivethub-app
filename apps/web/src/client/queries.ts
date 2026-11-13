@@ -32,7 +32,7 @@ export const useTopic = (id: TopicId) => q(keys.topic(id), (c) => c.topic(id));
 export const useEntities = (type?: EntityType) => q(keys.entities(type), (c) => c.entities(type));
 export const useEntity = (id: EntityId, asOf?: IsoTime) => q(keys.entity(id, asOf), (c) => c.entity(id, asOf));
 export const useSessions = (query: SessionQuery) => q(keys.sessions(query), (c) => c.sessions(query));
-export const useSession = (id: SessionId) => q(keys.session(id), (c) => c.session(id));
+export const useSession = (id: SessionId, enabled = true) => q(keys.session(id), (c) => c.session(id), enabled);
 export const useTranscript = (id: SessionId, enabled = true) => q(keys.transcript(id), (c) => c.transcript(id), enabled);
 export const useSummaryTree = (id: SessionId, enabled = true) => q(keys.summaryTree(id), (c) => c.summaryTree(id), enabled);
 export const useSearch = (text: string, options: SearchOptions = {}) => q([...keys.search(text), options], (c) => c.search(text, options));
@@ -78,6 +78,11 @@ export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
     (a) => [keys.topic(a.id), keys.topicTree],
+  );
+export const useCreateTopic = () =>
+  useWrite(
+    (c, a: { name: string; parentId?: TopicId }) => (c.createTopic ? c.createTopic(a.name, a.parentId) : Promise.reject(new Error("This hub cannot create topics."))),
+    () => [keys.topicTree, ["topic"]],
   );
 export const useAddDecision = () =>
   useWrite((c, a: { id: TopicId; text: string }) => c.addDecision(a.id, a.text), (a) => [keys.topic(a.id), keys.changes(a.id), ["today"]]);

@@ -269,6 +269,14 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
 
     topicTree: () => wait(tree),
     topic: (id) => wait(article(id)),
+    async createTopic(name, parentId) {
+      const id = `t-${name.toLowerCase().replace(/\W+/g, "-")}-${Date.now().toString(36)}` as TopicId;
+      const node: TopicNode = { id, name, sessionCount: 0, status: "open", children: [], ...(parentId ? { parentId } : {}) };
+      const parent = parentId ? topicById().get(parentId) : undefined;
+      if (parent) parent.children.push(node);
+      else tree.push(node);
+      return wait(id);
+    },
     async updateTopic(id, patch) {
       const node = topicById().get(id);
       if (!node) throw new Error(`No topic ${id}`);

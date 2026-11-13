@@ -3,7 +3,7 @@ import type { TopicNode } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { usePins, useTopicTree } from "../client/queries";
-import { subjectHref } from "../lib/format";
+import { plural, subjectHref } from "../lib/format";
 import { MobileHeader } from "./shell";
 import { cx } from "./ui";
 
@@ -101,7 +101,7 @@ export function TopicTree({ selected, phone }: { selected?: string; phone?: bool
                 <span className="flex flex-1 flex-col">
                   <span className={depth ? "" : "font-semibold"}>{n.name}</span>
                   <span className="text-[12px] text-muted-foreground">
-                    {n.sessionCount} sessions{n.status === "closed" ? " · closed" : ""}
+                    {plural(n.sessionCount, "session")}{n.status === "closed" ? " · closed" : ""}
                     {n.lastActivity ? ` · ${dayLabel(n.lastActivity) === "Today" ? "today" : dayLabel(n.lastActivity)}` : ""}
                   </span>
                 </span>

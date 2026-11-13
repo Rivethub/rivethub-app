@@ -10,7 +10,7 @@ import { Modal } from "../components/modal";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind } from "../lib/format";
+import { changeKind, plural } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { EmptyLibrary, visibilityLabel } from "./topic";
 
@@ -60,7 +60,7 @@ export function EntitiesIndex() {
       {g.items.map((e) => (
         <Link key={e.id} to="/entities/$entityId" params={{ entityId: e.id }} className="flex min-h-12 items-center gap-2.5 border-b border-border px-3 text-foreground hover:bg-accent hover:no-underline md:min-h-10">
           <span className="flex-1">{e.title}</span>
-          <span className="text-[12px] text-muted-foreground">{e.sessionCount} sessions</span>
+          <span className="text-[12px] text-muted-foreground">{plural(e.sessionCount, "session")}</span>
           <span className="text-muted-foreground">›</span>
         </Link>
       ))}
@@ -309,7 +309,7 @@ function StatePanel({ e, steps, asOf, onAsOf, focusSlider, startAdding }: { e: E
       <div className="flex flex-col gap-2 bg-raised px-3.5 py-3">
         <span className="flex items-center justify-between">
           <h2 className="m-0 text-[13px] font-semibold">State</h2>
-          <span className="text-[12px] text-muted-foreground">from {Math.max(sources, e.sessionCount)} sessions</span>
+          <span className="text-[12px] text-muted-foreground">from {plural(Math.max(sources, e.sessionCount), "session")}</span>
         </span>
         <div role="group" aria-label="As of" className="flex items-center gap-2">
           <span className="text-[12px] text-muted-foreground">As of</span>

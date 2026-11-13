@@ -304,3 +304,20 @@ describe("Receive", () => {
     expect(screen.getByLabelText("Paste the code you were sent")).toBeInTheDocument();
   });
 });
+
+describe("Share from a session", () => {
+  it("offers Share on the session and arrives with that session found and ticked", async () => {
+    const start = "2026-11-11T21:12:00";
+    const sample = createSampleClient();
+    const row = await sample.session("s-retention" as never);
+    const match: ShareableSession = { id: "conv-1", title: row.title, agent: row.harness, first: row.startedAt, last: row.startedAt, messages: row.messageCount, excerpts: [] };
+    const find = vi.fn(async () => [found("conv-0", "Something else"), match]);
+    void start;
+    const { user } = renderAt("/sessions/s-retention", fakeShare({ find }));
+    await user.click(await screen.findByRole("link", { name: "Share…" }));
+    expect(await screen.findByRole("checkbox", { name: new RegExp(row.title) })).toBeChecked();
+    expect(find).toHaveBeenCalledWith({ text: row.title, limit: 25 });
+    expect(screen.getByRole("checkbox", { name: /Something else/ })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+  });
+});

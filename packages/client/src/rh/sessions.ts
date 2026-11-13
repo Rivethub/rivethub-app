@@ -14,7 +14,7 @@ import type {
 import type { Http } from "../http.js";
 import { NetworkError, NotFoundError, RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
-import { harnessOf, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
+import { displayTitle, harnessOf, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import { indexTopics, sessionRow, topicPath, type TopicIndex } from "./topics.js";
 
 const PAGE_SIZE = 50;
@@ -82,7 +82,7 @@ function detail(summary: wire.HarnessSessionSummary, placement: TopicPlacement, 
   const topic = placement === undefined ? undefined : index.get(placement);
   return strip<SessionDetail>({
     id: sessionId(summary.sessionId),
-    title: summary.title ?? summary.sessionId,
+    title: displayTitle(summary.title ?? "", summary.sessionId),
     harness: summary.harnessId,
     startedAt: summary.createdAt,
     endedAt: summary.status === "ended" ? summary.updatedAt : undefined,
@@ -138,7 +138,7 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
         const items = trash.candidates.map((candidate) =>
           strip<SessionSummaryRow>({
             id: sessionId(candidate.session),
-            title: candidate.title ?? candidate.session,
+            title: displayTitle(candidate.title ?? "", candidate.session),
             harness: candidate.harness,
             startedAt: candidate.updatedAt,
             endedAt: candidate.updatedAt,
@@ -175,15 +175,20 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
     async transcript(id: SessionId, range?: [number, number]): Promise<TranscriptTurn[]> {
       // The harness's own file has the most detail (tool calls and results), but it exists only on the machine
       // that ran the session. Anywhere else, and for sessions that reached memory another way, read what the hub stored.
-      const turns = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
+      // rh answers an empty transcript, not an error, for a session whose file is not on this machine.
+      const fromHarness = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
         (response) => mapTranscript(response, EPOCH),
-        async (error: unknown) => {
+        (error: unknown) => {
           if (error instanceof NetworkError) throw error;
-          const stored = await storedTranscript(http, id);
-          if (stored.length === 0) throw error;
-          return stored;
+          return error instanceof Error ? error : new Error(String(error));
         },
       );
+      let turns: TranscriptTurn[];
+      if (Array.isArray(fromHarness) && fromHarness.length > 0) turns = fromHarness;
+      else {
+        turns = await storedTranscript(http, id);
+        if (turns.length === 0 && !Array.isArray(fromHarness)) throw fromHarness;
+      }
       return range ? turns.filter((turn) => turn.index >= range[0] && turn.index <= range[1]) : turns;
     },
 

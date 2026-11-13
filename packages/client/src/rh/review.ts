@@ -1,12 +1,14 @@
 import type { Change, ReviewDecision, ReviewItem, ReviewItemId, SubjectRef } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
+import { displayTitle } from "./util.js";
 import { strip } from "./util.js";
 
-export const mapSubject = (subject: wire.SubjectWire) => ({ kind: subject.kind, id: subject.id, title: subject.title }) as SubjectRef;
+export const mapSubject = (subject: wire.SubjectWire) =>
+  ({ kind: subject.kind, id: subject.id, title: subject.kind === "session" ? displayTitle(subject.title, subject.id) : subject.title }) as SubjectRef;
 
 const mapSource = (source: NonNullable<wire.ReviewWire["options"]>[number]["source"]) =>
-  source && { session: { id: source.session.id, title: source.session.title }, at: source.at, value: source.value };
+  source && { session: { id: source.session.id, title: displayTitle(source.session.title, source.session.id) }, at: source.at, value: source.value };
 
 export function mapReviewItem(item: wire.ReviewWire): ReviewItem {
   return strip({

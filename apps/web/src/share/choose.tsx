@@ -1,23 +1,40 @@
 import { shortDate } from "@rivethub/client-runtime/format";
 import type { ShareableSession } from "@rivethub/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useShareClient } from "../client/context";
 import { Button, Loading } from "../components/ui";
 import { describeFailure } from "./failure";
 import { FailureNote, field } from "./ui";
 
 /** Step 1: search the stored sessions and tick the ones to share. */
-export function Choose({ picked, onToggle, onContinue }: { picked: ShareableSession[]; onToggle: (session: ShareableSession) => void; onContinue: () => void }) {
+/** The session the person came from: what to search for, and how to recognize it among the results. */
+export interface ShareSeed {
+  text: string;
+  agent: string;
+  startedAt: string;
+}
+
+const sameStart = (a: string, b: string) => Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 2000;
+
+export function Choose({ picked, onToggle, onContinue, seed }: { picked: ShareableSession[]; onToggle: (session: ShareableSession) => void; onContinue: () => void; seed?: ShareSeed }) {
   const share = useShareClient()!;
-  const [text, setText] = useState("");
-  const [query, setQuery] = useState("");
+  const [text, setText] = useState(seed?.text ?? "");
+  const [query, setQuery] = useState(seed?.text.trim() ?? "");
+  const seeded = useRef(false);
   useEffect(() => {
     const timer = setTimeout(() => setQuery(text.trim()), 250);
     return () => clearTimeout(timer);
   }, [text]);
   const found = useQuery({ queryKey: ["share", "find", query], queryFn: () => share.find({ text: query, limit: 25 }), enabled: query !== "", retry: false });
   const isPicked = (id: string) => picked.some((s) => s.id === id);
+  // Coming from a session, tick it once so the person only has to confirm.
+  useEffect(() => {
+    if (!seed || seeded.current || !found.data) return;
+    seeded.current = true;
+    const match = found.data.find((s) => s.agent === seed.agent && sameStart(s.first, seed.startedAt));
+    if (match && !picked.some((s) => s.id === match.id)) onToggle(match);
+  }, [seed, found.data, picked, onToggle]);
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">

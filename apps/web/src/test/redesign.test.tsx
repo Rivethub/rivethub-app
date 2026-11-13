@@ -139,3 +139,22 @@ describe("Stats", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: /Failed jobs/ })).not.toBeInTheDocument());
   });
 });
+
+describe("Topics by hand", () => {
+  it("creates a topic from the Topics screen and opens it", async () => {
+    const { user, client } = renderAt("/topics");
+    const create = vi.spyOn(client, "createTopic");
+    await user.click(await screen.findByRole("button", { name: "New topic" }));
+    await user.type(screen.getByRole("textbox", { name: "New topic name" }), "Garden sensors{Enter}");
+    expect(create).toHaveBeenCalledWith("Garden sensors", undefined);
+    expect(await screen.findByRole("heading", { level: 1, name: /Garden sensors/ })).toBeInTheDocument();
+  });
+
+  it("files a session under a topic made on the spot", async () => {
+    const { user, client } = renderAt("/sessions/s-retention");
+    const place = vi.spyOn(client, "placeSession");
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Filed under" }), "New topic…");
+    await user.type(screen.getByRole("textbox", { name: "New topic name" }), "Storage{Enter}");
+    await waitFor(() => expect(place).toHaveBeenCalledWith("s-retention", expect.stringMatching(/^t-storage-/)));
+  });
+});

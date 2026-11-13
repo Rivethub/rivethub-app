@@ -4,7 +4,7 @@ import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useClient, useShareClient } from "../client/context";
-import { useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
+import { useCreateTopic, useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
 import { ArticleBar, ArticleTabs, Crumbs, MobileBack } from "../components/article";
 import { EditableText } from "../components/editable";
 import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../components/icons";
@@ -12,7 +12,7 @@ import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, subjectHref } from "../lib/format";
+import { changeKind, plural, subjectHref } from "../lib/format";
 import { markStep } from "../lib/journey";
 import { useIsPhone } from "../lib/media";
 
@@ -86,7 +86,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
         <span className="flex flex-wrap gap-x-2 text-[12px] text-muted-foreground">
           {phone && <span>{time(s.startedAt)} · {harnessNames[s.harness] ?? s.harness}</span>}
           <span style={s.topic ? undefined : { color: "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
-          <span>· {s.messageCount} messages</span>
+          <span>· {plural(s.messageCount, "message")}</span>
           {s.childCount ? <span>· {subagents(s.childCount)}</span> : null}
           {s.visibility.kind === "space" && <span>· shared with {s.visibility.space}</span>}
         </span>
@@ -240,6 +240,7 @@ export function SessionPage() {
   const tab = search.tab ?? (!s.data || s.data.memoryState === "summarized" ? "summary" : "transcript");
   const view = search.view ?? "all";
   const near = useNeighbors(sessionId, view);
+  const canSend = useShareClient() !== null;
   const keep = useKeep();
   const trash = useTrash();
   const restore = useRestore();
@@ -295,7 +296,8 @@ export function SessionPage() {
               {near.older ? <Link to="/sessions/$sessionId" params={{ sessionId: near.older.id }} search={view === "all" ? {} : { view }} title={near.older.title} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-accent hover:no-underline">Older ›</Link> : null}
             </span>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined })} />
-            <Button className="ml-2" aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
+            {canSend && <Link to="/share" search={{ session: d!.id }} className="ml-2 rounded-lg border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-accent hover:no-underline">Share…</Link>}
+            <Button className={canSend ? "" : "ml-2"} aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
             {d!.trashed ? (
               <Button onClick={() => restore.mutate([d!.id])} disabled={restore.isPending}>Restore</Button>
             ) : (
@@ -327,7 +329,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
         {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
         <span className="text-[13px] text-muted-foreground">
           {harnessNames[d.harness] ?? d.harness} · {shortDate(d.startedAt)}, {time(d.startedAt)}
-          {d.endedAt ? `–${time(d.endedAt)}` : ""} · {d.messageCount} messages{d.cwd ? ` · ` : ""}
+          {d.endedAt ? `–${time(d.endedAt)}` : ""} · {plural(d.messageCount, "message")}{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
         </span>
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
@@ -335,7 +337,9 @@ function SessionHeader({ d }: { d: SessionDetail }) {
       {d.resumeCommand && (
         <>
           <code className="rounded-md bg-code px-2 py-1 font-mono text-[12px]">{d.resumeCommand}</code>
-          <CopyButton text={d.resumeCommand} label="Copy resume" className="rounded-md bg-primary px-2.5 py-1 text-[12px] text-primary-foreground" />
+          <span title={`Paste in a terminal to pick this session back up in ${harnessNames[d.harness] ?? d.harness}`}>
+            <CopyButton text={d.resumeCommand} label="Copy resume command" className="rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground" />
+          </span>
         </>
       )}
     </div>
@@ -536,16 +540,50 @@ function Changes({ d }: { d: SessionDetail }) {
   );
 }
 
+const NEW_TOPIC = "__new__";
+
 function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?: string; onPicked?: () => void }) {
+  const client = useClient();
   const tree = useTopicTree().data ?? [];
   const place = usePlaceSession();
+  const create = useCreateTopic();
+  const [name, setName] = useState<string | null>(null);
   const options = flattenTopics(tree);
+  const save = () => {
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) return setName(null);
+    create.mutate({ name: trimmed }, { onSuccess: (id) => { place.mutate({ session: d.id, topic: id }); setName(null); onPicked?.(); } });
+  };
+  if (name !== null) {
+    return (
+      <span className="flex flex-col gap-1.5">
+        <span className="flex gap-1.5">
+          <input
+            autoFocus
+            aria-label="New topic name"
+            placeholder="Topic name"
+            value={name}
+            disabled={create.isPending}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") save();
+              if (e.key === "Escape") setName(null);
+            }}
+            className={cx("min-w-0 flex-1 rounded-lg border border-input bg-background px-2.5 py-1.5 text-foreground outline-none focus:border-primary", className)}
+          />
+          <Button variant="primary" size="md" disabled={create.isPending || !name.trim()} onClick={save}>File</Button>
+        </span>
+        {create.isError && <span role="alert" className="text-[12px] text-error">{create.error instanceof Error ? create.error.message : "Could not create the topic."}</span>}
+      </span>
+    );
+  }
   return (
-    <label className="flex flex-col">
+    <label className="flex flex-col gap-1">
       <span className="sr-only">Filed under</span>
       <select
         value={d.topic?.id ?? ""}
         onChange={(e) => {
+          if (e.target.value === NEW_TOPIC) return setName("");
           place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null });
           onPicked?.();
         }}
@@ -553,7 +591,9 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
       >
         <option value="">Unfiled</option>
         {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        {client.createTopic && <option value={NEW_TOPIC}>New topic…</option>}
       </select>
+      {place.isError && <span role="alert" className="text-[12px] text-error">The session was not moved{place.error instanceof Error ? `: ${place.error.message}` : ""}.</span>}
     </label>
   );
 }
@@ -630,7 +670,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
         <VisibilityPicker d={d} />
         <span className="text-[12px] leading-[1.45] text-muted-foreground">
           {d.visibility.kind === "private" ? "Only you can see this session." : `Everyone in ${d.visibility.space} can find it.`}{" "}
-          {canSend ? <Link to="/share">Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
+          {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
         </span>
       </section>
       {d.entities.length > 0 && (

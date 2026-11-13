@@ -2,10 +2,10 @@ import type { EntityArticle, EntityId, EntitySummary, EntityType, FactId, IsoTim
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { mapRow } from "./catalog.js";
-import { sessionId, strip, topicId } from "./util.js";
+import { displayTitle, sessionId, strip, topicId } from "./util.js";
 
 export function mapEntityArticle(article: ReturnType<typeof wire.entityArticle.parse>): EntityArticle {
-  const mention = (m: { id: string; title: string }) => ({ id: sessionId(m.id), title: m.title });
+  const mention = (m: { id: string; title: string }) => ({ id: sessionId(m.id), title: displayTitle(m.title, m.id) });
   const source = (s: (typeof article.facts)[number]["sources"][number]) => ({ session: mention(s.session), at: s.at, value: s.value });
   return strip<EntityArticle>({
     id: article.id as EntityId,
