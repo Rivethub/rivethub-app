@@ -8,9 +8,20 @@ export class HttpError extends ClientError {
     readonly status: number,
     readonly path: string,
     message: string,
+    /** rh's `code`, or its share routes' `reason`. */
     readonly code?: string,
+    /** The 1-based session numbers a receive refusal names. */
+    readonly sessions?: number[],
   ) {
     super(`${status} ${path}: ${message}`);
+  }
+}
+
+/** A sensitive route needs a login newer than `gateway.fresh_login_secs` (rivethub-runtime CONTRACT note 147). */
+export class ReauthRequiredError extends ClientError {
+  override readonly name = "ReauthRequiredError";
+  constructor(readonly path: string) {
+    super(`${path} needs a fresh sign-in`);
   }
 }
 

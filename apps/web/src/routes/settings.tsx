@@ -8,6 +8,8 @@ import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
 import { useIsPhone } from "../lib/media";
+import { useShareClient } from "../client/context";
+import { ShareKeys } from "../share/keys";
 import { useEmailSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
 import { setTheme, THEMES, useTheme } from "../theme";
@@ -18,17 +20,24 @@ const SECTIONS: { id: SettingsSection; label: string; hint: string }[] = [
   { id: "connections", label: "Connections", hint: "Harnesses and models" },
   { id: "account", label: "Account and updates", hint: "Email, updates, privacy" },
   { id: "sharing", label: "Sharing", hint: "People and spaces" },
+  { id: "keys", label: "Share keys", hint: "Your key and trusted senders" },
   { id: "trust", label: "Trust rules", hint: "What skips Review" },
   { id: "appearance", label: "Appearance", hint: "Theme" },
   { id: "server", label: "Server", hint: "Where memory lives" },
 ];
+
+/** Share keys belong to the desktop app, so the section is listed only there. */
+function useSections() {
+  const sharing = useShareClient() !== null;
+  return SECTIONS.filter((s) => s.id !== "keys" || sharing);
+}
 
 function SettingsSidebar({ active }: { active: SettingsSection }) {
   return (
     <nav aria-label="Settings" className="flex w-[236px] shrink-0 flex-col gap-0.5 border-r border-border bg-sidebar px-2 py-3">
       <Link to="/" className="px-2.5 py-[7px] text-muted-foreground">‹ Back</Link>
       <span className="px-2.5 pt-3 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">SETTINGS</span>
-      {SECTIONS.map((s) => (
+      {useSections().map((s) => (
         <Link
           key={s.id}
           to="/settings/$section"
@@ -52,7 +61,7 @@ export function SettingsIndex() {
       <MobileBack to="/" label=""><span /></MobileBack>
       <h1 className="m-0 px-4 pb-2 text-[22px] font-semibold">Settings</h1>
       <div className="mx-4 overflow-hidden rounded-[14px] border border-border bg-card">
-        {SECTIONS.map((s) => (
+        {useSections().map((s) => (
           <Link key={s.id} to="/settings/$section" params={{ section: s.id }} className="flex min-h-[52px] items-center gap-3 border-b border-border px-3.5 text-foreground last:border-b-0 hover:no-underline">
             <span className="flex flex-1 flex-col"><span>{s.label}</span><span className="text-[12px] text-muted-foreground">{s.hint}</span></span>
             <span className="text-muted-foreground">›</span>
@@ -80,6 +89,8 @@ export function SettingsPage() {
         return <Server />;
       case "sharing":
         return <NotYet what="People and spaces on a team hub, and who can see which sessions." />;
+      case "keys":
+        return <ShareKeys />;
       case "trust":
         return <NotYet what="Rules that let some proposals skip Review, like always taking the newer session for times on a machine." />;
     }

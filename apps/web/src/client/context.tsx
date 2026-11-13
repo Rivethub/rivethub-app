@@ -1,5 +1,6 @@
-import type { CrashReport, IsoTime, MemoryClient, SubjectRef } from "@rivethub/contracts";
+import type { CrashReport, IsoTime, MemoryClient, ShareClient, SubjectRef } from "@rivethub/contracts";
 import { createContext, useContext, type ReactNode } from "react";
+import { desktopBridge } from "../lib/desktop";
 
 /**
  * Methods this app uses that `MemoryClient` does not have yet. Each is
@@ -11,6 +12,8 @@ export interface MemoryClientExtras {
   setPinned?(ref: SubjectRef, pinned: boolean): Promise<void>;
   libraryCounts?(): Promise<{ topics: number; entities: number; sessions: number }>;
   lastCrashReport?(): Promise<{ report: CrashReport; sentAt: IsoTime } | null>;
+  /** Sharing sessions and receiving them. Present only for a client wired to the local rh. */
+  share?: ShareClient;
 }
 
 export type AppClient = MemoryClient & MemoryClientExtras;
@@ -25,4 +28,10 @@ export function useClient(): AppClient {
   const client = useContext(ClientContext);
   if (!client) throw new Error("useClient needs a MemoryClientProvider above it");
   return client;
+}
+
+/** The share client when this app can share: it needs the desktop bridge and a client wired to the local rh. */
+export function useShareClient(): ShareClient | null {
+  const client = useClient();
+  return desktopBridge() === null ? null : (client.share ?? null);
 }

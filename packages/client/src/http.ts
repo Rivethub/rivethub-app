@@ -1,12 +1,21 @@
 import type { ZodType } from "zod";
-import { HttpError, MalformedResponseError, NetworkError, RouteMissingError } from "./errors.js";
+import { HttpError, MalformedResponseError, NetworkError, ReauthRequiredError, RouteMissingError } from "./errors.js";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+/** How a client authenticates to the local rh (rivethub-runtime CONTRACT note 147). */
+export interface AuthSeam {
+  /** Headers every request carries, such as `X-RH-CSRF`. Read on each request. */
+  headers(): Record<string, string>;
+  /** Called on a plain 401. A 401 that asks for a fresh sign-in (`ReauthRequiredError`) does not call it. */
+  onUnauthorized?(): void;
+}
 
 export interface HttpOptions {
   baseUrl: string;
   fetch?: FetchLike;
   timeoutMs?: number;
+  auth?: AuthSeam;
 }
 
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -33,15 +42,26 @@ function query(params: Record<string, string | number | undefined> | undefined):
   return pairs.length ? `?${pairs.join("&")}` : "";
 }
 
-async function errorBody(response: Response): Promise<{ message: string; code?: string }> {
+const REAUTH_REQUIRED = "reauth_required";
+
+interface Failure {
+  message: string;
+  code?: string;
+  sessions?: number[];
+}
+
+async function errorBody(response: Response): Promise<Failure> {
   const text = await response.text().catch(() => "");
   try {
     const body: unknown = JSON.parse(text);
     if (body && typeof body === "object") {
       const record = body as Record<string, unknown>;
-      const message = typeof record["error"] === "string" ? record["error"] : text;
-      const code = typeof record["code"] === "string" ? record["code"] : undefined;
-      return code === undefined ? { message } : { message, code };
+      const failure: Failure = { message: typeof record["error"] === "string" ? record["error"] : text };
+      const code = [record["code"], record["reason"]].find((value) => typeof value === "string");
+      if (code !== undefined) failure.code = code as string;
+      const sessions = record["sessions"];
+      if (Array.isArray(sessions) && sessions.every((n) => typeof n === "number")) failure.sessions = sessions as number[];
+      return failure;
     }
   } catch {
     // not JSON
@@ -54,10 +74,11 @@ export function createHttp(options: HttpOptions): Http {
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
 
   async function request(method: Method, path: string, body?: unknown, timeoutMs: number = options.timeoutMs ?? 30_000): Promise<Response> {
-    const init: RequestInit = { method, headers: { accept: "application/json" }, signal: AbortSignal.timeout(timeoutMs) };
+    const headers: Record<string, string> = { accept: "application/json", ...options.auth?.headers() };
+    const init: RequestInit = { method, headers, signal: AbortSignal.timeout(timeoutMs) };
     if (body !== undefined) {
       init.body = JSON.stringify(body);
-      init.headers = { accept: "application/json", "content-type": "application/json" };
+      headers["content-type"] = "application/json";
     }
     let response: Response;
     try {
@@ -70,7 +91,11 @@ export function createHttp(options: HttpOptions): Http {
     if (response.status === 405 || (response.status === 404 && failure.message === MISSING_ROUTE_BODY)) {
       throw new RouteMissingError(path);
     }
-    throw new HttpError(response.status, path, failure.message, failure.code);
+    if (response.status === 401) {
+      if (failure.message === REAUTH_REQUIRED) throw new ReauthRequiredError(path);
+      options.auth?.onUnauthorized?.();
+    }
+    throw new HttpError(response.status, path, failure.message, failure.code, failure.sessions);
   }
 
   async function parse<T>(response: Response, path: string, schema: ZodType<T, any, unknown>): Promise<T> {

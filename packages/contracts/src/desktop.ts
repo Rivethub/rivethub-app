@@ -38,8 +38,12 @@ export type DesktopUpdateState =
  * holds the owner token and only ever hands the window a fresh login.
  */
 export interface RivetHubDesktop {
-  /** Main mints a new login code with the owner token and reloads the window through `/login`. */
-  relogin: () => Promise<void>;
+  /**
+   * Main mints a one-time login code with the owner token, which never leaves main, and returns the code, or
+   * null when it can't. The renderer exchanges the code at `POST /api/auth/session` for a fresh session in
+   * place, so the screen it is on keeps its state.
+   */
+  relogin: () => Promise<string | null>;
   updates: {
     getState: () => Promise<DesktopUpdateState>;
     /** Calls `listener` on every change; returns the unsubscribe. */

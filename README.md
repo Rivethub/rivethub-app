@@ -55,6 +55,17 @@ The app's version is independent of rh's. Each app build ships the rh pinned in 
 
 `pnpm dist:desktop:linux` writes the manifests next to the packages. A version like `0.2.0-nightly.20261111.1` builds for `nightly`, and anything else builds for `stable`. Running the `Release desktop` workflow with `publish` set uploads both arches to the channel's directory. That job stays off until `DESKTOP_PUBLISH_ENABLED` is set; see its TODO.
 
+### Sharing sessions
+
+The desktop app can share sessions with someone else and receive theirs (Share and Receive in the sidebar). They are routes in `apps/web` that appear only when the Electron bridge (`window.rivethub`) is present, so the plain browser build and mobile don't show them. They call rh's local `/api/share/**` routes (rivethub-runtime CONTRACT notes 151 and 152) through `createShareClient` in `packages/client`; `packages/contracts` has the types.
+
+- **Share.** Search sessions, then approve, redact (exact terms, optionally drop tool outputs) or deny each one in a single table. Nothing is sanitized until you confirm that table. Walk the sanitizer's flags (keep, redact or map), choose rivethub.cloud or a team server, confirm the counts rh checks, and get a one-time code to send privately.
+- **Receive.** Paste the code into a masked field. rh downloads the bundle and checks it, and the screen shows who sent it, whether that verified, and what was held per session. Each held session is imported, skipped or held span by span. A sender's key can be trusted after a fingerprint check, and Settings has the node's own key and the trusted senders (Share keys).
+- **The code is a live secret.** It is held in the screen's memory only. It never goes into a URL, history entry, storage, a query cache or a log, and leaving the screen drops it.
+- **Sign-in.** The window is signed in by a browser session; `apps/web` sends its CSRF token (`rh-csrf` in `localStorage`) as `X-RH-CSRF` through the client's `auth` option. Sending, signing in to a share server and trusting a key need a fresh sign-in. When rh answers `reauth_required`, the screen offers "Sign in again". That calls the preload's `relogin()`, where main reads the owner token (the path comes from `rh auth token-path --json`; the renderer never holds the token), mints a one-time login code at `POST /api/auth/login-codes`, and returns only the code. The page trades it at `POST /api/auth/session` for a fresh session and CSRF token without navigating, so the Share draft, or the Receive code, report and decisions, stay on screen and the person retries.
+
+`apps/desktop/e2e/share.live.spec.ts` drives the real screens in Electron against throwaway rh nodes; see the header of that file to run it.
+
 ## Deploy the web app to a hub
 
 ```sh

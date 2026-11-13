@@ -1,5 +1,5 @@
 import type { Capability, MemoryClient } from "@rivethub/contracts";
-import { createHttp, type FetchLike } from "../http.js";
+import { createHttp, type AuthSeam, type FetchLike } from "../http.js";
 import { accountApi } from "./account.js";
 import { catalogApi } from "./catalog.js";
 import { entitiesApi } from "./entities.js";
@@ -25,6 +25,7 @@ export interface RhOptions {
   fetch?: FetchLike;
   /** How long one request may take before it is aborted. Defaults to 30 seconds. Capability probes stay at 2.5 seconds. */
   timeoutMs?: number;
+  auth?: AuthSeam;
 }
 
 /** Routes of which one must answer for a capability to count as live. A 404 with the runtime's "not found" body means the route is absent. */
