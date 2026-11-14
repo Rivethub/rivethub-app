@@ -52,3 +52,11 @@ describe("open descriptive values", () => {
     expect(share.loginStep.safeParse({ state: "future" }).success).toBe(false);
   });
 });
+
+it("keeps arbitrary entity types and optional hub display names in the contract", () => {
+  const entities = wire.entityList.parse([
+    { id: "a", title: "Voyager", type: "spacecraft", sessionCount: 1 },
+    { id: "b", title: "Notebook", type: "field-notes", typeName: "Field research notes", sessionCount: 2 },
+  ]);
+  expect(entities.map((e) => [e.type, e.typeName])).toEqual([["spacecraft", undefined], ["field-notes", "Field research notes"]]);
+});

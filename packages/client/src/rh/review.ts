@@ -5,7 +5,7 @@ import { displayTitle } from "./util.js";
 import { strip } from "./util.js";
 
 export const mapSubject = (subject: wire.SubjectWire) =>
-  ({ kind: subject.kind, id: subject.id, title: subject.kind === "session" ? displayTitle(subject.title, subject.id) : subject.title }) as SubjectRef;
+  strip({ ...subject, kind: subject.kind, id: subject.id, title: subject.kind === "session" ? displayTitle(subject.title, subject.id) : subject.title }) as SubjectRef;
 
 const mapSource = (source: NonNullable<wire.ReviewWire["options"]>[number]["source"]) =>
   source && { session: { id: source.session.id, title: displayTitle(source.session.title, source.session.id) }, at: source.at, value: source.value };

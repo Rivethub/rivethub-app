@@ -1,3 +1,4 @@
+import { entityTypeLabel } from "@rivethub/client-runtime/format";
 import type {
   Capability,
   Change,
@@ -92,6 +93,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       id: e.id as EntityId,
       title: e.title,
       type: e.type,
+      ...(e.typeName ? { typeName: e.typeName } : {}),
       sessionCount: e.n,
       aliases: [],
       visibility: { kind: "private" },
@@ -192,7 +194,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     }
     if (item.group === "new-entity" && !entities.has(item.subject.id)) {
       entities.set(item.subject.id, {
-        id: item.subject.id as EntityId, title: item.subject.title, type: item.after?.startsWith("Machine") ? "machine" : "software", sessionCount: item.evidence.length,
+        id: item.subject.id as EntityId, title: item.subject.title, type: data.entitySeeds.find((e) => e.id === item.subject.id)?.type ?? "unclassified", sessionCount: item.evidence.length,
         aliases: [], visibility: { kind: "private" }, lead: value ?? item.text, facts: [], timeline: [], connected: [], sessions: [], tags: [], freshness: "sample",
       });
       return;
@@ -307,7 +309,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       wait(
         [...entities.values()]
           .filter((e) => !type || e.type === type)
-          .map(({ id, title, type: t, sessionCount }): EntitySummary => ({ id, title, type: t, sessionCount })),
+          .map(({ id, title, type: t, typeName, sessionCount }): EntitySummary => ({ id, title, type: t, ...(typeName ? { typeName } : {}), sessionCount })),
       ),
     entity(id, asOf) {
       const e = entities.get(id);
@@ -442,7 +444,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
         ...[...entities.values()].filter((e) => e.title.toLowerCase().includes(t) || e.aliases.some((a) => a.toLowerCase().includes(t))).map((e) => ({
           subject: { kind: "entity", id: e.id, title: e.title } as SubjectRef,
           snippet: e.lead,
-          context: [e.type[0]!.toUpperCase() + e.type.slice(1), e.topic?.path.join(" › ")].filter(Boolean).join(" · "),
+          context: [entityTypeLabel(e), e.topic?.path.join(" › ")].filter(Boolean).join(" · "),
         })),
         ...sessionRows().filter((s) => s.title.toLowerCase().includes(t) || s.gist?.toLowerCase().includes(t)).map((s) => ({
           subject: { kind: "session", id: s.id, title: s.title } as SubjectRef,

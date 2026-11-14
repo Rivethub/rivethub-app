@@ -1,3 +1,4 @@
+import { SubjectType } from "../components/subject-type";
 import { reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
@@ -86,7 +87,7 @@ function NeedsCard({ item }: { item: ReviewItem }) {
     >
       <span className="flex items-center gap-1.5">
         <KindTag {...kind} />
-        <Link to={subjectHref(item.subject)} className="text-[13px] font-medium">{item.subject.title}</Link>
+        <Link to={subjectHref(item.subject)} className="text-[13px] font-medium">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
       </span>
       <span className="flex-1 leading-[1.45]">{label}</span>
       <span className="flex gap-1.5">
@@ -216,7 +217,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
               >
                 <span className="flex items-center gap-1.5">
                   <KindTag {...reviewKindLabel[item.group]} />
-                  <span className="text-[14px] font-semibold">{item.subject.title}</span>
+                  <span className="text-[14px] font-semibold">{item.subject.title}</span>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
                 </span>
                 <span className="text-[14px] leading-[1.4]">{item.group === "conflict" ? `${reviewText(item)}: ${item.options?.map((o) => o.label).join(" or ")}?` : reviewText(item)}</span>
               </Link>
@@ -303,7 +304,7 @@ function TodayAside({ digest }: { digest: TodayDigest }) {
           {digest.recentlyUpdated.map((s) => (
             <Link key={s.id} to={subjectHref(s)} className="flex flex-col gap-px text-foreground hover:no-underline">
               <span className="font-medium">{s.title}</span>
-              <span className="text-[12px] text-muted-foreground">{subjectKindLabel[s.kind]}</span>
+              <span className="text-[12px] text-muted-foreground"><SubjectType subject={s} /></span>
             </Link>
           ))}
         </section>

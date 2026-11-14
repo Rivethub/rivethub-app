@@ -27,6 +27,8 @@ const nullish = <T extends z.ZodTypeAny>(schema: T) => schema.nullish().transfor
 export const topicRecord = z.object({
   id: z.string().min(1),
   kind: z.string().default("work"),
+  type: nullish(z.string()),
+  typeName: nullish(z.string()),
   slug: z.string().optional(),
   name: z.string(),
   aliases: rows(z.string()).default([]),
@@ -243,12 +245,11 @@ export const catalogDetail = catalogRow.extend({
   tags: rows(z.object({ key: z.string(), value: z.string(), state: descriptive(["applied", "suggested"]) })).default([]),
 });
 
-const entityType = descriptive(["person", "agent", "machine", "hardware", "model", "service", "software", "repository", "domain", "database", "organization", "project", "place"]);
 const sessionMention = z.object({ id: z.string().min(1), title: z.string() });
 const factSource = z.object({ session: sessionMention, at: timeSchema, value: z.string() });
 const shared = z.discriminatedUnion("kind", [z.object({ kind: z.literal("private") }), z.object({ kind: z.literal("space"), space: z.string() })]);
 
-export const entitySummary = z.object({ id: z.string().min(1), title: z.string(), type: entityType, sessionCount: z.number() });
+export const entitySummary = z.object({ id: z.string().min(1), title: z.string(), type: z.string(), typeName: nullish(z.string()), sessionCount: z.number() });
 export const entityList = rows(entitySummary);
 
 export const entityArticle = entitySummary.extend({
@@ -320,7 +321,7 @@ export const connectOutcome = z.object({ diff: z.string(), backupPath: z.string(
 
 export const modelJobList = rows(
   z.object({
-    role: descriptive(["default", "summarizer", "categorizer", "wiki-writer", "embedder"]),
+    role: z.string(),
     provider: nullish(z.string()),
     model: nullish(z.string()),
     inheritsDefault: z.boolean(),
@@ -331,7 +332,7 @@ export const modelJobList = rows(
 );
 
 // Navigation targets stay strict: an unknown kind must never link to the wrong resource.
-const subjectRef = z.object({ kind: z.enum(["topic", "entity", "session"]), id: z.string().min(1), title: z.string() });
+const subjectRef = z.object({ type: nullish(z.string()), typeName: nullish(z.string()), kind: z.enum(["topic", "entity", "session"]), id: z.string().min(1), title: z.string() });
 export type SubjectWire = z.infer<typeof subjectRef>;
 
 export const reviewItem = z.object({

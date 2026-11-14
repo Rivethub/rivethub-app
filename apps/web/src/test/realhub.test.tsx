@@ -178,16 +178,16 @@ describe("Sessions on a busy hub", () => {
 });
 
 describe("Stats on a busy hub", () => {
-  it("names jobs by what they do and admits when no cause was recorded", async () => {
-    expect(jobName("compact-conversation")).toBe("Summarize a session");
-    expect(jobName("some-new-job")).toBe("some-new-job");
+  it("formats every job name by the same rule and admits when no cause was recorded", async () => {
+    expect(jobName("compact-conversation")).toBe("Compact conversation");
+    expect(jobName("some-new-job")).toBe("Some new job");
     renderWith("/stats", (c) => ({
       upkeep: { ...c.upkeep!, flagged: async () => [{ id: "1", task: "propose-tidy", cause: "", count: 1, lastFailedAt: now }, { id: "2", task: "compact-conversation", cause: "the model truncated the summary", count: 18, lastFailedAt: now }] },
     }));
     const failed = await screen.findByRole("region", { name: /Failed jobs/ });
-    expect(within(failed).getByText("1 × Suggest tidy-ups")).toBeInTheDocument();
+    expect(within(failed).getByText("1 × Propose tidy")).toBeInTheDocument();
     expect(within(failed).getByText(/No cause was recorded/)).toBeInTheDocument();
-    expect(within(failed).getByText("18 × Summarize a session")).toBeInTheDocument();
+    expect(within(failed).getByText("18 × Compact conversation")).toBeInTheDocument();
   });
 });
 

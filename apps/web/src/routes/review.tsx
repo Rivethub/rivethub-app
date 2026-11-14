@@ -1,3 +1,4 @@
+import { SubjectType } from "../components/subject-type";
 import { reviewText, dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
 import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
@@ -177,7 +178,7 @@ function ReviewDesktop() {
                     className={cx("flex cursor-default flex-col gap-2 rounded-[10px] border px-3.5 py-3", open ? "border-primary bg-card" : "border-border bg-transparent")}
                   >
                     <span className="flex flex-wrap items-baseline gap-2">
-                      <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>
+                      <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
                       <span className="min-w-[180px] flex-1 leading-[1.45]">{reviewText(item)}</span>
                       <span className="text-[12px] text-muted-foreground">
                         {item.group === "conflict" ? `${item.options?.length ?? 0} sessions` : item.group === "filing" || item.group === "tag" || item.group === "tidy" ? "categorizer" : `${dayLabel(item.createdAt).replace("Today", "today")} · ${item.evidence[0]?.session.title ?? ""}`}
@@ -287,7 +288,7 @@ function Evidence({ item }: { item: ReviewItem }) {
       <div className="flex flex-col gap-1.5">
         <span className="text-[12px] font-semibold text-muted-foreground">AFFECTS</span>
         <span className="text-[13px] leading-[1.5]">
-          <Link to={subjectHref(item.subject)}>{item.subject.title}</Link>
+          <Link to={subjectHref(item.subject)}>{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
           {item.group === "conflict" || item.group === "fact" ? ` › ${reviewText(item)}` : ""}
         </span>
       </div>
@@ -375,7 +376,7 @@ function ReviewPhone() {
             >
               <span className="flex items-center gap-2">
                 <KindTag {...reviewKindLabel[item.group]} />
-                <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>
+                <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
               </span>
               <span className="text-[18px] leading-[1.35] font-semibold">{item.group === "conflict" ? `Which ${reviewText(item).toLowerCase()} is right?` : reviewText(item)}</span>
               {item.group === "conflict" && item.options && (

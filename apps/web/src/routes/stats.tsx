@@ -1,4 +1,4 @@
-import { count, whenLabel } from "@rivethub/client-runtime/format";
+import { readableName, count, whenLabel } from "@rivethub/client-runtime/format";
 import type { MemoryStats, WorkerId } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -15,21 +15,7 @@ const workerName: Record<WorkerId, { name: string; does: string }> = {
   "wiki-builder": { name: "Wiki builder", does: "Writes topic and entity pages." },
 };
 
-/** rh's job names, as what the job does. An unknown job keeps its name. */
-const JOBS: Record<string, string> = {
-  "compact-conversation": "Summarize a session",
-  "extract-wiki": "Write wiki pages from a session",
-  "extract-entities": "Update entity pages from a session",
-  "entity-backfill": "Catch up entity pages",
-  "stale-entity-sweep": "Queue sessions for entity pages",
-  "enqueue-stale-wiki": "Queue sessions for the wiki",
-  "propose-tidy": "Suggest tidy-ups",
-  "embed-messages": "Make messages findable by meaning",
-  "embed-summaries": "Make summaries findable by meaning",
-  "categorize-conversation": "File a session under a topic",
-  "title-conversation": "Title a session",
-};
-export const jobName = (task: string) => JOBS[task] ?? task;
+export const jobName = readableName;
 
 function Tile({ label, value, note, tone }: { label: string; value: ReactNode; note?: ReactNode; tone?: "warn" }) {
   return (

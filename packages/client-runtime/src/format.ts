@@ -1,4 +1,4 @@
-import type { EntityType, ReviewItem, SessionOrigin, SessionSummaryRow, SubjectRef } from "@rivethub/contracts";
+import type { EntitySummary, ReviewItem, SessionOrigin, SessionSummaryRow, SubjectRef } from "@rivethub/contracts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -47,25 +47,38 @@ export const count = (n: number) => n.toLocaleString("en-US");
 
 export const subjectKindLabel: Record<SubjectRef["kind"], string> = { topic: "Topic", entity: "Entity", session: "Session" };
 
-const knownEntityTypes: Record<EntityType, { one: string; many: string }> = {
-  organization: { one: "Organization", many: "Organizations" },
-  project: { one: "Project", many: "Projects" },
-  place: { one: "Place", many: "Places" },
-  machine: { one: "Machine", many: "Machines" },
-  service: { one: "Service", many: "Services" },
-  person: { one: "Person", many: "People" },
-  repository: { one: "Repository", many: "Repositories" },
-  model: { one: "Model", many: "Models" },
-  agent: { one: "Agent", many: "Agents" },
-  hardware: { one: "Hardware", many: "Hardware" },
-  software: { one: "Software", many: "Software" },
-  domain: { one: "Domain", many: "Domains" },
-  database: { one: "Database", many: "Databases" },
-};
+/** Labels are data: use the hub's name as given, otherwise humanize its raw value. */
+export function readableName(value: string): string {
+  const words = value.replace(/[-_]+/g, " ").trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
-export const entityTypes = new Proxy(knownEntityTypes, {
-  get: (target, key: string) => Object.hasOwn(target, key) ? target[key] : { one: key, many: "Other" },
-});
+export function entityTypeLabel(entity: { type: string; typeName?: string | undefined }): string {
+  return entity.typeName?.trim() ? entity.typeName : readableName(entity.type);
+}
+
+/** Only types present in this response exist. Group count determines order, then display name. */
+export function groupEntities(entities: EntitySummary[]) {
+  const groups = new Map<string, EntitySummary[]>();
+  for (const entity of entities) {
+    const items = groups.get(entity.type) ?? [];
+    items.push(entity);
+    groups.set(entity.type, items);
+  }
+  return [...groups].map(([type, items]) => {
+    // A named row wins over an unnamed one; sort inconsistent names for deterministic responses.
+    const names = items.map((e) => e.typeName).filter((name): name is string => !!name?.trim()).sort();
+    return { type, label: entityTypeLabel({ type, typeName: names[0] }), items };
+  }).sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label) || a.type.localeCompare(b.type));
+}
+
+/** Entity subjects can carry their type directly or resolve it from the hub's entity list. */
+export function subjectLabel(subject: SubjectRef, entities: EntitySummary[]): string {
+  if (subject.kind !== "entity") return subjectKindLabel[subject.kind];
+  if (subject.typeName?.trim()) return subject.typeName;
+  const entity = entities.find((e) => e.id === subject.id);
+  return entity ? entityTypeLabel(entity) : subject.type !== undefined ? entityTypeLabel({ type: subject.type, typeName: subject.typeName }) : "Entity";
+}
 
 /** The label on a review item's main button. */
 export function primaryAction(item: ReviewItem): string {

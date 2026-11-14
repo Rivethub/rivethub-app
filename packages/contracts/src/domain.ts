@@ -25,7 +25,7 @@ export type Actor =
 
 export type SubjectRef =
   | { kind: "topic"; id: TopicId; title: string }
-  | { kind: "entity"; id: EntityId; title: string }
+  | { kind: "entity"; id: EntityId; title: string; type?: string; typeName?: string }
   | { kind: "session"; id: SessionId; title: string };
 
 export interface Change {
@@ -151,20 +151,7 @@ export interface TopicArticle {
   freshness: Freshness;
 }
 
-export type EntityType =
-  | "person"
-  | "agent"
-  | "machine"
-  | "hardware"
-  | "model"
-  | "service"
-  | "software"
-  | "repository"
-  | "domain"
-  | "organization"
-  | "project"
-  | "place"
-  | "database" | (string & {});
+export type EntityType = string;
 
 export interface FactSource {
   session: { id: SessionId; title: string };
@@ -187,6 +174,8 @@ export interface EntitySummary {
   id: EntityId;
   title: string;
   type: EntityType;
+  /** Display name supplied by the hub, used as given without pluralization. */
+  typeName?: string;
   sessionCount: number;
 }
 
@@ -297,7 +286,7 @@ export interface HarnessStatus {
   canConnect: boolean;
 }
 
-export type ModelRole = "default" | "summarizer" | "categorizer" | "wiki-writer" | "embedder" | (string & {});
+export type ModelRole = string;
 
 export interface ModelJob {
   role: ModelRole;

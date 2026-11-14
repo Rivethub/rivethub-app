@@ -118,7 +118,7 @@ describe("Entities list", () => {
     expect(await main.findByRole("link", { name: /^nas-01/ })).toBeInTheDocument();
     expect(main.getByRole("link", { name: /^embed-server/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^Machines/ }));
+    await user.click(screen.getByRole("button", { name: /^Machine/ }));
     expect(main.getByRole("link", { name: /^nas-01/ })).toBeInTheDocument();
     expect(main.queryByRole("link", { name: /^embed-server/ })).not.toBeInTheDocument();
 
@@ -137,7 +137,7 @@ describe("Entities list", () => {
     const { user } = renderAt("/entities");
     await within(await screen.findByRole("main")).findByRole("link", { name: /^nas-01/ });
     await user.selectOptions(screen.getByRole("combobox", { name: "Sort" }), "sessions");
-    const machines = screen.getByRole("region", { name: "Machines" });
+    const machines = screen.getByRole("region", { name: "Machine" });
     const titles = within(machines).getAllByRole("link").map((l) => l.textContent ?? "");
     expect(titles[0]).toMatch(/^phildesk/);
   });

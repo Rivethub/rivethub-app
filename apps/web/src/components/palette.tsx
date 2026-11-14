@@ -1,7 +1,8 @@
+import { subjectLabel } from "@rivethub/client-runtime/format";
 import type { SearchHit } from "@rivethub/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useSearch } from "../client/queries";
+import { useEntities, useSearch } from "../client/queries";
 import { subjectHref } from "../lib/format";
 import { markStep } from "../lib/journey";
 import { setTheme, THEMES } from "../theme";
@@ -37,6 +38,7 @@ export function usePaletteGroups(text: string, onDone: () => void = () => {}): P
   const navigate = useNavigate();
   const query = text.trim();
   const search = useSearch(query);
+  const entities = useEntities().data ?? [];
   return useMemo(() => {
     const go = (to: string) => () => {
       onDone();
@@ -80,7 +82,8 @@ export function usePaletteGroups(text: string, onDone: () => void = () => {}): P
         title: "Go to",
         items: results.goTo.map((h) => {
           const item: PaletteItem = { key: `${h.subject.kind}:${h.subject.id}`, icon: icons[h.subject.kind], label: h.subject.title, run: go(subjectHref(h.subject)) };
-          if (h.context) item.hint = h.context;
+          if (h.subject.kind === "entity") item.hint = [subjectLabel(h.subject, entities), h.snippet].filter(Boolean).join(" · ");
+          else if (h.context) item.hint = h.context;
           return item;
         }),
       });
@@ -100,7 +103,7 @@ export function usePaletteGroups(text: string, onDone: () => void = () => {}): P
       items: [{ key: "ask", icon: "?", label: `Search every session for "${query}"`, hint: "All matches, with filters", run: go(`/search?q=${encodeURIComponent(query)}`) }],
     });
     return groups;
-  }, [query, search.data, navigate, onDone]);
+  }, [query, search.data, entities, navigate, onDone]);
 }
 
 export function PaletteList({ groups, active, onHover, idPrefix, large }: { groups: PaletteGroup[]; active: number; onHover?: (i: number) => void; idPrefix: string; large?: boolean }) {

@@ -11,6 +11,7 @@ export function mapEntityArticle(article: ReturnType<typeof wire.entityArticle.p
     id: article.id as EntityId,
     title: article.title,
     type: article.type,
+    typeName: article.typeName,
     sessionCount: article.sessionCount,
     aliases: article.aliases,
     topic: article.topic ? { id: topicId(article.topic.id), path: article.topic.path } : undefined,
@@ -42,7 +43,7 @@ export function entitiesApi(http: Http) {
   return {
     async entities(type?: EntityType): Promise<EntitySummary[]> {
       const list = await http.get("/api/entities", wire.entityList, { type });
-      return list.map((entity) => ({ ...entity, id: entity.id as EntityId }));
+      return list.map((entity) => strip<EntitySummary>({ ...entity, id: entity.id as EntityId }));
     },
 
     async entity(id: EntityId, asOf?: IsoTime): Promise<EntityArticle> {

@@ -31,10 +31,10 @@ export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof
     .map((topic) => {
       const also = topic.aliases.length > 0 ? `Also known as ${topic.aliases.slice(0, 3).join(", ")}` : undefined;
       if (topic.kind === "entity") {
-        return { subject: { kind: "entity", id: topic.id as EntityId, title: topic.name }, snippet: also ?? "", context: also ? `Entity · ${also}` : "Entity" };
+        return { subject: { kind: "entity", id: topic.id as EntityId, title: topic.name, ...(topic.type !== undefined ? { type: topic.type } : {}), ...(topic.typeName !== undefined ? { typeName: topic.typeName } : {}) }, snippet: also ?? "", context: also ? `Entity · ${also}` : "Entity" };
       }
       const sessions = `${topic.sessionCount} ${topic.sessionCount === 1 ? "session" : "sessions"}`;
-      return { subject: { kind: "topic", id: topicId(topic.id), title: topic.name }, snippet: also ?? sessions, context: `Topic · ${also ?? sessions}` };
+      return { subject: { kind: "topic", id: topicId(topic.id), title: topic.name, ...(topic.type !== undefined ? { type: topic.type } : {}), ...(topic.typeName !== undefined ? { typeName: topic.typeName } : {}) }, snippet: also ?? sessions, context: `Topic · ${also ?? sessions}` };
     });
   // rh ranks by how much a page says about the words. Someone typing a name wants the thing with that name first.
   const typed = query.trim().toLowerCase();

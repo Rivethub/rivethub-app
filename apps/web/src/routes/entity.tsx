@@ -1,4 +1,4 @@
-import { dayLabel, entityTypes, localDay, parseDay, shortDate, time } from "@rivethub/client-runtime/format";
+import { dayLabel, entityTypeLabel, groupEntities, localDay, parseDay, shortDate, time } from "@rivethub/client-runtime/format";
 import type { ChangeKind, EntityArticle, EntityId, EntitySummary, EntityType, Fact, IsoTime } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,11 +18,6 @@ import { EmptyLibrary, visibilityLabel } from "./topic";
 
 const route = getRouteApi("/entities/$entityId");
 type TabId = "overview" | "sessions" | "history";
-const TYPE_ORDER: EntityType[] = ["organization", "project", "place", "machine", "service", "person", "repository", "model", "database", "software", "hardware", "agent", "domain"];
-
-function groupByType(list: EntitySummary[]) {
-  return [...TYPE_ORDER, "other"].map((type) => ({ type, items: list.filter((e) => type === "other" ? !TYPE_ORDER.includes(e.type) : e.type === type) })).filter((g) => g.items.length);
-}
 
 const SIDEBAR_SHOWN = 14;
 
@@ -38,10 +33,10 @@ function EntityKinds({ selected }: { selected?: EntitySummary }) {
   const list = useEntities().data ?? [];
   return (
     <>
-      {groupByType(list).map((g) => (
+      {groupEntities(list).map((g) => (
         <div key={g.type} className="flex flex-col">
           <Link to="/entities" hash={g.type} className="flex justify-between rounded-lg px-2.5 py-[5px] text-foreground hover:bg-accent hover:no-underline">
-            <span>{entityTypes[g.type]!.many}</span>
+            <span>{g.label}</span>
             <span className="text-[12px] text-muted-foreground">{g.items.length}</span>
           </Link>
           {selected?.type === g.type &&
@@ -57,7 +52,7 @@ function EntityKinds({ selected }: { selected?: EntitySummary }) {
               </Link>
             ))}
           {selected?.type === g.type && g.items.length > SIDEBAR_SHOWN && (
-            <Link to="/entities" hash={g.type} className="py-[5px] pr-2.5 pl-[22px] text-[12px]">All {g.items.length} {entityTypes[g.type]!.many.toLowerCase()}</Link>
+            <Link to="/entities" hash={g.type} className="py-[5px] pr-2.5 pl-[22px] text-[12px]">All {g.items.length} {g.label}</Link>
           )}
         </div>
       ))}
@@ -74,12 +69,12 @@ export function EntitiesIndex() {
   const [only, setOnly] = useState<EntityType | "">("");
   const [sort, setSort] = useState<EntitySort>("name");
   const all = list.data ?? [];
-  const types = groupByType(all);
+  const types = groupEntities(all);
   const needle = text.trim().toLowerCase();
   const shown = all
-    .filter((e) => (!only || (only === "other" ? !TYPE_ORDER.includes(e.type) : e.type === only)) && (!needle || e.title.toLowerCase().includes(needle)))
+    .filter((e) => (!only || e.type === only) && (!needle || e.title.toLowerCase().includes(needle)))
     .sort((x, y) => (sort === "sessions" ? y.sessionCount - x.sessionCount : 0) || x.title.localeCompare(y.title, undefined, { sensitivity: "base" }));
-  const groups = groupByType(shown);
+  const groups = types.map((g) => ({ ...g, items: shown.filter((e) => e.type === g.type) })).filter((g) => g.items.length > 0);
   const chip = (on: boolean) => cx("rounded-full border px-2.5 text-[12px]", phone ? "min-h-9 px-3" : "py-1", on ? "border-transparent bg-selected text-foreground" : "border-border bg-transparent text-muted-foreground hover:text-foreground");
 
   const controls = all.length > 0 && (
@@ -102,7 +97,7 @@ export function EntitiesIndex() {
         <button type="button" aria-pressed={only === ""} onClick={() => setOnly("")} className={chip(only === "")}>All {all.length.toLocaleString("en-US")}</button>
         {types.map((g) => (
           <button key={g.type} type="button" aria-pressed={only === g.type} onClick={() => setOnly(only === g.type ? "" : g.type)} className={chip(only === g.type)}>
-            {entityTypes[g.type]!.many} {g.items.length}
+            {g.label} {g.items.length}
           </button>
         ))}
       </div>
@@ -110,11 +105,11 @@ export function EntitiesIndex() {
   );
 
   const rows = groups.map((g) => (
-    <section key={g.type} id={g.type} aria-label={entityTypes[g.type]!.many} className="flex flex-col">
-      <h2 className="m-0 px-2 pt-4 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">{entityTypes[g.type]!.many} <span className="font-normal">{g.items.length}</span></h2>
+    <section key={g.type} id={g.type} aria-label={g.label} className="flex flex-col">
+      <h2 className="m-0 px-2 pt-4 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label} <span className="font-normal">{g.items.length}</span></h2>
       {g.items.map((e) => (
         <Link key={e.id} to="/entities/$entityId" params={{ entityId: e.id }} className="flex min-h-12 items-center gap-2.5 border-b border-border px-3 text-foreground hover:bg-accent hover:no-underline md:min-h-10">
-          <span className="min-w-0 flex-1 truncate">{e.title}</span>{!TYPE_ORDER.includes(e.type) && <span className="text-[12px] text-muted-foreground">{e.type}</span>}
+          <span className="min-w-0 flex-1 truncate">{e.title}</span>
           {e.sessionCount > 0 && <span className="text-[12px] text-muted-foreground">{plural(e.sessionCount, "session")}</span>}
           <span className="text-muted-foreground">›</span>
         </Link>
@@ -135,7 +130,7 @@ export function EntitiesIndex() {
         <div className="flex justify-center px-7 py-8">
           <div className="flex max-w-[820px] flex-1 flex-col gap-3">
             <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Entities <SampleBadge capability="entities" /></h1>
-            <p className="m-0 text-muted-foreground">The machines, services, people, repositories and tools your sessions touch. Each has a page with what is currently true about it.</p>
+            <p className="m-0 text-muted-foreground">The entities your sessions touch. Each has a page with what is currently true about it.</p>
             {controls}
             <div className="flex flex-col">{body}</div>
           </div>
@@ -186,7 +181,7 @@ export function EntityPage() {
   if (phone) {
     return (
       <Frame sidebar={null}>
-        <MobileBack to="/entities" label={e ? entityTypes[e.type]!.many : "Entities"}>
+        <MobileBack to="/entities" label={e ? entityTypeLabel(e) : "Entities"}>
           {e && <AsOfSheetButton steps={steps} asOf={asOf} onAsOf={setAsOf} />}
           {e && <PinButton subject={{ kind: "entity", id: e.id, title: e.title }} className="size-11" />}
         </MobileBack>
@@ -214,7 +209,7 @@ export function EntityPage() {
     <Frame sidebar={<MainSidebar><EntityKinds {...(e ? { selected: e } : {})} /></MainSidebar>}>
       {fallback ?? (
         <>
-          <ArticleBar crumbs={<Crumbs items={[{ label: entityTypes[e!.type]!.many, to: `/entities#${e!.type}` }, { label: e!.title }]} />}>
+          <ArticleBar crumbs={<Crumbs items={[{ label: entityTypeLabel(e!), to: `/entities#${e!.type}` }, { label: e!.title }]} />}>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ tab: id })} />
             <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this entity">{visibilityLabel(e!.visibility)}</span>
             <PinButton subject={{ kind: "entity", id: e!.id, title: e!.title }} />
@@ -237,7 +232,7 @@ function EntityTitle({ e, phone }: { e: EntityArticle; phone?: boolean }) {
         <SampleBadge capability="entities" />
       </span>
       <span className="font-sans text-[13px] text-muted-foreground">
-        {entityTypes[e.type]!.one}
+        {entityTypeLabel(e)}
         {e.aliases.length > 0 && ` · also ${e.aliases.map((a) => `“${a}”`).join(", ")}`}
         {e.lastVerified && ` · last checked ${shortDate(e.lastVerified)}`}
         {e.topic && (

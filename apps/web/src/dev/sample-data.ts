@@ -172,11 +172,12 @@ interface EntitySeed {
   id: string;
   title: string;
   type: EntityArticle["type"];
+  typeName?: string;
   n: number;
 }
 
 export const entitySeeds: EntitySeed[] = [
-  { id: "rivet-org", title: "Rivet", type: "organization", n: 2 },
+  { id: "rivet-org", title: "Rivet", type: "organization", typeName: "Organization", n: 2 },
   { id: "entity-worker", title: "Entity worker", type: "project", n: 1 },
   { id: "home-office", title: "Home office", type: "place", n: 1 },
   { id: "nas-01", title: "nas-01", type: "machine", n: 9 },
