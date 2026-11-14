@@ -8,6 +8,10 @@
       "types": "./src/format.ts",
       "default": "./src/format.ts"
     },
+    "./markdown": {
+      "types": "./src/markdown.ts",
+      "default": "./src/markdown.ts"
+    },
     "./hub-list": {
       "types": "./src/hubList.ts",
       "default": "./src/hubList.ts"
