@@ -73,6 +73,60 @@ describe("a session's messages", () => {
     expect(rh.calls.filter((c) => c.path.startsWith("/api/memory/browse"))).toHaveLength(2);
   });
 
+  describe("when the span cannot be read to its end", () => {
+    const at = (ms: number) => new Date(Date.parse("2026-11-13T20:00:00.000Z") + ms).toISOString();
+    const other = (n: number, ms: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ id: `o${i}`, role: "assistant", content: "other", createdAt: at(ms(i)), sessionId: "claude-code:other" }));
+    /** Serves `all` (newest first) the way rh does: `since` inclusive, `before` exclusive, at most `limit`. */
+    const hub = (all: { createdAt: string }[]) => fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: at(0), endedAt: at(4_000_000) },
+      "GET /api/memory/browse": (call: { path: string }) => {
+        const q = new URL(BASE + call.path).searchParams;
+        return { messages: all.filter((m) => m.createdAt >= q.get("since")! && m.createdAt < q.get("before")!).slice(0, Number(q.get("limit"))) };
+      },
+    });
+    const browses = (rh: ReturnType<typeof fakeRh>) => rh.calls.filter((c) => c.path.startsWith("/api/memory/browse")).length;
+
+    it("marks the oldest turn it found when the page budget runs out before the session's first message", async () => {
+      // The session's last message, then 2,000 messages of another session, then its first message.
+      const all = [
+        { id: "last", role: "assistant", content: "Done.", createdAt: at(3_000_000), sessionId: SID },
+        ...other(2000, (i) => 2_999_000 - i * 1000),
+        { id: "first", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID },
+      ];
+      const rh = hub(all);
+      const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+      expect(turns.map((t) => [t.parts[0], t.missing])).toEqual([[{ kind: "text", text: "Done." }, "before"]]);
+      expect(browses(rh)).toBe(10);
+    });
+
+    it("fails, and does not say the session is empty, when the budget runs out before any of its messages", async () => {
+      const all = [...other(2000, (i) => 3_000_000 - i * 1000), { id: "only", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID }];
+      const rh = hub(all);
+      await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).rejects.toThrow(/could not be found/);
+    });
+
+    it("stops and marks the gap when more than a page of messages share one instant", async () => {
+      // rh pages by time alone, so it can never get past 200 messages stored at the same instant.
+      const all = [
+        { id: "last", role: "assistant", content: "Done.", createdAt: at(3_000), sessionId: SID },
+        ...other(201, () => 2_000),
+        { id: "first", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID },
+      ];
+      const rh = hub(all);
+      const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+      expect(turns.map((t) => [t.parts[0], t.missing])).toEqual([[{ kind: "text", text: "Done." }, "before"]]);
+      expect(browses(rh)).toBeLessThan(10);
+    });
+
+    it("leaves a transcript that was read to its end unmarked", async () => {
+      const all = [{ id: "last", role: "assistant", content: "Done.", createdAt: at(3_000), sessionId: SID }, ...other(250, (i) => 2_900 - i), { id: "first", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID }];
+      const turns = await createRhClient({ baseUrl: BASE, fetch: hub(all).fetch }).methods.transcript!(SID);
+      expect(turns.map((t) => t.missing)).toEqual([undefined, undefined]);
+      expect(turns).toHaveLength(2);
+    });
+  });
+
   it("keeps the original failure when memory has nothing for the session either", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { status: 400, body: { error: "invalid session id" } },

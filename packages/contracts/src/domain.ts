@@ -77,6 +77,11 @@ export interface TranscriptTurn {
   role: "user" | "assistant";
   at: IsoTime;
   parts: TranscriptPart[];
+  /**
+   * Set on the first or last turn when the hub could not hand over the messages before it or after it,
+   * so a transcript that is not whole never reads as one that is.
+   */
+  missing?: "before" | "after";
 }
 
 export interface SummaryNode {

@@ -105,7 +105,7 @@ function HarnessRow({ harness }: { harness: HarnessStatus }) {
   const { palette } = useTheme();
   const capture = harness.capture.state === "receiving" ? palette.success : harness.capture.state === "stale" ? palette.warning : palette.input;
   const recall = harness.recall.state === "connected" ? palette.success : palette.input;
-  const captureText = harness.capture.state === "receiving" ? "Capturing" : harness.capture.state === "stale" ? "Stopped" : "Not connected";
+  const captureText = harness.capture.state === "receiving" ? "Capturing" : harness.capture.state === "stale" ? "Stopped" : harness.capture.state === "idle" ? "Ready, nothing captured yet" : "Not connected";
   const recallText = harness.recall.state === "connected" ? "recall on" : "recall off";
   return (
     <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: palette.border }}>

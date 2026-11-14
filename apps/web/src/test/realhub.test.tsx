@@ -133,6 +133,38 @@ describe("Sessions on a busy hub", () => {
     expect(await screen.findByText(/#1 · phil ·/)).toBeInTheDocument();
     expect(screen.queryByText(/#1 · You ·/)).not.toBeInTheDocument();
   });
+
+  it("offers no filing, sharing-with or renaming on a shared session, since the hub refuses them", async () => {
+    const detail: SessionDetail = { ...row("import:abc", "Move the backups", 3, { harness: "shared", origin: { author: "phil", verification: "verified" } }), changed: [], entities: [], tags: [] };
+    renderWith("/sessions/import:abc", () => ({ session: async () => detail }));
+    expect(await screen.findByText(/cannot be filed under a topic yet/)).toBeInTheDocument();
+    expect(screen.getByText(/cannot be shared with a space yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Filed under" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Shared with" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Session title/ })).not.toBeInTheDocument();
+  });
+
+  it("says so when a transcript read from memory stops short", async () => {
+    const detail: SessionDetail = { ...row("s-long", "A long day", 900), changed: [], entities: [], tags: [] };
+    renderWith("/sessions/s-long?tab=transcript", () => ({
+      session: async () => detail,
+      transcript: async () => [{ index: 1, role: "assistant", at: now, parts: [{ kind: "text", text: "Done." }], missing: "before" }],
+    }));
+    expect(await screen.findByText("Done.")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(/Earlier messages are not shown/);
+  });
+
+  it("shows that a sharing change failed, and does not count it as done in the guide", async () => {
+    const detail: SessionDetail = { ...row("s-vis", "Move the backups", 3), changed: [], entities: [], tags: [] };
+    const { user } = renderWith("/sessions/s-vis", () => ({
+      session: async () => detail,
+      transcript: async () => [{ index: 1, role: "user", at: now, parts: [{ kind: "text", text: "Where do the backups go now?" }] }],
+      setVisibility: async () => { throw new Error("the hub refused"); },
+    }));
+    await user.selectOptions(await screen.findByRole("combobox", { name: "Shared with" }), "space:household");
+    expect(await screen.findByText(/was not changed: the hub refused/)).toHaveAttribute("role", "alert");
+    expect(JSON.parse(localStorage.getItem("rivethub.journey") ?? "{}")).not.toMatchObject({ share: true });
+  });
 });
 
 describe("Stats on a busy hub", () => {

@@ -352,7 +352,11 @@ function SessionHeader({ d }: { d: SessionDetail }) {
     <div className="flex flex-wrap items-end gap-3">
       <div className="flex min-w-[260px] flex-1 flex-col gap-1.5">
         <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">
-          <EditableText label="Session title" value={d.title} display={<span className="line-clamp-3" title={d.title}>{d.title}</span>} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
+          {d.origin ? (
+            <span className="line-clamp-3" title={d.title}>{d.title}</span>
+          ) : (
+            <EditableText label="Session title" value={d.title} display={<span className="line-clamp-3" title={d.title}>{d.title}</span>} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
+          )}
           <SampleBadge capability="sessions" />
         </h1>
         {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
@@ -506,6 +510,7 @@ function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; ra
           Showing messages {rangeLabel(range)} from the summary. <Link to="." search={{ tab: "transcript" } as never}>Clear</Link>
         </p>
       )}
+      {transcript.data[0]?.missing === "before" && <MissingNote side="before" />}
       {groupTurns(transcript.data).map((group) => {
         if (group.kind === "steps" && !group.turns.some(inRange)) {
           return (
@@ -519,6 +524,7 @@ function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; ra
         }
         return group.turns.map((t) => <Turn key={t.index} t={t} hit={inRange(t)} first={hit0(t) ? first : undefined} phone={phone} sender={sender} />);
       })}
+      {transcript.data.at(-1)?.missing === "after" && <MissingNote side="after" />}
     </div>
   );
 }
@@ -535,6 +541,15 @@ function groupTurns(turns: TranscriptTurn[]): TurnGroup[] {
     else out.push({ kind: toolOnly ? "steps" : "turn", turns: [t] });
   }
   return out.map((g) => (g.kind === "steps" && g.turns.length < 2 ? { ...g, kind: "turn" } : g));
+}
+
+/** Shown where a transcript read from memory stops short, so a part is never taken for the whole. */
+function MissingNote({ side }: { side: "before" | "after" }) {
+  return (
+    <p role="note" className="m-0 rounded-lg border border-dashed border-input px-3 py-2 text-[13px] text-muted-foreground">
+      {side === "before" ? "Earlier messages are not shown." : "Later messages are not shown."} Memory holds too many messages from the same hours to read through all of them here. Search still finds every message.
+    </p>
+  );
 }
 
 /** `sender` names who wrote the user turns of a session someone else shared; without it they are yours. */
@@ -589,6 +604,8 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
     if (!trimmed) return setName(null);
     create.mutate({ name: trimmed }, { onSuccess: (id) => { place.mutate({ session: d.id, topic: id }); setName(null); onPicked?.(); } });
   };
+  // rh files only sessions its own tools ran.
+  if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Not filed. A session someone shared with you cannot be filed under a topic yet.</span>;
   if (name !== null) {
     return (
       <span className="flex flex-col gap-1.5">
@@ -619,8 +636,7 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
         value={d.topic?.id ?? ""}
         onChange={(e) => {
           if (e.target.value === NEW_TOPIC) return setName("");
-          place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null });
-          onPicked?.();
+          place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null }, { onSuccess: () => onPicked?.() });
         }}
         className={cx(selectCls, className)}
       >
@@ -636,22 +652,31 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
 function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; className?: string; onPicked?: () => void }) {
   const set = useSetVisibility();
   const spaces = [...new Set([...(d.visibility.kind === "space" ? [d.visibility.space] : []), "household"])];
+  // rh changes who can see only sessions its own tools ran.
+  if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Private. A session someone shared with you cannot be shared with a space yet.</span>;
   return (
-    <label className="flex flex-col">
+    <label className="flex flex-col gap-1">
       <span className="sr-only">Shared with</span>
       <select
         value={visibilityKey(d.visibility)}
         onChange={(e) => {
           const v = e.target.value;
-          set.mutate({ id: d.id, visibility: v === "private" ? { kind: "private" } : { kind: "space", space: v.slice(6) } });
-          if (v !== "private") markStep("share");
-          onPicked?.();
+          set.mutate(
+            { id: d.id, visibility: v === "private" ? { kind: "private" } : { kind: "space", space: v.slice(6) } },
+            {
+              onSuccess: () => {
+                if (v !== "private") markStep("share");
+                onPicked?.();
+              },
+            },
+          );
         }}
         className={cx(selectCls, className)}
       >
         <option value="private">Private</option>
         {spaces.map((s) => <option key={s} value={`space:${s}`}>{s}</option>)}
       </select>
+      {set.isError && <span role="alert" className="text-[12px] text-error">Who can see this session was not changed{set.error instanceof Error ? `: ${set.error.message}` : ""}.</span>}
     </label>
   );
 }
@@ -704,7 +729,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
         <Eyebrow>Shared with</Eyebrow>
         <VisibilityPicker d={d} />
         <span className="text-[12px] leading-[1.45] text-muted-foreground">
-          {d.visibility.kind === "private" ? "Only you can see this session." : `Everyone in ${d.visibility.space} can find it.`}{" "}
+          {d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : `Everyone in ${d.visibility.space} can find it. `}
           {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
         </span>
       </section>
