@@ -76,6 +76,16 @@ describe("Sessions on a busy hub", () => {
     await waitFor(() => expect(screen.queryByRole("link", { name: /Untitled session/ })).not.toBeInTheDocument());
   });
 
+  it("keeps the resume command and copy button together below long session metadata", async () => {
+    const command = "claude --resume 76d71fb3-8325-48d6-a012-00d08a3b2fb1";
+    const detail: SessionDetail = { ...row("s-resume", "A long day", 0), cwd: "/home/phil/work/a-very-long-working-directory/another-long-path/component", resumeCommand: command, changed: [], entities: [], tags: [] };
+    renderWith("/sessions/s-resume", () => ({ session: async () => detail }));
+    const group = await screen.findByRole("group", { name: "Resume session" });
+    expect(within(group).getByText(command).tagName).toBe("CODE");
+    expect(within(group).getByRole("button", { name: "Copy resume command" })).toBeInTheDocument();
+    expect(group.previousElementSibling).toHaveTextContent(detail.cwd!);
+  });
+
   it("says a session has no messages instead of failing to read them", async () => {
     const detail: SessionDetail = { ...row("s-1", "Untitled session", 0), changed: [], entities: [], tags: [] };
     renderWith("/sessions/s-1", () => ({

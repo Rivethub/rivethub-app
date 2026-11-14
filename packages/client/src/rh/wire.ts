@@ -198,6 +198,7 @@ export const memoryBrowse = z.object({
         content: z.string().default(""),
         createdAt: nullish(timeSchema),
         sessionId: nullish(z.string()),
+        agent: nullish(z.string()),
         toolName: nullish(z.string()),
       }),
     )
