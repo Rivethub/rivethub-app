@@ -23,3 +23,18 @@ describe("splitInjected", () => {
     expect(splitInjected(text)).toEqual([{ kind: "said", text }]);
   });
 });
+
+it("handles multiline blocks, hyphenated tags and CRLF without losing the request", () => {
+  expect(splitInjected("<system-reminder>\r\nKeep this context.\r\n</system-reminder>\r\n<user_query>\r\nWhat changed?\r\n</user_query>")).toEqual([
+    { kind: "injected", tag: "system-reminder", text: "Keep this context." },
+    { kind: "said", text: "What changed?" },
+  ]);
+});
+
+it("also classifies a person's line-start custom-element example as context", () => {
+  // Known ambiguity: callers must not apply this heuristic to assistant markup examples.
+  expect(splitInjected("Explain this component:\n<my-widget>Save</my-widget>")).toEqual([
+    { kind: "said", text: "Explain this component:" },
+    { kind: "injected", tag: "my-widget", text: "Save" },
+  ]);
+});

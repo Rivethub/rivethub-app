@@ -3,6 +3,12 @@ import type { ChangeKind, ReviewItem, SubjectRef } from "@rivethub/contracts";
 /** "1 session", "2 sessions". */
 export const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 
+/** Join a plain-language list without an Oxford comma. */
+export function listSentence(items: readonly string[]): string {
+  if (items.length < 2) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
 const ACRONYMS = new Set(["ip", "os", "gpu", "gpus", "cpu", "cpus", "url", "ssh", "dns", "id", "api", "ram", "vm", "pr", "ui", "mcp", "tls", "nfs"]);
 
 /**

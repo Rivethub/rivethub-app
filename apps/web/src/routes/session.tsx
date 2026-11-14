@@ -1,3 +1,4 @@
+import { splitInjected } from "@rivethub/client";
 import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
@@ -554,7 +555,10 @@ function MissingNote({ side }: { side: "before" | "after" }) {
 
 /** `sender` names who wrote the user turns of a session someone else shared; without it they are yours. */
 function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolean; first: React.Ref<HTMLDivElement> | undefined; phone: boolean | undefined; sender: string | undefined }) {
-  const text = t.parts.filter((p) => p.kind === "text");
+  // Assistant output often contains XML/custom-element examples that match the tag heuristic.
+  const text = t.parts.filter((p) => p.kind === "text").flatMap((p) =>
+    t.role === "user" ? splitInjected(p.text) : [{ kind: "said" as const, text: p.text }],
+  );
   const tools = t.parts.filter((p) => p.kind === "tool");
   return (
     <div
@@ -564,9 +568,14 @@ function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolea
       style={hit ? { background: "color-mix(in srgb, var(--primary) 6%, transparent)" } : undefined}
     >
       {!phone && <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? (sender ?? "You") : "Agent"} · {time(t.at)}</span>}
-      {text.map((p, i) => (
+      {text.map((p, i) => p.kind === "injected" ? (
+        <details key={i} className="w-full min-w-0 rounded-lg border border-border px-3 py-2 text-[12px] text-muted-foreground">
+          <summary className="cursor-pointer">Context: {p.tag.replace(/[_-]/g, " ")}</summary>
+          <pre className="m-0 mt-2 whitespace-pre-wrap break-words font-mono">{p.text}</pre>
+        </details>
+      ) : (
         <p key={i} className={cx("m-0 leading-[1.55]", t.role === "user" && "max-w-[85%] rounded-2xl bg-message-surface px-3.5 py-2.5")}>
-          {p.kind === "text" && p.text}
+          {p.text}
         </p>
       ))}
       {tools.map((p, i) => (
