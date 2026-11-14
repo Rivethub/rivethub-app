@@ -107,6 +107,10 @@ export interface MemoryClient {
   modelJobs(): Promise<ModelJob[]>;
 
   hubs(): Promise<Hub[]>;
+  /** Membership and sharing defaults from this hub, independent of cloud account settings. */
+  me?(): Promise<import("./domain.js").Me>;
+  /** Operations backed by this client. Absence means no tag controls. */
+  tagOperations?(): Promise<("add" | "accept" | "reject" | "remove")[]>;
   account(): Promise<Account>;
   /** Who is signed in, and the spaces they can share a session with. */
   me(): Promise<Me>;

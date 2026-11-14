@@ -2,7 +2,7 @@ import { longDay, localDay } from "@rivethub/client-runtime/format";
 import type { SessionSummaryRow } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import { useShareClient } from "../client/context";
-import { useSessions } from "../client/queries";
+import { useMe, useSessions } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Frame, MainSidebar } from "../components/shell";
 import { SampleBadge } from "../components/ui";
@@ -28,7 +28,9 @@ export function SharedPage() {
   const phone = useIsPhone();
   const share = useShareClient();
   const list = useSessions({ view: "all" });
-  const spaces = bySpace(list.data?.items ?? []);
+  const me = useMe();
+  const grouped = bySpace(list.data?.items ?? []);
+  const spaces = (me.data?.spaces ?? []).map((space) => ({ id: space.id, space: space.name, items: grouped.find((g) => g.space === space.id)?.items ?? [] }));
   return (
     <Frame sidebar={<MainSidebar />}>
       {phone && <MobileBack to="/" label="Today" />}
@@ -48,14 +50,14 @@ export function SharedPage() {
                 People in the space, and their agents, can find the session. It stays where it is, and you can make it private again.
               </span>
             </div>
-            {list.isPending ? null : spaces.length === 0 ? (
+            {me.isError ? <p role="alert">Spaces could not be read from the hub.</p> : list.isPending || me.isPending ? null : spaces.length === 0 ? (
               <p className="m-0 rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.5] text-muted-foreground">
-                Nothing is shared with a space yet. Open a session and change <span className="text-foreground">Shared with</span> on its right-hand panel.{" "}
+                Spaces are set up on the hub. Open a session and change <span className="text-foreground">Shared with</span> on its right-hand panel.{" "}
                 <Link to="/sessions">Open Sessions</Link>
               </p>
             ) : (
               spaces.map((g) => (
-                <div key={g.space} className={card}>
+                <div key={g.id} className={card}>
                   <span className="flex items-baseline gap-2">
                     <span className="font-semibold">{g.space}</span>
                     <span className="text-[12px] text-muted-foreground">{g.items.length} {g.items.length === 1 ? "session" : "sessions"}</span>

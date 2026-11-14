@@ -484,6 +484,8 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     },
     modelJobs: () => wait(data.modelJobs),
     hubs: () => wait(data.hubs),
+    me: () => wait({ user: "sample", spaces: [{ id: "household", kind: "household", name: "household" }], settings: { defaultVisibility: "private", chosen: true } }),
+    tagOperations: () => wait(["add", "accept", "reject", "remove"]),
     account: () => wait(account),
     me: () => wait({ user: "you", spaces: [{ id: "household", kind: "household", name: "Household" }] }),
     async updateAccount(patch) {

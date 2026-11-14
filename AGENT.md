@@ -45,6 +45,9 @@ The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entit
 
 ## Gotchas
 
+- Read membership spaces from the hub through the shared client; never invent space names or infer membership from sessions.
+- Offer no control without a live route; never send a live write to sample data.
+
 - Descriptive wire values are open; preserve raw labels with a plain UI fallback, and drop unusable list rows with a warning. Keep action/security discriminants strict.
 - `owner` is present only for a teammate’s session; retain it through mapping, attribute prompts to them, and hide owner-only controls.
 

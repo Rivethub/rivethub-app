@@ -138,7 +138,7 @@ describe("a session received from someone else", () => {
   it("opens it", async () => {
     const { client, calls } = rh({ "GET /api/sessions": { items: [received] }, [`GET /api/sessions/${encodeURIComponent(received.id)}`]: { ...received, cwd: "/tmp/x", changed: [], entities: [], tags: [] } });
     expect(await client.methods.session!(received.id as SessionId)).toMatchObject({ harness: "shared", origin: { author: "phil" }, cwd: "/tmp/x" });
-    expect(calls.at(-1)!.path).toBe(`/api/sessions/${encodeURIComponent(received.id)}`);
+    expect(calls.find((c) => c.path === `/api/sessions/${encodeURIComponent(received.id)}`)?.method).toBe("GET");
   });
 
   it("retains an unfamiliar verification value and the sender", async () => {

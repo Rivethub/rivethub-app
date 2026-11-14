@@ -43,7 +43,8 @@ const unreachable = (error: unknown) => error instanceof RouteMissingError || er
 
 /**
  * Live where the runtime answers, sample everywhere else. A missing route or an unreachable runtime
- * falls back to the sample world for that call and never reaches the UI as an error.
+ * falls back to the sample world for reads. Once a write is sent to a live route, its failure reaches the UI.
+ * Membership and tags always use the hub directly.
  */
 export function createClient(options: ClientOptions): MemoryClient {
   const sample = createSampleClient();
@@ -71,8 +72,7 @@ export function createClient(options: ClientOptions): MemoryClient {
         if (!(await live(capability))) return fromSample();
         const outcome = await settle(liveMethod(...args));
         if (outcome.ok) return outcome.value;
-        if (!unreachable(outcome.error)) throw outcome.error;
-        return fromSample();
+        throw outcome.error;
       }
       // A read goes out at once. If it answers, that is the capability's proof of life, and no probe asks the
       // same route a second time. If the route is missing or the hub cannot be reached, the sample world
@@ -164,7 +164,10 @@ export function createClient(options: ClientOptions): MemoryClient {
       }
       for (const id of ids) trashed.delete(id);
     },
-    tag: sample.tag,
+    // These calls must never substitute sample membership or pretend a hub write succeeded.
+    me: rh.methods.me!,
+    tagOperations: rh.methods.tagOperations!,
+    tag: rh.methods.tag!,
 
     search: choose("search", "search"),
 

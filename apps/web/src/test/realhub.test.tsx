@@ -201,3 +201,102 @@ describe("Tags", () => {
     expect(screen.getByText("project: rivethub")).toBeInTheDocument();
   });
 });
+
+describe("Session controls match the hub", () => {
+  const detail: SessionDetail = { ...row("s-controls", "Check controls", 3, { visibility: { kind: "space", space: "space-1" } }), changed: [], entities: [], tags: [] };
+  const membership = { user: "phil", spaces: [{ id: "space-1", kind: "team", name: "Engineering" }, { id: "space-2", kind: "compartment", name: "Research" }], settings: { defaultVisibility: "private", chosen: true } };
+
+  it("lists exactly membership spaces by name and marks the current space", async () => {
+    renderWith("/sessions/s-controls", () => ({ session: async () => detail, me: async () => membership }));
+    const picker = await screen.findByRole("combobox", { name: "Shared with" });
+    expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual(["Private", "Engineering", "Research"]);
+    expect(picker).toHaveValue("space:space-1");
+    expect(within(picker).queryByText("household")).not.toBeInTheDocument();
+  });
+
+  it("offers household only if the hub returns it", async () => {
+    renderWith("/sessions/s-controls", () => ({ session: async () => detail, me: async () => ({ ...membership, spaces: [{ id: "h", kind: "household", name: "household" }] }) }));
+    expect(await screen.findByRole("option", { name: "household" })).toHaveValue("space:h");
+  });
+
+  it("explains private sessions without a dropdown when there are no spaces", async () => {
+    renderWith("/sessions/s-controls", () => ({ session: async () => ({ ...detail, visibility: { kind: "private" } }), me: async () => ({ ...membership, spaces: [] }) }));
+    expect(await screen.findByText("Private. Spaces are set up on the hub.")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Shared with" })).not.toBeInTheDocument();
+  });
+
+  it("calls tag and displays the hub's failure", async () => {
+    const calls: unknown[][] = [];
+    const { user } = renderWith("/sessions/s-controls", () => ({
+      session: async () => detail,
+      tagOperations: async () => ["add"],
+      tag: async (...args) => { calls.push(args); throw new Error("not your session"); },
+    }));
+    await user.click(await screen.findByRole("button", { name: "+ tag" }));
+    await user.type(screen.getByRole("textbox", { name: "New tag, as key: value" }), "project:e2e{Enter}");
+    expect(await screen.findByText("The tag was not changed: not your session.")).toHaveAttribute("role", "alert");
+    expect(calls).toEqual([["s-controls", "project", "e2e", "add"]]);
+  });
+
+  it("offers no tag controls when the client has no supported operations", async () => {
+    renderWith("/sessions/s-controls", () => ({ session: async () => ({ ...detail, tags: [{ key: "project", value: "e2e", state: "suggested" }] }), tagOperations: async () => [] }));
+    await screen.findByRole("heading", { name: /Check controls/ });
+    expect(screen.queryByRole("button", { name: "+ tag" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Accept.*e2e/ })).not.toBeInTheDocument();
+  });
+
+  it("renders a title as plain text for a tool without rename", async () => {
+    renderWith("/sessions/s-controls", (c) => ({ session: async () => detail, harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capabilities: { renameSession: false } })) }));
+    const title = await screen.findByRole("heading", { name: /Check controls/ });
+    expect(within(title).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("keeps branch and leaf paragraphs outside their metadata rows", async () => {
+    const leaf = { level: "leaf" as const, text: "Full leaf paragraph", messageRange: [1, 3] as [number, number], children: [] };
+    const { user } = renderWith("/sessions/s-controls?tab=summary", () => ({
+      session: async () => ({ ...detail, memoryState: "summarized" }),
+      summaryTree: async () => ({ level: "root", text: "Root", messageRange: [1, 3], children: [{ level: "branch", text: "Full branch paragraph", messageRange: [1, 3], children: [leaf] }] }),
+    }));
+    const paragraph = await screen.findByText("Full branch paragraph");
+    const branch = screen.getByRole("button", { name: /Branch.*Full branch paragraph/ });
+    const metadata = within(branch).getByText("Branch").parentElement!;
+    expect(metadata).not.toContainElement(paragraph);
+    expect(metadata).toHaveTextContent("msgs 1–3");
+    expect(branch).toHaveAttribute("aria-expanded", "true");
+    const leafParagraph = await screen.findByText("Full leaf paragraph");
+    expect(leafParagraph.previousElementSibling).toHaveTextContent("Leaf · 1–3");
+    expect(leafParagraph.parentElement).not.toHaveClass("md:grid");
+  });
+});
+
+it("allows an explicitly supported rename and keeps the hub's refusal reason", async () => {
+  const detail: SessionDetail = { ...row("s-rename", "Original title", 0), changed: [], entities: [], tags: [] };
+  const { user } = renderWith("/sessions/s-rename", (c) => ({
+    session: async () => detail,
+    harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capabilities: { renameSession: true } })),
+    renameSession: async () => { throw new Error("the session store is locked"); },
+  }));
+  await user.click(await screen.findByRole("button", { name: /Session title: Original title/ }));
+  const input = screen.getByRole("textbox", { name: "Session title" });
+  await user.clear(input);
+  await user.type(input, "New title{Enter}");
+  expect(await screen.findByText("The title was not changed: the session store is locked.")).toHaveAttribute("role", "alert");
+});
+
+it("uses hub membership names in Sharing settings", async () => {
+  renderWith("/settings/sharing", () => ({ me: async () => ({ user: "phil", spaces: [{ id: "opaque-id", kind: "team", name: "Engineering" }], settings: { defaultVisibility: "private", chosen: true } }) }));
+  expect(await screen.findByText("Engineering")).toBeInTheDocument();
+  expect(screen.queryByText("household")).not.toBeInTheDocument();
+});
+
+it("groups Shared sessions under membership names, including spaces with no sessions", async () => {
+  renderWith("/shared", () => ({
+    me: async () => ({ user: "phil", spaces: [{ id: "opaque-id", kind: "team", name: "Engineering" }, { id: "empty", kind: "team", name: "Research" }], settings: { defaultVisibility: "private", chosen: true } }),
+    sessions: async () => ({ items: [row("s-share", "Shared work", 3, { visibility: { kind: "space", space: "opaque-id" } })] }),
+  }));
+  expect(await screen.findByText("Engineering")).toBeInTheDocument();
+  expect(screen.getByText("Research")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /Shared work/ })).toBeInTheDocument();
+  expect(screen.queryByText("household")).not.toBeInTheDocument();
+  expect(screen.queryByText("opaque-id")).not.toBeInTheDocument();
+});

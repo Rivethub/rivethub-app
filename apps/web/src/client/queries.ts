@@ -122,3 +122,6 @@ export const useSetPinned = () =>
   );
 export const useRetryFlagged = () => useWrite((c, id: string) => (c.upkeep ? c.upkeep.retry(id) : Promise.resolve()), () => [["upkeep"]]);
 export const useDismissFlagged = () => useWrite((c, id: string) => (c.upkeep ? c.upkeep.dismiss(id) : Promise.resolve()), () => [["upkeep"]]);
+
+export const useMe = () => q(["me"], (c) => c.me ? c.me() : Promise.resolve(null));
+export const useTagOperations = () => q(["tag-operations"], (c) => c.tagOperations ? c.tagOperations() : Promise.resolve([]));

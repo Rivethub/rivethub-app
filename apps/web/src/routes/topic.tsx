@@ -1,5 +1,6 @@
+import { VisibilityName } from "../components/visibility";
 import { dayLabel, shortDate, time, whenLabel } from "@rivethub/client-runtime/format";
-import type { TopicArticle, TopicId, Visibility } from "@rivethub/contracts";
+import type { TopicArticle, TopicId } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useClient } from "../client/context";
@@ -17,7 +18,6 @@ import { useIsPhone } from "../lib/media";
 const route = getRouteApi("/topics/$topicId");
 type TabId = "overview" | "sessions" | "history";
 
-export const visibilityLabel = (v: Visibility) => (v.kind === "private" ? "Private" : v.space);
 
 /** Creates a top-level topic by name and opens it. Shown only where the client can create topics. */
 export function NewTopic() {
@@ -147,7 +147,7 @@ export function TopicPage() {
         <>
           <ArticleBar crumbs={<Crumbs items={t!.path.map((p, i) => (i < t!.path.length - 1 ? { label: p.name, to: `/topics/${p.id}` } : { label: p.name }))} />}>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ tab: id })} />
-            <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this topic">{visibilityLabel(t!.visibility)}</span>
+            <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this topic"><VisibilityName value={t!.visibility} /></span>
             <PinButton subject={{ kind: "topic", id: t!.id, title: t!.name }} />
           </ArticleBar>
           <ArticleBody side={tab === "overview" ? <TopicSide t={t!} /> : null}>
@@ -277,7 +277,7 @@ function TopicSide({ t }: { t: TopicArticle }) {
     { k: "Inside", v: parent ? <Link to="/topics/$topicId" params={{ topicId: parent.id }}>{parent.name}</Link> : <span className="text-muted-foreground">Top level</span> },
     { k: "Folder", v: <EditableText label="Folder" mono value={t.folder ?? ""} placeholder="No folder" onSave={(v) => save({ folder: v || null })} /> },
     { k: "Status", v: t.status === "open" ? "Open" : "Closed" },
-    { k: "Shared", v: visibilityLabel(t.visibility) },
+    { k: "Shared", v: <VisibilityName value={t.visibility} /> },
   ];
   return (
     <SidePanel label="About this topic">

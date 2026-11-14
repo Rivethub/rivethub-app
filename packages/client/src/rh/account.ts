@@ -8,6 +8,7 @@ const mapAccount = (account: wire.AccountWire): Account =>
 
 export function accountApi(http: Http) {
   return {
+    me: () => http.get("/api/me", wire.me),
     async account(): Promise<Account> {
       return mapAccount(await http.get("/api/account", wire.account));
     },

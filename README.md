@@ -45,7 +45,7 @@ Two things the app does because of how `rh` 0.8 behaves, both in `packages/clien
 
 - **A session's messages.** The detailed transcript comes from the tool's own files, which exist only on the machine that ran the session, and `rh` answers an empty transcript elsewhere. The client then reads what memory stored, by browsing the session's time span (`storedTranscript`), discovering its capturing agent from matching messages and then filtering later pages by that name. `rh` has no route that reads one session's stored messages, so the client pages through memory with a 100-page cap and marks an incomplete read.
 - **An entity's article.** `/api/entities/{id}` carries the page's summary and facts but not its article. Every entity is also a topic, so the client reads the article from `/api/topics/{id}/page` and joins the two. The entity worker ends its article with a "Current facts" list; the page drops that list when the facts themselves are shown.
-- **Renaming.** `rh` renames only Claude Code and Grok Build sessions, in the tool's own store. For any other session the app says the title was not changed.
+- **Renaming.** `rh` renames only Claude Code and Grok Build sessions, in the tool's own store. The app offers title editing only when the hub explicitly advertises rename support for the tool. rh 0.8.3 does not advertise it, so its session titles are read-only.
 
 The desktop app:
 
