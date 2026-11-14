@@ -296,9 +296,9 @@ export function Connections({ phone }: { phone: boolean }) {
             <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
               <thead>
                 <tr className="bg-sidebar text-[12px] text-muted-foreground">
-                  <th scope="col" className="w-[28%] px-3.5 py-2 font-normal">Harness</th>
-                  <th scope="col" className="w-[30%] px-3 py-2 font-normal">Capture</th>
-                  <th scope="col" className="px-3 py-2 font-normal">Recall</th>
+                  <th scope="col" className="px-3.5 py-2 font-normal">Harness</th>
+                  <th scope="col" className="w-[240px] px-3 py-2 font-normal">Capture</th>
+                  <th scope="col" className="w-[150px] px-3 py-2 font-normal">Recall</th>
                   <th scope="col" className="w-[150px] px-3.5 py-2"><span className="sr-only">Action</span></th>
                 </tr>
               </thead>
