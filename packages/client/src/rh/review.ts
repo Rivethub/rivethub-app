@@ -13,7 +13,8 @@ const mapSource = (source: NonNullable<wire.ReviewWire["options"]>[number]["sour
 export function mapReviewItem(item: wire.ReviewWire): ReviewItem {
   return strip({
     id: item.id,
-    group: item.group,
+    group: ["conflict", "fact", "filing", "tag", "tidy", "new-entity"].includes(item.group) ? item.group : "tidy",
+    rawGroup: ["conflict", "fact", "filing", "tag", "tidy", "new-entity"].includes(item.group) ? undefined : item.group,
     subject: mapSubject(item.subject),
     text: item.text,
     before: item.before,

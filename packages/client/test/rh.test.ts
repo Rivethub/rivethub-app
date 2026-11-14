@@ -196,17 +196,15 @@ describe("search", () => {
 });
 
 describe("the boundary", () => {
-  it("rejects a malformed body with a typed error naming the field", async () => {
+  it("drops an unusable topic instead of failing its neighbors", async () => {
     const { client } = rh({ "GET /api/topics": { topics: [{ id: "t-a", name: 5 }] } });
-    const failure = await client.topicTree!().catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(MalformedResponseError);
-    expect((failure as MalformedResponseError).issues).toContain("topics.0.name");
+    expect(await client.topicTree!()).toEqual([]);
   });
 
-  it("rejects an unparseable time", async () => {
+  it("drops a row with an unparseable time", async () => {
     const bad = { topics: [{ ...body.topicsBody.topics[0], lastActive: "not a time" }] };
     const { client } = rh({ "GET /api/topics": bad });
-    await expect(client.topicTree!()).rejects.toBeInstanceOf(MalformedResponseError);
+    expect(await client.topicTree!()).toEqual([]);
   });
 
   it("tells a missing route from a missing resource", async () => {

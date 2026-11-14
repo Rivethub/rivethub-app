@@ -99,7 +99,7 @@ export function SessionRows({ sessions, detail = "gist" }: { sessions: SessionSu
           >
             <span className="text-[12px] text-muted-foreground">{dayLabel(s.startedAt)}</span>
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="font-medium">{s.title}</span>
+              <span className="font-medium">{s.title}</span>{s.owner && <span className="text-[12px] text-info">{s.owner}’s session</span>}
               <span className="truncate text-[13px] text-muted-foreground">{detail === "topic" ? (s.topic?.path.join(" › ") ?? "Unfiled") : s.gist}</span>
             </span>
             <span className="justify-self-end font-mono text-[11px] text-muted-foreground">{s.harness}</span>

@@ -47,7 +47,10 @@ export const count = (n: number) => n.toLocaleString("en-US");
 
 export const subjectKindLabel: Record<SubjectRef["kind"], string> = { topic: "Topic", entity: "Entity", session: "Session" };
 
-export const entityTypes: Record<EntityType, { one: string; many: string }> = {
+const knownEntityTypes: Record<EntityType, { one: string; many: string }> = {
+  organization: { one: "Organization", many: "Organizations" },
+  project: { one: "Project", many: "Projects" },
+  place: { one: "Place", many: "Places" },
   machine: { one: "Machine", many: "Machines" },
   service: { one: "Service", many: "Services" },
   person: { one: "Person", many: "People" },
@@ -59,6 +62,10 @@ export const entityTypes: Record<EntityType, { one: string; many: string }> = {
   domain: { one: "Domain", many: "Domains" },
   database: { one: "Database", many: "Databases" },
 };
+
+export const entityTypes = new Proxy(knownEntityTypes, {
+  get: (target, key: string) => Object.hasOwn(target, key) ? target[key] : { one: key, many: "Other" },
+});
 
 /** The label on a review item's main button. */
 export function primaryAction(item: ReviewItem): string {
@@ -74,6 +81,7 @@ export function primaryAction(item: ReviewItem): string {
     case "tag":
     case "tidy":
       return "Apply";
+    default: return "Review";
   }
 }
 
@@ -102,5 +110,27 @@ export function originNote(origin: SessionOrigin): string {
   if (origin.verification === "verified") return `${who} shared this session with you. It was signed with a key you trust.`;
   if (origin.verification === "unsigned") return `${who} shared this session with you. It was not signed, so the sender is not confirmed.`;
   if (origin.verification === "unknown_key") return `${who} shared this session with you. It was signed with a key you have not trusted yet, so the sender is not confirmed.`;
-  return `${who} shared this session with you.`;
+  return `${who} shared this session with you.${origin.verification ? ` Verification: ${origin.verification}.` : ""}`;
+}
+
+const ACRONYMS = new Set(["ip", "os", "gpu", "gpus", "cpu", "cpus", "url", "ssh", "dns", "id", "api", "ram", "vm", "pr", "ui", "mcp", "tls", "nfs"]);
+
+/**
+ * A fact's key as a label. The entity worker writes keys as kebab-case attribute names and files
+ * one-off facts under `other-`: `ip` reads "IP", `other-incident-silent-stop` reads "Incident silent stop".
+ * A key a person typed with capitals or spaces is left as they wrote it.
+ */
+export function factLabel(key: string): string {
+  if (/[A-Z ]/.test(key)) return key;
+  const words = key.replace(/^other[-_]/, "").split(/[-_]+/).filter(Boolean);
+  if (!words.length) return key;
+  return words.map((w, i) => (ACRONYMS.has(w) ? w.replace(/s$/, "").toUpperCase() + (w.endsWith("s") && w.length > 2 && ACRONYMS.has(w.slice(0, -1)) ? "s" : "") : i === 0 ? w[0]!.toUpperCase() + w.slice(1) : w)).join(" ");
+}
+
+
+/** Label only fact keys, leaving the value and the stored review text intact. */
+export function reviewText(item: Pick<ReviewItem, "group" | "text">): string {
+  if (item.group !== "fact" && item.group !== "conflict") return item.text;
+  const colon = item.text.indexOf(":");
+  return colon < 0 ? factLabel(item.text) : factLabel(item.text.slice(0, colon)) + item.text.slice(colon);
 }

@@ -1,5 +1,6 @@
 import type { FlaggedGroup, IsoTime, MemoryStats, UpkeepClient, WorkerId } from "@rivethub/contracts";
 import { z } from "zod";
+import { rows } from "../tolerant.js";
 import { createHttp, type AuthSeam, type FetchLike } from "../http.js";
 import { timeSchema } from "../rh/wire.js";
 
@@ -25,14 +26,13 @@ const statsWire = z.object({
 
 const upkeepWire = z.object({
   filing: z.object({ categorizer: count, you: count, uncategorized: count, leftOut: count, correctionsLastWeek: count }),
-  wiki: z.object({ topicPages: count, entityTypes: z.array(z.object({ name: z.string(), entities: count })).default([]), loosePages: count }),
+  wiki: z.object({ topicPages: count, entityTypes: rows(z.object({ name: z.string(), entities: count })).default([]), loosePages: count }),
   workers: z.object({ embedder: activity, summarizer: activity, categorizer: activity, wikiBuilder: activity }),
   pendingProposals: count,
 });
 
 const flaggedWire = z.object({
-  groups: z
-    .array(z.object({ task: z.string(), cause: z.string(), count, lastFailedAt: timeSchema, sample: z.object({ id: z.union([z.string(), z.number()]).transform(String) }) }))
+  groups: rows(z.object({ task: z.string(), cause: z.string(), count, lastFailedAt: timeSchema, sample: z.object({ id: z.union([z.string(), z.number()]).transform(String) }) }))
     .default([]),
 });
 

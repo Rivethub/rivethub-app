@@ -9,8 +9,6 @@ const PAGE_SIZE = 50;
 /** The harness id given to a session that was received from someone else, which no tool on this hub ran. */
 export const SHARED_HARNESS = "shared";
 
-const VERIFICATIONS = ["verified", "unsigned", "unknown_key"] as const;
-const verification = (value: string | undefined) => VERIFICATIONS.find((known) => known === value);
 
 type RowFields = Omit<wire.CatalogRow, "visibility" | "parentId" | "childCount"> & Partial<Pick<wire.CatalogRow, "parentId" | "childCount">>;
 
@@ -20,7 +18,8 @@ export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRo
     id: sessionId(row.id),
     title: displayTitle(row.title, row.id),
     harness: row.harness ?? SHARED_HARNESS,
-    origin: row.origin ? strip<SessionOrigin>({ author: row.origin.author, verification: verification(row.origin.verification) }) : undefined,
+    origin: row.origin ? strip<SessionOrigin>({ author: row.origin.author, verification: row.origin.verification }) : undefined,
+    owner: row.owner,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     messageCount: row.messageCount,
@@ -28,7 +27,8 @@ export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRo
     visibility,
     kept: row.kept,
     trashed: row.trashed,
-    memoryState: row.memoryState,
+    memoryState: knownMemoryState(row.memoryState),
+    memoryStateRaw: ["capturing", "queued", "summarized", "flagged"].includes(row.memoryState) ? undefined : row.memoryState,
     gist: row.gist,
     parentId: row.parentId === undefined ? undefined : sessionId(row.parentId),
     childCount: row.childCount,
@@ -115,4 +115,8 @@ export function catalogApi(http: Http) {
 
     unkeep: (id: SessionId) => http.send("DELETE", `/api/sessions/${segment(id)}/keep`),
   };
+}
+
+function knownMemoryState(state: string): SessionSummaryRow["memoryState"] {
+  switch (state) { case "capturing": case "summarized": case "flagged": return state; default: return "queued"; }
 }

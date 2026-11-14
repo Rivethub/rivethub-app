@@ -56,6 +56,8 @@ export function Tags({ tags, onAccept, onReject }: { tags: TagAssignment[]; onAc
       {tags.map((t) =>
         t.state === "applied" ? (
           <span key={`${t.key}:${t.value}`} className="rounded-md border border-border px-2 py-0.5">{tagLabel(t)}</span>
+        ) : t.state !== "suggested" ? (
+          <span key={`${t.key}:${t.value}`} className="rounded-md border border-border px-2 py-0.5">{tagLabel(t)} · {t.state}</span>
         ) : (
           <span key={`${t.key}:${t.value}`} className="inline-flex items-center gap-1 rounded-md border border-dashed border-warning px-2 py-0.5 text-warning">
             {tagLabel(t)}

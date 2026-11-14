@@ -77,7 +77,7 @@ export interface MarksResult {
   learned?: string;
 }
 
-export type ShareServerKind = "cloud" | "team";
+export type ShareServerKind = "cloud" | "team" | (string & {});
 
 export interface ShareServer {
   origin: string;
@@ -90,7 +90,7 @@ export interface ShareServer {
 export interface ShareServers {
   servers: ShareServer[];
   /** `keyring` or `file`: where this rh keeps share tokens. */
-  tokenStore: "keyring" | "file";
+  tokenStore: "keyring" | "file" | (string & {});
 }
 
 export type ShareLoginRequest = { kind: "cloud"; origin: string } | { kind: "team"; origin: string; token: string };
@@ -121,14 +121,14 @@ export interface ShareKey {
   fingerprint: string;
 }
 
-export type ShareVerification = "verified" | "unsigned" | "unknown_key";
+export type ShareVerification = "verified" | "unsigned" | "unknown_key" | (string & {});
 export type ReceiveDecision = "import" | "skip" | "hold_spans";
 
 export interface FindingRow {
   event?: string;
   field: string;
   rule: string;
-  family: "secret" | "injection";
+  family: "secret" | "injection" | (string & {});
   kind: string;
   count: number;
   /** An excerpt with the finding between `>>` and `<<` and hidden characters written as `<U+XXXX>`. */

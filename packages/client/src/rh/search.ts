@@ -58,6 +58,7 @@ export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof
     const text = clip(hit.content);
     passages.push({
       id: hit.id,
+      ...(hit.owner === undefined ? {} : { owner: hit.owner }),
       session: { id: sessionId(hit.sessionId), title: hit.title ?? text.slice(0, 60) },
       source: hit.source === "summary" ? "summary" : "message",
       text,

@@ -257,7 +257,7 @@ function TopicHistory({ t }: { t: TopicArticle }) {
       {rows.map((r, i) => (
         <li key={i} className="grid grid-cols-[60px_70px_minmax(0,1fr)] items-baseline gap-2.5">
           <span className="text-[12px] text-muted-foreground">{shortDate(r.at)}</span>
-          <span className="text-[11px] font-semibold" style={{ color: changeKind[r.kind].color }}>{changeKind[r.kind].label}</span>
+          <span className="text-[11px] font-semibold" style={{ color: changeKind[r.kind]!.color }}>{changeKind[r.kind]!.label}</span>
           <span className="leading-[1.5]">
             {r.text}{" "}
             {r.source && <Link to="/sessions/$sessionId" params={{ sessionId: r.source.id }} className="text-[12px]">{r.source.title}</Link>}

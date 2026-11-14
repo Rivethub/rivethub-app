@@ -175,7 +175,7 @@ export function SearchPage() {
                     <li key={p.id}>
                       <Link to="/sessions/$sessionId" params={{ sessionId: p.session.id }} search={p.source === "summary" ? { tab: "summary" } : { tab: "transcript" }} className="group flex flex-col gap-1.5 rounded-xl bg-card px-3.5 py-3 text-foreground hover:bg-raised hover:no-underline">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                          <span className="rounded-md bg-raised px-1.5 py-px group-hover:bg-card">{p.source === "summary" ? "Summary" : p.role ? roleLabel[p.role] : "Message"}</span>
+                          <span className="rounded-md bg-raised px-1.5 py-px group-hover:bg-card">{p.owner && `${p.owner}’s session · `}{p.source === "summary" ? "Summary" : p.role ? roleLabel[p.role] : "Message"}</span>
                           <span className="min-w-0 truncate font-medium text-foreground">{p.session.title}</span>
                           {p.at && <span>{shortDate(p.at)}, {time(p.at)}</span>}
                           <span className="flex-1" />

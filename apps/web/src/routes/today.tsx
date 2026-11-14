@@ -1,4 +1,4 @@
-import { harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
@@ -78,7 +78,7 @@ function NeedsCard({ item }: { item: ReviewItem }) {
   const decide = useDecide();
   const kind = reviewKindLabel[item.group];
   const primary = item.group === "conflict" && item.options?.[0] ? { kind: "choose" as const, value: item.options[0].value } : { kind: "accept" as const };
-  const label = item.group === "conflict" ? `${item.text}: ${item.options?.map((o) => (o.source ? `${o.label} (${shortDate(o.source.at)})` : o.label)).join(" or ")}?` : item.text;
+  const label = item.group === "conflict" ? `${reviewText(item)}: ${item.options?.map((o) => (o.source ? `${o.label} (${shortDate(o.source.at)})` : o.label)).join(" or ")}?` : reviewText(item);
   return (
     <article
       className="flex flex-col gap-2 rounded-[10px] border bg-card p-3"
@@ -179,7 +179,7 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
                 </span>
                 {changes.map((c, i) => (
                   <span key={i} className="flex flex-wrap items-baseline gap-2 py-0.5 leading-[1.5]">
-                    <span className="w-[62px] flex-none text-[11px] font-semibold" style={{ color: changeKind[c.kind].color }}>{changeKind[c.kind].label}</span>
+                    <span className="w-[62px] flex-none text-[11px] font-semibold" style={{ color: changeKind[c.kind]!.color }}>{changeKind[c.kind]!.label}</span>
                     <Link to={subjectHref(c.subject)} className="font-medium">{c.subject.title}</Link>
                     <span className="min-w-40 flex-1">{c.text}</span>
                   </span>
@@ -218,7 +218,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
                   <KindTag {...reviewKindLabel[item.group]} />
                   <span className="text-[14px] font-semibold">{item.subject.title}</span>
                 </span>
-                <span className="text-[14px] leading-[1.4]">{item.group === "conflict" ? `${item.text}: ${item.options?.map((o) => o.label).join(" or ")}?` : item.text}</span>
+                <span className="text-[14px] leading-[1.4]">{item.group === "conflict" ? `${reviewText(item)}: ${item.options?.map((o) => o.label).join(" or ")}?` : reviewText(item)}</span>
               </Link>
             ))}
           </div>
@@ -236,7 +236,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
             <span title={session.title} className="line-clamp-2 text-[15px] font-semibold">{session.title}</span>
             {changes.slice(0, 2).map((c, i) => (
               <span key={i} className="flex gap-2 text-[14px] leading-[1.45]">
-                <span className="w-[58px] flex-none pt-0.5 text-[11px] font-semibold" style={{ color: changeKind[c.kind].color }}>{changeKind[c.kind].label}</span>
+                <span className="w-[58px] flex-none pt-0.5 text-[11px] font-semibold" style={{ color: changeKind[c.kind]!.color }}>{changeKind[c.kind]!.label}</span>
                 <span>{c.text}</span>
               </span>
             ))}

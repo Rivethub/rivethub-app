@@ -59,7 +59,7 @@ function groupByDay(items: SessionSummaryRow[]) {
 }
 
 function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: View; active: boolean; phone?: boolean }) {
-  const state = stateNote[s.memoryState];
+  const state = (s.memoryStateRaw ? { label: s.memoryStateRaw, long: s.memoryStateRaw, color: "var(--muted-foreground)" } : stateNote[s.memoryState]) ?? (s.memoryState === "summarized" ? undefined : { label: s.memoryState, color: "var(--muted-foreground)", long: s.memoryState });
   const ref = useRef<HTMLAnchorElement>(null);
   useEffect(() => {
     if (active) ref.current?.scrollIntoView?.({ block: "nearest" });
@@ -80,6 +80,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="line-clamp-2 font-medium">{s.title}</span>
+          {s.owner && <KindTag label={`${s.owner}’s session`} color="var(--info)" />}
           {s.origin && <KindTag label={originLabel(s.origin)} color="var(--info)" />}
           {s.kept && <KindTag label="Kept" color="var(--primary)" />}
           {state && <KindTag label={state.label} color={state.color} />}
@@ -296,6 +297,7 @@ export function SessionPage() {
           <>
             <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-4 pt-1 pb-3 text-[15px]">
               <h1 className="m-0 line-clamp-4 font-serif text-[25px] font-semibold">{d!.title}</h1>
+              {d!.owner && <KindTag label={`${d!.owner}’s session`} color="var(--info)" />}
               {d!.origin && <p className="m-0 text-[13px] text-muted-foreground">{originNote(d!.origin)}</p>}
               <SampleBadge capability="sessions" />
               <details className="rounded-[14px] border border-border bg-card">
@@ -307,7 +309,7 @@ export function SessionPage() {
               </details>
               <StateNote d={d!} />
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
-              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} phone />}
+              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} phone />}
             </div>
             <PhoneActions d={d!} onTrash={doTrash} onRestore={() => restore.mutate([d!.id])} />
           </>
@@ -327,17 +329,19 @@ export function SessionPage() {
             </span>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined })} />
             {canSend && <Link to="/share" search={{ session: d!.id }} className="ml-2 rounded-lg border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-accent hover:no-underline">Share…</Link>}
+            {d!.owner ? <span className="ml-2 text-[13px] text-muted-foreground">This is {d!.owner}’s session. Only they can change it.</span> : <>
             <Button className={canSend ? "" : "ml-2"} aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
             {d!.trashed ? (
               <Button onClick={() => restore.mutate([d!.id])} disabled={restore.isPending}>Restore</Button>
             ) : (
               <Button variant="danger" onClick={doTrash}>Trash</Button>
             )}
+            </>}
           </ArticleBar>
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
             <StateNote d={d!} />
-            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} />}
+            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} />}
           </div>
         </>
       )}
@@ -353,7 +357,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
     <div className="flex min-w-0 flex-col items-start gap-3">
       <div className="flex min-w-0 max-w-full flex-col gap-1.5">
         <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">
-          {d.origin ? (
+          {d.owner || d.origin ? (
             <span className="line-clamp-3" title={d.title}>{d.title}</span>
           ) : (
             <EditableText label="Session title" value={d.title} display={<span className="line-clamp-3" title={d.title}>{d.title}</span>} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
@@ -366,6 +370,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
           {d.endedAt ? `–${time(d.endedAt)}` : ""}{d.messageCountUnknown ? "" : ` · ${plural(d.messageCount, "message")}`}{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="break-all font-mono text-[12px]">{d.cwd}</span>}
         </span>
+        {d.owner && <KindTag label={`${d.owner}’s session`} color="var(--info)" />}
         {d.origin && <span className="text-[13px] text-muted-foreground">{originNote(d.origin)}</span>}
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
       </div>
@@ -404,12 +409,12 @@ function CopyButton({ text, label, className }: { text: string; label: string; c
 
 /** Says why there is no summary to lead with, and what to do about it. */
 function StateNote({ d }: { d: SessionDetail }) {
-  const state = stateNote[d.memoryState];
-  if (!state || hasNoMessages(d)) return null;
+  const state = (d.memoryStateRaw ? { label: d.memoryStateRaw, long: d.memoryStateRaw, color: "var(--muted-foreground)" } : stateNote[d.memoryState]) ?? { label: d.memoryState, long: d.memoryState, color: "var(--muted-foreground)" };
+  if ((!d.memoryStateRaw && d.memoryState === "summarized") || hasNoMessages(d)) return null;
   return (
     <p className="m-0 rounded-lg border border-border px-3 py-2 text-[13px] text-muted-foreground">
       <span style={{ color: state.color }}>{state.long}</span>{" "}
-      {d.memoryState === "capturing" ? "The messages so far are below." : <>Summaries need a model. <Link to="/settings/$section" params={{ section: "connections" }}>Check the models</Link></>}
+      {d.memoryStateRaw ? null : d.memoryState === "capturing" ? "The messages so far are below." : <>Summaries need a model. <Link to="/settings/$section" params={{ section: "connections" }}>Check the models</Link></>}
     </p>
   );
 }
@@ -567,7 +572,7 @@ function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolea
       className={cx("flex scroll-mt-4 flex-col gap-1", t.role === "user" ? "items-end" : "items-stretch", hit && "rounded-lg border-l-2 border-primary py-1 pl-2.5")}
       style={hit ? { background: "color-mix(in srgb, var(--primary) 6%, transparent)" } : undefined}
     >
-      {!phone && <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? (sender ?? "You") : "Agent"} · {time(t.at)}</span>}
+      <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? (sender ?? "You") : "Agent"} · {time(t.at)}</span>
       {text.map((p, i) => p.kind === "injected" ? (
         <details key={i} className="w-full min-w-0 rounded-lg border border-border px-3 py-2 text-[12px] text-muted-foreground">
           <summary className="cursor-pointer">Context: {p.tag.replace(/[_-]/g, " ")}</summary>
@@ -591,7 +596,7 @@ function Changes({ d }: { d: SessionDetail }) {
     <>
       {d.changed.map((c, i) => (
         <span key={i} className="flex gap-2 leading-[1.45]">
-          <span className="w-12 flex-none text-[11px] font-semibold" style={{ color: changeKind[c.kind].color }}>{changeKind[c.kind].label}</span>
+          <span className="w-12 flex-none text-[11px] font-semibold" style={{ color: changeKind[c.kind]!.color }}>{changeKind[c.kind]!.label}</span>
           <span><Link to={subjectHref(c.subject)}>{c.subject.title}</Link> {c.text}</span>
         </span>
       ))}
@@ -614,6 +619,7 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
     create.mutate({ name: trimmed }, { onSuccess: (id) => { place.mutate({ session: d.id, topic: id }); setName(null); onPicked?.(); } });
   };
   // rh files only sessions its own tools ran.
+  if (d.owner) return <span className="text-muted-foreground">This is {d.owner}’s session. Only they can change it.</span>;
   if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Not filed. A session someone shared with you cannot be filed under a topic yet.</span>;
   if (name !== null) {
     return (
@@ -662,6 +668,7 @@ function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; classN
   const set = useSetVisibility();
   const spaces = [...new Set([...(d.visibility.kind === "space" ? [d.visibility.space] : []), "household"])];
   // rh changes who can see only sessions its own tools ran.
+  if (d.owner) return <span className="text-muted-foreground">This is {d.owner}’s session. Only they can change it.</span>;
   if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Private. A session someone shared with you cannot be shared with a space yet.</span>;
   return (
     <label className="flex flex-col gap-1">
@@ -738,7 +745,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
         <Eyebrow>Shared with</Eyebrow>
         <VisibilityPicker d={d} />
         <span className="text-[12px] leading-[1.45] text-muted-foreground">
-          {d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : `Everyone in ${d.visibility.space} can find it. `}
+          {d.owner || d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : `Everyone in ${d.visibility.space} can find it. `}
           {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
         </span>
       </section>
@@ -759,6 +766,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
 function PhoneActions({ d, onTrash, onRestore }: { d: SessionDetail; onTrash: () => void; onRestore: () => void }) {
   const keep = useKeep();
   const [sheet, setSheet] = useState<"file" | "share" | null>(null);
+  if (d.owner) return <p className="px-4 text-muted-foreground">This is {d.owner}’s session. Only they can change it.</p>;
   const btn = "flex min-h-12 flex-col items-center justify-center gap-0.5 border-0 bg-transparent text-[12px]";
   return (
     <div className="grid shrink-0 grid-cols-4 gap-1.5 border-t border-border bg-sidebar px-3 pt-2 pb-[max(env(safe-area-inset-bottom),24px)]">

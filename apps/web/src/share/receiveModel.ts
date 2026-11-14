@@ -87,4 +87,4 @@ export function importChoices(report: ReceiveReport, choices: ReceiveState["choi
 export const acceptsFlagged = (report: ReceiveReport, choices: ReceiveState["choices"]) =>
   report.sessions.some((s) => isFlagged(s) && choices[s.n] === "import");
 
-export const verifiedLabel = (verification: ReceiveReport["verification"]) => (verification === "verified" ? "verified" : "unverified");
+export const verifiedLabel = (verification: ReceiveReport["verification"]) => (verification === "verified" ? "verified" : verification === "unsigned" || verification === "unknown_key" ? "unverified" : verification);
