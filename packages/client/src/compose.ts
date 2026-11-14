@@ -50,10 +50,14 @@ export function createClient(options: ClientOptions): MemoryClient {
   const rh = createRhClient(options);
   /** The first read sent for each capability. Its answer settles whether the capability is live without a probe. */
   const firstRead = new Map<Capability, Promise<Outcome>>();
+  /** Capabilities a read has already been answered for. A later failure on one of these is the hub's own error and is shown, not replaced with sample data. */
+  const proven = new Set<Capability>();
   const probe = (capability: Capability) => rh.live(capability).catch(() => false);
   const live = async (capability: Capability) => {
+    if (proven.has(capability)) return true;
     const read = firstRead.get(capability);
     if (read && (await read).ok) return true;
+    if (proven.has(capability)) return true;
     return probe(capability);
   };
 
@@ -76,8 +80,11 @@ export function createClient(options: ClientOptions): MemoryClient {
       const read = settle(liveMethod(...args));
       if (!firstRead.has(capability)) firstRead.set(capability, read);
       const outcome = await read;
-      if (outcome.ok) return outcome.value;
-      if (unreachable(outcome.error) || !(await probe(capability))) return fromSample();
+      if (outcome.ok) {
+        proven.add(capability);
+        return outcome.value;
+      }
+      if (unreachable(outcome.error) || !(await live(capability))) return fromSample();
       throw outcome.error;
     };
     return call as LiveMethods[K];

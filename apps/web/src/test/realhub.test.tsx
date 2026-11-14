@@ -75,6 +75,35 @@ describe("Sessions on a busy hub", () => {
     expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Summaries need a model/)).not.toBeInTheDocument();
   });
+
+  it("offers older sessions when every session on the loaded page is hidden", async () => {
+    const { user } = renderWith("/sessions", () => ({
+      sessions: async (query) => (query.cursor ? { items: [rows[2]!] } : { items: [rows[0]!, rows[1]!], next: "2" }),
+    }));
+    expect(await screen.findByText(/2 sessions with no messages are hidden/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show older sessions" }));
+    expect(await screen.findByRole("link", { name: /Review the entity worker/ })).toBeInTheDocument();
+  });
+
+  // An older hub lists sessions without counting their messages. Zero then means "not told", not "empty".
+  const uncounted = row("s-old", "Move the backups", 0, { messageCountUnknown: true });
+
+  it("lists a session whose message count the hub did not give", async () => {
+    renderWith("/sessions", () => ({ sessions: async () => ({ items: [uncounted] }) }));
+    const link = await screen.findByRole("link", { name: /Move the backups/ });
+    expect(link).not.toHaveTextContent(/0 messages/);
+    expect(screen.queryByText(/with no messages/)).not.toBeInTheDocument();
+  });
+
+  it("reads the transcript of a session whose message count the hub did not give", async () => {
+    const detail: SessionDetail = { ...uncounted, changed: [], entities: [], tags: [] };
+    renderWith("/sessions/s-old", () => ({
+      session: async () => detail,
+      transcript: async () => [{ index: 0, role: "user", at: now, parts: [{ kind: "text", text: "Where do the backups go now?" }] }],
+    }));
+    expect(await screen.findByText("Where do the backups go now?")).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing was said in this session/)).not.toBeInTheDocument();
+  });
 });
 
 describe("Stats on a busy hub", () => {

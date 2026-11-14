@@ -45,5 +45,7 @@ The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entit
 
 - `rh` sends `degraded` on search as an object (`{reason, effect}`) when no embedding model is set. The wire schema accepts a flag, a string or that object.
 - `/api/share/find` ids are conversation ids, not session ids, and it only searches by text. Sharing from a session seeds that search with the title (or gist, or first message) and matches on tool and start time.
+- `messageCount: 0` is only an empty session when `messageCountUnknown` is absent. A runtime without the session catalog, the trash list and a topic's session list do not count messages and set the flag. Use `hasNoMessages()` from `@rivethub/client-runtime/format`; never test the count on its own.
+- In `compose.ts`, any read that answers puts its capability in `proven`. After that a non-network failure is thrown as the hub's own error even when a probe would fail.
 - A throwaway `rh local` needs a short home path: its Unix socket path is refused when the home directory is deep.
 - Three desktop e2e tests (rejected URL exit code, window bounds and single instance, failed install lock) fail on the rivet-claude box on `main` too, so they are about that machine, not this branch.

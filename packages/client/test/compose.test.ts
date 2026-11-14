@@ -65,6 +65,14 @@ describe("createClient", () => {
     await expect(client.topic("t-a" as TopicId)).rejects.toMatchObject({ name: "HttpError", status: 500 });
   });
 
+  it("marks message counts as unknown on a runtime without the session catalog, so no session reads as empty", async () => {
+    const client = createClient({ baseUrl: "https://rh.test", fetch: fakeRh(liveRoutes).fetch });
+    const { items } = await client.sessions({});
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((row) => row.messageCountUnknown === true)).toBe(true);
+    expect((await client.session(SID)).messageCountUnknown).toBe(true);
+  });
+
   it("keeps UI trash out of live lists without deleting anything on the runtime", async () => {
     const fake = fakeRh(liveRoutes);
     const client = createClient({ baseUrl: "https://rh.test", fetch: fake.fetch });
@@ -123,6 +131,29 @@ describe("first calls do not wait on probes", () => {
     const client = createClient({ baseUrl: "https://rh.test", fetch: rh.fetch });
     const [first] = await client.topicTree();
     await expect(client.topic(first!.id)).resolves.toMatchObject({ id: first!.id });
+  });
+
+  it("keeps a real error real once a read has shown the capability is there, even if the probe would now fail", async () => {
+    // The tree answers once. After that the list route cannot be reached, and the page route answers 500.
+    const inner = fakeRh({
+      "GET /api/topics": body.topicsBody,
+      "GET /api/topics/t-a/page": { status: 500, body: { error: "boom" } },
+      "GET /api/topics/t-a/decisions": { decisions: [] },
+      "GET /api/topics/t-a/sessions": { sessions: [] },
+    });
+    let listUp = true;
+    const fetch: typeof inner.fetch = async (input, init) => {
+      if (!listUp && new URL(input).pathname === "/api/topics") {
+        await tick();
+        throw new TypeError("fetch failed");
+      }
+      return inner.fetch(input, init);
+    };
+    const client = createClient({ baseUrl: "https://rh.test", fetch });
+    expect((await client.topicTree()).map((node) => node.name)).toEqual(["RivetHub", "Home lab"]);
+    listUp = false;
+    await expect(client.topic("t-a" as TopicId)).rejects.toMatchObject({ name: "HttpError", status: 500 });
+    expect((await client.capabilities()).topics).toBe("live");
   });
 
   it("holds a write until its capability is known, and never sends it to a hub without the capability", async () => {

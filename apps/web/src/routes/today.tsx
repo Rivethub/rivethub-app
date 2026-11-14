@@ -1,4 +1,4 @@
-import { localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
@@ -137,7 +137,7 @@ function NeedsCards({ digest }: { digest: TodayDigest }) {
 }
 
 /** A session that captured nothing and changed nothing is not news. Tools open such sessions all the time. */
-const worthShowing = (digest: TodayDigest) => digest.entries.filter(({ session, changes }) => changes.length > 0 || session.messageCount > 0);
+const worthShowing = (digest: TodayDigest) => digest.entries.filter(({ session, changes }) => changes.length > 0 || !hasNoMessages(session));
 
 function TodayDesktop({ digest }: { digest: TodayDigest }) {
   const entries = worthShowing(digest);

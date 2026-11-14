@@ -77,6 +77,7 @@ export function sessionRow(
     startedAt: (when ?? new Date(0).toISOString()) as SessionSummaryRow["startedAt"],
     endedAt: when,
     messageCount: 0,
+    messageCountUnknown: true,
     topic: topic ? { id: topicId(topic.id), path: topicPath(index, topic.id).map((step) => step.name) } : undefined,
     visibility: visibilityFromWire(entry.visibility),
     kept: false,
