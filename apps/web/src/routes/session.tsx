@@ -298,7 +298,7 @@ export function SessionPage() {
         {fallback ?? (
           <>
             <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-4 pt-1 pb-3 text-[15px]">
-              <h1 className="m-0 line-clamp-4 font-serif text-[25px] font-semibold">{d!.title}</h1>
+              <h1 className="m-0 line-clamp-4 shrink-0 font-serif text-[25px] font-semibold">{d!.title}</h1>
               {d!.owner && <KindTag label={`${d!.owner}’s session`} color="var(--info)" />}
               {d!.origin && <p className="m-0 text-[13px] text-muted-foreground">{originNote(d!.origin)}</p>}
               <SampleBadge capability="sessions" />
