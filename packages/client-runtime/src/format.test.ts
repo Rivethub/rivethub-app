@@ -1,9 +1,13 @@
 import type { EntityId } from "@rivethub/contracts";
 import type { ReviewItem } from "@rivethub/contracts";
 import { describe, expect, it } from "vitest";
-import { ago, dayLabel, localDay, parseDay, primaryAction, toolLine, whenLabel } from "./format";
+import { ago, dayLabel, harnessNames, localDay, parseDay, primaryAction, toolLine, whenLabel } from "./format";
 
 describe("format", () => {
+  it("names every tool rh lists as rh names it", () => {
+    expect(["opencode", "dsh", "kimi", "omp", "hermes", "cowork"].map((id) => harnessNames[id])).toEqual(["OpenCode", "DeepSeek Harness", "Kimi Code", "Oh My Pi", "Hermes", "Claude Cowork"]);
+  });
+
   const now = new Date(2026, 10, 11, 15, 30);
 
   it("labels today by time and other days by date", () => {

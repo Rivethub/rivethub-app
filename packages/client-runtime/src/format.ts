@@ -98,12 +98,20 @@ export function primaryAction(item: ReviewItem): string {
   }
 }
 
+/** A tool's name as rh's own harness list gives it, for places that have only the session's harness id. */
 export const harnessNames: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   "grok-build": "Grok Build",
   cursor: "Cursor",
-  opencode: "opencode",
+  opencode: "OpenCode",
+  dsh: "DeepSeek Harness",
+  cowork: "Claude Cowork",
+  kimi: "Kimi Code",
+  omp: "Oh My Pi",
+  hermes: "Hermes",
+  antigravity: "Antigravity",
+  kiro: "Kiro",
   shared: "Shared",
 };
 
