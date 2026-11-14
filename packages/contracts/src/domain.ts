@@ -44,6 +44,8 @@ export interface SessionSummaryRow {
   startedAt: IsoTime;
   endedAt?: IsoTime;
   messageCount: number;
+  /** Set when the hub did not say how many messages the session has. `messageCount` is then 0 and means nothing. */
+  messageCountUnknown?: true;
   topic?: { id: TopicId; path: string[] };
   visibility: Visibility;
   kept: boolean;

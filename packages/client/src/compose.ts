@@ -25,6 +25,20 @@ const CAPABILITIES: Capability[] = [
   "summary-tree", "search", "harnesses", "models", "hubs", "account",
 ];
 
+/** Calls that only read. Only these may be sent before their capability has been probed. */
+const READS: ReadonlySet<keyof LiveMethods> = new Set<keyof LiveMethods>([
+  "today", "changes", "reviewQueue", "topicTree", "topic", "entities", "entity", "sessions", "session",
+  "transcript", "summaryTree", "search", "harnesses", "modelJobs", "hubs", "account",
+]);
+
+type Outcome = { ok: true; value: unknown } | { ok: false; error: unknown };
+/** A promise that never rejects, so an answer nobody ends up using cannot surface as an unhandled rejection. */
+const settle = (promise: Promise<unknown>): Promise<Outcome> =>
+  promise.then(
+    (value) => ({ ok: true, value }),
+    (error: unknown) => ({ ok: false, error }),
+  );
+
 const unreachable = (error: unknown) => error instanceof RouteMissingError || error instanceof NetworkError;
 
 /**
@@ -34,20 +48,44 @@ const unreachable = (error: unknown) => error instanceof RouteMissingError || er
 export function createClient(options: ClientOptions): MemoryClient {
   const sample = createSampleClient();
   const rh = createRhClient(options);
-  const probed = rh.probe().catch(() => ({}) as Awaited<ReturnType<typeof rh.probe>>);
-  const live = async (capability: Capability) => (await probed)[capability] === "live";
+  /** The first read sent for each capability. Its answer settles whether the capability is live without a probe. */
+  const firstRead = new Map<Capability, Promise<Outcome>>();
+  /** Capabilities a read has already been answered for. A later failure on one of these is the hub's own error and is shown, not replaced with sample data. */
+  const proven = new Set<Capability>();
+  const probe = (capability: Capability) => rh.live(capability).catch(() => false);
+  const live = async (capability: Capability) => {
+    if (proven.has(capability)) return true;
+    const read = firstRead.get(capability);
+    if (read && (await read).ok) return true;
+    if (proven.has(capability)) return true;
+    return probe(capability);
+  };
 
   function choose<K extends keyof LiveMethods>(capability: Capability, name: K): LiveMethods[K] {
     const call = async (...args: unknown[]) => {
       const liveMethod = rh.methods[name] as ((...a: unknown[]) => Promise<unknown>) | undefined;
-      if (liveMethod && (await live(capability))) {
-        try {
-          return await liveMethod(...args);
-        } catch (error) {
-          if (!unreachable(error)) throw error;
-        }
+      const fromSample = () => (sample[name] as (...a: unknown[]) => Promise<unknown>)(...args);
+      if (!liveMethod) return fromSample();
+      if (!READS.has(name)) {
+        // A write changes the hub, so it goes out only once the capability is known to be there.
+        if (!(await live(capability))) return fromSample();
+        const outcome = await settle(liveMethod(...args));
+        if (outcome.ok) return outcome.value;
+        if (!unreachable(outcome.error)) throw outcome.error;
+        return fromSample();
       }
-      return (sample[name] as (...a: unknown[]) => Promise<unknown>)(...args);
+      // A read goes out at once. If it answers, that is the capability's proof of life, and no probe asks the
+      // same route a second time. If the route is missing or the hub cannot be reached, the sample world
+      // serves this call. Any other failure is real only on a hub that has the capability.
+      const read = settle(liveMethod(...args));
+      if (!firstRead.has(capability)) firstRead.set(capability, read);
+      const outcome = await read;
+      if (outcome.ok) {
+        proven.add(capability);
+        return outcome.value;
+      }
+      if (unreachable(outcome.error) || !(await live(capability))) return fromSample();
+      throw outcome.error;
     };
     return call as LiveMethods[K];
   }
@@ -61,11 +99,10 @@ export function createClient(options: ClientOptions): MemoryClient {
 
   const client: MemoryClient = {
     async capabilities() {
-      const answered = await probed;
-      return Object.fromEntries(CAPABILITIES.map((capability) => [capability, answered[capability] ?? "sample"])) as Record<
-        Capability,
-        "live" | "sample"
-      >;
+      // Let the reads a screen sends in the same moment go first: each one that answers saves a probe.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const entries = await Promise.all(CAPABILITIES.map(async (capability) => [capability, (await live(capability)) ? "live" : "sample"] as const));
+      return Object.fromEntries(entries) as Record<Capability, "live" | "sample">;
     },
 
     today: choose("today", "today"),

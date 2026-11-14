@@ -1,4 +1,4 @@
-import type { EntityType, ReviewItem, SubjectRef } from "@rivethub/contracts";
+import type { EntityType, ReviewItem, SessionSummaryRow, SubjectRef } from "@rivethub/contracts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -84,3 +84,8 @@ export const harnessNames: Record<string, string> = {
   cursor: "Cursor",
   opencode: "opencode",
 };
+
+/** True only when the hub counted the session's messages and found none. An unknown count is not an empty session. */
+export function hasNoMessages(session: Pick<SessionSummaryRow, "messageCount" | "messageCountUnknown">): boolean {
+  return session.messageCount === 0 && !session.messageCountUnknown;
+}

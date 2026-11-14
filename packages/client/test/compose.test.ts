@@ -65,6 +65,14 @@ describe("createClient", () => {
     await expect(client.topic("t-a" as TopicId)).rejects.toMatchObject({ name: "HttpError", status: 500 });
   });
 
+  it("marks message counts as unknown on a runtime without the session catalog, so no session reads as empty", async () => {
+    const client = createClient({ baseUrl: "https://rh.test", fetch: fakeRh(liveRoutes).fetch });
+    const { items } = await client.sessions({});
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((row) => row.messageCountUnknown === true)).toBe(true);
+    expect((await client.session(SID)).messageCountUnknown).toBe(true);
+  });
+
   it("keeps UI trash out of live lists without deleting anything on the runtime", async () => {
     const fake = fakeRh(liveRoutes);
     const client = createClient({ baseUrl: "https://rh.test", fetch: fake.fetch });
@@ -85,5 +93,98 @@ describe("createClient", () => {
     expect((await client.sessions({})).items.some((row) => row.id === SID)).toBe(true);
     expect(fake.calls.at(-1)).toMatchObject({ method: "GET" });
     expect(fake.calls.some((call) => call.method === "PUT" && call.path.endsWith("/keep"))).toBe(true);
+  });
+});
+
+describe("first calls do not wait on probes", () => {
+  /** A fake rh that holds every answer until `open()`, so a test can see what was sent while the probes were out. */
+  function gated(routes: Parameters<typeof fakeRh>[0]) {
+    const inner = fakeRh(routes);
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => (open = resolve));
+    const fetch: typeof inner.fetch = async (input, init) => {
+      const response = inner.fetch(input, init);
+      await gate;
+      return response;
+    };
+    return { fetch, calls: inner.calls, open };
+  }
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const sent = (calls: { method: string; path: string }[], method: string, path: string) => calls.filter((c) => c.method === method && c.path === path).length;
+
+  it("sends a read at once and takes its answer as proof the capability is live, with no probe of the same route", async () => {
+    const rh = gated({ "GET /api/topics": body.topicsBody });
+    const client = createClient({ baseUrl: "https://rh.test", fetch: rh.fetch });
+    const tree = client.topicTree();
+    const caps = client.capabilities();
+    await tick();
+    expect(sent(rh.calls, "GET", "/api/topics")).toBe(1);
+    rh.open();
+    expect((await tree).map((node) => node.name)).toEqual(["RivetHub", "Home lab"]);
+    expect((await caps).topics).toBe("live");
+    expect(sent(rh.calls, "GET", "/api/topics")).toBe(1);
+  });
+
+  it("serves the sample world when a read fails on a hub that lacks the capability", async () => {
+    // The page route answers 500, but nothing this hub has says it serves topics at all.
+    const rh = fakeRh({ "GET /api/topics/t-a/page": { status: 500, body: { error: "boom" } } });
+    const client = createClient({ baseUrl: "https://rh.test", fetch: rh.fetch });
+    const [first] = await client.topicTree();
+    await expect(client.topic(first!.id)).resolves.toMatchObject({ id: first!.id });
+  });
+
+  it("keeps a real error real once a read has shown the capability is there, even if the probe would now fail", async () => {
+    // The tree answers once. After that the list route cannot be reached, and the page route answers 500.
+    const inner = fakeRh({
+      "GET /api/topics": body.topicsBody,
+      "GET /api/topics/t-a/page": { status: 500, body: { error: "boom" } },
+      "GET /api/topics/t-a/decisions": { decisions: [] },
+      "GET /api/topics/t-a/sessions": { sessions: [] },
+    });
+    let listUp = true;
+    const fetch: typeof inner.fetch = async (input, init) => {
+      if (!listUp && new URL(input).pathname === "/api/topics") {
+        await tick();
+        throw new TypeError("fetch failed");
+      }
+      return inner.fetch(input, init);
+    };
+    const client = createClient({ baseUrl: "https://rh.test", fetch });
+    expect((await client.topicTree()).map((node) => node.name)).toEqual(["RivetHub", "Home lab"]);
+    listUp = false;
+    await expect(client.topic("t-a" as TopicId)).rejects.toMatchObject({ name: "HttpError", status: 500 });
+    expect((await client.capabilities()).topics).toBe("live");
+  });
+
+  it("holds a write until its capability is known, and never sends it to a hub without the capability", async () => {
+    const live = gated({ "GET /api/topics": body.topicsBody, "PATCH /api/topics/t-a": { status: 204, body: null } });
+    const client = createClient({ baseUrl: "https://rh.test", fetch: live.fetch });
+    const write = client.updateTopic("t-a" as TopicId, { name: "Renamed" });
+    await tick();
+    expect(live.calls.filter((c) => c.method !== "GET")).toEqual([]);
+    live.open();
+    await write;
+    expect(sent(live.calls, "PATCH", "/api/topics/t-a")).toBe(1);
+
+    const bare = fakeRh({});
+    const offHub = createClient({ baseUrl: "https://rh.test", fetch: bare.fetch });
+    const [first] = await offHub.topicTree();
+    await offHub.updateTopic(first!.id, { name: "Renamed" });
+    expect(bare.calls.filter((c) => c.method !== "GET")).toEqual([]);
+  });
+
+  it("probes each capability on its own, so a slow one does not hold up the rest", async () => {
+    let releaseToday!: () => void;
+    const slow = new Promise<void>((resolve) => (releaseToday = resolve));
+    const inner = fakeRh({ "GET /api/topics": body.topicsBody });
+    const client = createClient({
+      baseUrl: "https://rh.test",
+      fetch: async (input, init) => {
+        if (new URL(input).pathname === "/api/today") await slow;
+        return inner.fetch(input, init);
+      },
+    });
+    expect((await client.topicTree()).map((node) => node.name)).toEqual(["RivetHub", "Home lab"]);
+    releaseToday();
   });
 });

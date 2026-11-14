@@ -1,7 +1,8 @@
-# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64, smoke-tests both packages,
-# and uploads them, with electron-builder's latest-linux*.yml update manifests, as workflow
-# artifacts. The publish job copies them to get.rivethub.io/desktop/<channel>/, where installed
-# apps look for updates; it runs only when dispatched on main with publish=true.
+# Builds the Linux desktop app (AppImage + .deb) on x64 and arm64 and smoke-tests both packages.
+# A dispatched run also uploads them, with electron-builder's latest-linux*.yml update manifests,
+# as workflow artifacts; a pull request's build is checked and not kept. The publish job copies
+# the artifacts to get.rivethub.io/desktop/<channel>/, where installed apps look for updates; it
+# runs only when dispatched on main with publish=true.
 #
 # Builds are nightly-versioned, x.y.z-nightly.YYYYMMDD.<run>, from apps/desktop/package.json's x.y.z,
 # unless dispatched with channel=stable, which builds x.y.z itself. Stable is for a release that a
@@ -130,8 +131,14 @@ jobs:
           name: desktop-launch-check-linux-${{ matrix.arch }}
           path: ${{ runner.temp }}/desktop-launch-check
           if-no-files-found: ignore
+          retention-days: 7
 
+      # Only a dispatched run can publish, so only a dispatched run keeps its packages, and only for
+      # a week. A pull request's build is checked by the steps above and then thrown away: at about
+      # 500 MB a run, keeping them filled the account's artifact storage, after which every build
+      # failed at this step with all of its checks passed.
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         with:
           name: rivethub-desktop-linux-${{ matrix.arch }}
           path: |
@@ -140,6 +147,7 @@ jobs:
             release/latest-linux*.yml
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
 
   # Copies both arches' packages and latest-linux*.yml to the channel's directory on the
   # get.rivethub.io host, the way Rivethub/rivethub-io's ci.yml deploys: rsync over SSH as rivet@

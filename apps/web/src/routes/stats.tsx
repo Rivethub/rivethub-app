@@ -15,6 +15,22 @@ const workerName: Record<WorkerId, { name: string; does: string }> = {
   "wiki-builder": { name: "Wiki builder", does: "Writes topic and entity pages." },
 };
 
+/** rh's job names, as what the job does. An unknown job keeps its name. */
+const JOBS: Record<string, string> = {
+  "compact-conversation": "Summarize a session",
+  "extract-wiki": "Write wiki pages from a session",
+  "extract-entities": "Update entity pages from a session",
+  "entity-backfill": "Catch up entity pages",
+  "stale-entity-sweep": "Queue sessions for entity pages",
+  "enqueue-stale-wiki": "Queue sessions for the wiki",
+  "propose-tidy": "Suggest tidy-ups",
+  "embed-messages": "Make messages findable by meaning",
+  "embed-summaries": "Make summaries findable by meaning",
+  "categorize-conversation": "File a session under a topic",
+  "title-conversation": "Title a session",
+};
+export const jobName = (task: string) => JOBS[task] ?? task;
+
 function Tile({ label, value, note, tone }: { label: string; value: ReactNode; note?: ReactNode; tone?: "warn" }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-card px-3.5 py-3">
@@ -101,8 +117,8 @@ function Flagged() {
         {groups.map((g) => (
           <li key={g.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-warning/40 bg-card px-3.5 py-3">
             <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
-              <span className="font-medium">{g.count} × {g.task}</span>
-              <span className="text-[13px] leading-[1.45] text-muted-foreground">{g.cause} · last {whenLabel(g.lastFailedAt)}</span>
+              <span className="font-medium">{g.count} × {jobName(g.task)}</span>
+              <span className="text-[13px] leading-[1.45] text-muted-foreground">{g.cause.trim() || "No cause was recorded"} · last {whenLabel(g.lastFailedAt)}</span>
             </span>
             <Button variant="primary" size="md" disabled={retry.isPending} onClick={() => retry.mutate(g.id)}>Retry</Button>
             <Button size="md" disabled={dismiss.isPending} onClick={() => dismiss.mutate(g.id)}>Dismiss</Button>

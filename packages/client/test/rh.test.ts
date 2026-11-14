@@ -177,7 +177,7 @@ describe("sessions", () => {
 describe("search", () => {
   it("returns topic hits then session hits and skips results without a session", async () => {
     const { client } = rh({
-      "GET /api/topics/search?q=stream&limit=8": body.topicSearchBody,
+      "GET /api/topics/search?q=stream&limit=8&kind=all": body.topicSearchBody,
       "GET /api/memory/search?q=stream&limit=30": body.memorySearchBody,
     });
     const results = await client.search!("  stream ");
@@ -185,7 +185,7 @@ describe("search", () => {
       ["topic", "RivetHub"],
       ["session", "Wire the stream"],
     ]);
-    expect(results.goTo[1]).toMatchObject({ snippet: "Wired the stream end to end.", context: "summary" });
+    expect(results.goTo[1]).toMatchObject({ snippet: "Wired the stream end to end.", context: "Session · found in its summary" });
   });
 
   it("does not call the runtime for a blank query", async () => {

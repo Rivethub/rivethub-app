@@ -1,4 +1,4 @@
-import { count, dayLabel, harnessNames, longDay, localDay, shortDate, time } from "@rivethub/client-runtime/format";
+import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, shortDate, time } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -78,7 +78,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
       {!phone && <span className="text-[12px] text-muted-foreground">{time(s.startedAt)}</span>}
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="font-medium">{s.title}</span>
+          <span className="line-clamp-2 font-medium">{s.title}</span>
           {s.kept && <KindTag label="Kept" color="var(--primary)" />}
           {state && <KindTag label={state.label} color={state.color} />}
         </span>
@@ -86,7 +86,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
         <span className="flex flex-wrap gap-x-2 text-[12px] text-muted-foreground">
           {phone && <span>{time(s.startedAt)} · {harnessNames[s.harness] ?? s.harness}</span>}
           <span style={s.topic ? undefined : { color: "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
-          <span>· {plural(s.messageCount, "message")}</span>
+          {!s.messageCountUnknown && <span>· {plural(s.messageCount, "message")}</span>}
           {s.childCount ? <span>· {subagents(s.childCount)}</span> : null}
           {s.visibility.kind === "space" && <span>· shared with {s.visibility.space}</span>}
         </span>
@@ -132,6 +132,18 @@ function SessionFilters({ view, onView, text, onText, harness, onHarness, phone 
   );
 }
 
+/** A session the hub counted no messages in, and that nobody chose to keep. A session whose count is unknown is never one of these. */
+const isEmpty = (s: SessionSummaryRow) => hasNoMessages(s) && !s.kept;
+
+function EmptyToggle({ n, shown, onToggle }: { n: number; shown: boolean; onToggle: () => void }) {
+  return (
+    <>
+      {shown ? `Showing ${plural(n, "session")} with no messages.` : `${plural(n, "session")} with no messages ${n === 1 ? "is" : "are"} hidden.`}{" "}
+      <button type="button" className="border-0 bg-transparent p-0 text-info hover:underline" onClick={onToggle}>{shown ? "Hide them" : "Show them"}</button>
+    </>
+  );
+}
+
 const emptyNote: Record<View, string> = {
   all: "No sessions match. A session shows up here when a connected tool finishes a turn.",
   unfiled: "Every session has a topic.",
@@ -146,7 +158,11 @@ function SessionBrowser({ view, phone }: { view: View; phone?: boolean }) {
   const [harness, setHarness] = useState("");
   const [active, setActive] = useState(-1);
   const pages = useSessionPages({ view, ...(text ? { text } : {}), ...(harness ? { harness } : {}) });
-  const items = useMemo(() => pages.data?.pages.flatMap((p) => p.items) ?? [], [pages.data]);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const loaded = useMemo(() => pages.data?.pages.flatMap((p) => p.items) ?? [], [pages.data]);
+  // Tools open sessions that never get a message. They are kept, but out of the way unless asked for or kept on purpose.
+  const empty = useMemo(() => loaded.filter(isEmpty).length, [loaded]);
+  const items = useMemo(() => (showEmpty || view === "trash" ? loaded : loaded.filter((s) => !isEmpty(s))), [loaded, showEmpty, view]);
   const groups = useMemo(() => groupByDay(items), [items]);
   useEffect(() => setActive(-1), [view, text, harness]);
   useEffect(() => {
@@ -163,11 +179,23 @@ function SessionBrowser({ view, phone }: { view: View; phone?: boolean }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [items, active, navigate, view]);
   let n = -1;
+  // Offered even when nothing on the loaded pages is visible: older pages may hold sessions that are.
+  const older = pages.hasNextPage && (
+    <Button className="mt-4 self-center" size="md" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
+      {pages.isFetchingNextPage ? "Loading…" : "Show older sessions"}
+    </Button>
+  );
   return (
     <>
       <SessionFilters view={view} text={text} onText={setText} harness={harness} onHarness={setHarness} onView={(v) => void navigate({ to: "/sessions", search: v === "all" ? {} : { view: v } })} {...(phone ? { phone } : {})} />
       {pages.isPending ? <Loading /> : pages.isError ? <ErrorNote error={pages.error} /> : groups.length === 0 ? (
-        <p className="m-0 py-6 text-muted-foreground">{text || harness ? "No sessions match these filters." : emptyNote[view]}</p>
+        <div className="flex flex-col">
+          <p className="m-0 py-6 text-muted-foreground">
+            {text || harness ? "No sessions match these filters." : emptyNote[view]}
+            {empty > 0 && !showEmpty && <> <EmptyToggle n={empty} shown={false} onToggle={() => setShowEmpty(true)} /></>}
+          </p>
+          {older}
+        </div>
       ) : (
         <div className="flex flex-col">
           {groups.map((g) => (
@@ -179,11 +207,10 @@ function SessionBrowser({ view, phone }: { view: View; phone?: boolean }) {
               })}
             </section>
           ))}
-          {pages.hasNextPage && (
-            <Button className="mt-4 self-center" size="md" disabled={pages.isFetchingNextPage} onClick={() => void pages.fetchNextPage()}>
-              {pages.isFetchingNextPage ? "Loading…" : "Show older sessions"}
-            </Button>
+          {empty > 0 && view !== "trash" && (
+            <p className="m-0 px-2 pt-4 text-[13px] text-muted-foreground"><EmptyToggle n={empty} shown={showEmpty} onToggle={() => setShowEmpty((v) => !v)} /></p>
           )}
+          {older}
         </div>
       )}
     </>
@@ -237,7 +264,7 @@ export function SessionPage() {
   const phone = useIsPhone();
   const s = useSession(sessionId as SessionId);
   // Lead with the summary when there is one; otherwise the messages are all there is.
-  const tab = search.tab ?? (!s.data || s.data.memoryState === "summarized" ? "summary" : "transcript");
+  const tab = s.data && hasNoMessages(s.data) ? "transcript" : (search.tab ?? (!s.data || s.data.memoryState === "summarized" ? "summary" : "transcript"));
   const view = search.view ?? "all";
   const near = useNeighbors(sessionId, view);
   const canSend = useShareClient() !== null;
@@ -249,7 +276,7 @@ export function SessionPage() {
   const d = s.data;
   const tabs = [
     { id: "summary" as const, label: "Summary" },
-    { id: "transcript" as const, label: "Transcript", count: d?.messageCount ?? 0 },
+    { id: "transcript" as const, label: "Transcript", ...(d && !d.messageCountUnknown ? { count: d.messageCount } : {}) },
   ];
   const fallback = s.isPending ? <Loading /> : s.isError ? <ErrorNote error={s.error} /> : null;
   const doTrash = () => {
@@ -277,7 +304,7 @@ export function SessionPage() {
               </details>
               <StateNote d={d!} />
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
-              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} phone />}
+              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} phone />}
             </div>
             <PhoneActions d={d!} onTrash={doTrash} onRestore={() => restore.mutate([d!.id])} />
           </>
@@ -307,7 +334,7 @@ export function SessionPage() {
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
             <StateNote d={d!} />
-            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} />}
+            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} />}
           </div>
         </>
       )}
@@ -329,7 +356,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
         {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
         <span className="text-[13px] text-muted-foreground">
           {harnessNames[d.harness] ?? d.harness} · {shortDate(d.startedAt)}, {time(d.startedAt)}
-          {d.endedAt ? `–${time(d.endedAt)}` : ""} · {plural(d.messageCount, "message")}{d.cwd ? ` · ` : ""}
+          {d.endedAt ? `–${time(d.endedAt)}` : ""}{d.messageCountUnknown ? "" : ` · ${plural(d.messageCount, "message")}`}{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
         </span>
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
@@ -370,7 +397,7 @@ function CopyButton({ text, label, className }: { text: string; label: string; c
 /** Says why there is no summary to lead with, and what to do about it. */
 function StateNote({ d }: { d: SessionDetail }) {
   const state = stateNote[d.memoryState];
-  if (!state) return null;
+  if (!state || hasNoMessages(d)) return null;
   return (
     <p className="m-0 rounded-lg border border-border px-3 py-2 text-[13px] text-muted-foreground">
       <span style={{ color: state.color }}>{state.long}</span>{" "}
@@ -444,12 +471,16 @@ function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boo
   );
 }
 
-function TranscriptView({ id, range, phone }: { id: SessionId; range: [number, number] | undefined; phone?: boolean }) {
-  const transcript = useTranscript(id);
+/** `empty` is true only when the hub counted the messages and found none; then there is nothing to ask for. */
+function TranscriptView({ id, range, phone, empty }: { id: SessionId; range: [number, number] | undefined; phone?: boolean; empty: boolean }) {
+  const transcript = useTranscript(id, !empty);
   const first = useRef<HTMLDivElement>(null);
   useEffect(() => {
     first.current?.scrollIntoView?.({ block: "start" });
   }, [range?.[0], transcript.data]);
+  if (empty) {
+    return <p className="m-0 rounded-xl border border-dashed border-input px-[18px] py-4 text-muted-foreground">Nothing was said in this session. The tool opened it and no message followed.</p>;
+  }
   if (transcript.isPending) return <Loading label="Loading the messages" />;
   if (transcript.isError || transcript.data.length === 0) {
     return (

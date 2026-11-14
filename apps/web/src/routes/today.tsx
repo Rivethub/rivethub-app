@@ -1,4 +1,4 @@
-import { localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
@@ -60,7 +60,7 @@ function Health({ phone }: { phone?: boolean }) {
   const problems = [
     none ? "No tool is sending sessions yet" : "",
     stale.length ? `${stale.map((h) => h.name).join(" and ")} stopped sending sessions` : "",
-    failing.length ? `the ${failing.map((j) => j.role).join(" and ")} model is failing` : "",
+    failing.length ? `the ${failing.map((j) => j.role).join(" and ")} ${failing.length === 1 ? "model is" : "models are"} failing` : "",
   ].filter(Boolean);
   if (!problems.length) return null;
   const text = problems.join(", and ");
@@ -127,14 +127,20 @@ function NeedsCards({ digest }: { digest: TodayDigest }) {
   const filing = (useReviewQueue().data ?? []).filter((i) => i.group === "filing");
   return (
     <>
-      {digest.needsYou.map((item) =>
-        item.group === "filing" && filing.length > 1 ? <FilingCard key="filing" items={filing} /> : <NeedsCard key={item.id} item={item} />,
-      )}
+      {digest.needsYou.map((item, i) => {
+        if (item.group !== "filing" || filing.length <= 1) return <NeedsCard key={item.id} item={item} />;
+        // Several filing proposals are one decision. Show the card where the first of them falls.
+        return digest.needsYou.findIndex((other) => other.group === "filing") === i ? <FilingCard key="filing" items={filing} /> : null;
+      })}
     </>
   );
 }
 
+/** A session that captured nothing and changed nothing is not news. Tools open such sessions all the time. */
+const worthShowing = (digest: TodayDigest) => digest.entries.filter(({ session, changes }) => changes.length > 0 || !hasNoMessages(session));
+
 function TodayDesktop({ digest }: { digest: TodayDigest }) {
+  const entries = worthShowing(digest);
   return (
     <div className="flex justify-center px-7 py-8">
       <div className="flex min-w-0 max-w-[820px] flex-1 flex-col gap-[26px]">
@@ -156,8 +162,8 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
         <NextStep />
         <section aria-labelledby="changed" className="flex flex-col gap-3.5">
           <h2 id="changed" className="m-0 border-b border-border pb-2 text-[15px] font-semibold">What changed {digest.date === localDay(new Date()) ? "today" : "this day"}</h2>
-          {digest.entries.length === 0 && <p className="m-0 text-muted-foreground">Nothing was captured this day. Sessions appear here as your connected tools finish them.</p>}
-          {digest.entries.map(({ session, changes }) => (
+          {entries.length === 0 && <p className="m-0 text-muted-foreground">Nothing was captured this day. Sessions appear here as your connected tools finish them.</p>}
+          {entries.map(({ session, changes }) => (
             <div key={session.id} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
               <span className="pt-0.5 text-[12px] text-muted-foreground">{whenLabel(session.startedAt)}</span>
               <div className="flex flex-col gap-1.5">
@@ -187,6 +193,7 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
 }
 
 function TodayPhone({ digest }: { digest: TodayDigest }) {
+  const entries = worthShowing(digest);
   return (
     <div className="flex flex-col gap-[18px] px-4 pb-4 text-[15px]">
       <Lede digest={digest} phone />
@@ -219,7 +226,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
       <NextStep phone />
       <section aria-labelledby="changed-m" className="flex flex-col gap-3">
         <h2 id="changed-m" className="m-0 text-[15px] font-semibold">What changed</h2>
-        {digest.entries.map(({ session, changes }) => (
+        {entries.map(({ session, changes }) => (
           <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="flex flex-col gap-1.5 border-b border-border pb-3 text-foreground hover:no-underline">
             <span className="flex flex-wrap gap-2 text-[12px] text-muted-foreground">
               <span>{whenLabel(session.startedAt)}</span>·<span>{session.harness}</span>
