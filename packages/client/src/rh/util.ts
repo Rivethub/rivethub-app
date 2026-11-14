@@ -9,8 +9,17 @@ export function strip<T>(value: { [K in keyof T]: T[K] | undefined }): T {
 export const sessionId = (raw: string) => raw as SessionId;
 export const topicId = (raw: string) => raw as TopicId;
 
-/** rh addresses a session in a path as the unpadded base64url of its canonical id. */
+const IMPORT_KEY = /^import:[0-9a-f]{64}$/;
+
+/** True for the key of a session received from someone else. */
+export const isImportKey = (id: string) => IMPORT_KEY.test(id);
+
+/**
+ * rh addresses a session in a path as the unpadded base64url of its canonical id. A session received from
+ * someone else is the exception: its key (`import:<digest>`) goes in the path as it is.
+ */
 export function sessionSegment(id: string): string {
+  if (isImportKey(id)) return id;
   const bytes = new TextEncoder().encode(id);
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);

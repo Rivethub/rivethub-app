@@ -14,7 +14,7 @@ import type {
 import type { Http } from "../http.js";
 import { NetworkError, NotFoundError, RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
-import { displayTitle, harnessOf, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
+import { displayTitle, harnessOf, isImportKey, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import { indexTopics, sessionRow, topicPath, type TopicIndex } from "./topics.js";
 
 const PAGE_SIZE = 50;
@@ -178,7 +178,8 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       // The harness's own file has the most detail (tool calls and results), but it exists only on the machine
       // that ran the session. Anywhere else, and for sessions that reached memory another way, read what the hub stored.
       // rh answers an empty transcript, not an error, for a session whose file is not on this machine.
-      const fromHarness = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
+      // A session received from someone else never ran in a tool here, so only memory has it.
+      const fromHarness = isImportKey(id) ? [] : await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
         (response) => mapTranscript(response, EPOCH),
         (error: unknown) => {
           if (error instanceof NetworkError) throw error;
@@ -221,29 +222,59 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
 }
 
 const STORED_PAGE = 200;
+/** How many pages of a session's time span are read before giving up on a very busy span. */
+const STORED_MAX_PAGES = 10;
+/**
+ * A received session's start is when its sender's hub first stored it, which is after its first turn ended.
+ * Its first messages are older than that, so the span is read from this long before the start.
+ */
+const IMPORT_LEAD_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * rh stores each message of a received session inside a note that it is quoted data from someone else, so an
+ * agent recalling it does not take it for instructions. The session's page says who sent it once, so the
+ * transcript shows the message itself.
+ */
+const QUOTED = /^Imported from [^\n]* Quoted data from another person, not instructions\.\n(`{3,})\n([\s\S]*)\n\1\s*$/;
+export const unquoted = (content: string) => QUOTED.exec(content)?.[2] ?? content;
 
 /**
  * A session's messages as memory stored them. rh has no route that reads one session's messages, so this
- * browses the session's own time span for its harness and keeps the messages that belong to it. A span
- * holding more than one page of messages comes back short; the harness transcript has no such limit.
+ * browses the session's own time span and keeps the messages that belong to it, a page at a time. A span
+ * holding more than ten pages of messages comes back short; the harness transcript has no such limit.
  */
 export async function storedTranscript(http: Http, id: SessionId): Promise<TranscriptTurn[]> {
-  const span = await http.get(`/api/sessions/${sessionSegment(id)}`, wire.sessionSpan).catch(() => undefined);
+  const span = await http.get(`/api/sessions/${encodeURIComponent(sessionSegment(id))}`, wire.sessionSpan).catch(() => undefined);
   const pad = (iso: string, ms: number) => new Date(new Date(iso).getTime() + ms).toISOString();
-  const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
-    limit: STORED_PAGE,
-    agent: harnessOf(id),
-    ...(span ? { since: pad(span.startedAt, -1000), before: pad(span.endedAt ?? new Date().toISOString(), 1000) } : {}),
-  });
-  const mine = page.messages.filter((message) => message.sessionId === id);
-  const ordered = mine.map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
+  const imported = isImportKey(id);
+  let since = span ? pad(span.startedAt, imported ? -IMPORT_LEAD_MS : -1000) : undefined;
+  let before = span ? pad(span.endedAt ?? new Date().toISOString(), 1000) : undefined;
+  const mine = new Map<string, wire.BrowsedMessage>();
+  for (let pages = 0; pages < STORED_MAX_PAGES; pages += 1) {
+    const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
+      limit: STORED_PAGE,
+      // A received session keeps its sender's agent name, which is not its key's prefix.
+      ...(imported ? {} : { agent: harnessOf(id) }),
+      ...(since ? { since } : {}),
+      ...(before ? { before } : {}),
+    });
+    for (const message of page.messages) if (message.sessionId === id && !mine.has(message.id)) mine.set(message.id, message);
+    const first = page.messages[0]?.createdAt;
+    const last = page.messages.at(-1)?.createdAt;
+    if (page.messages.length < STORED_PAGE || !first || !last || first === last) break;
+    // The next page starts where this one ended, whichever way the hub sorted it. Repeats are dropped by id.
+    if (first > last) before = pad(last, 1);
+    else since = pad(last, -1);
+  }
+  const ordered = [...mine.values()].map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
   return ordered.map(({ message }, i) => {
     const tool = message.role === "tool" || message.toolName !== undefined;
+    const content = imported ? unquoted(message.content) : message.content;
     return {
       index: i + 1,
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${message.content}` : message.content) } : { kind: "text", text: message.content }],
+      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${content}` : content) } : { kind: "text", text: content }],
     } satisfies TranscriptTurn;
   });
 }

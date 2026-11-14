@@ -50,11 +50,12 @@ export function ArticleBar({ crumbs, children }: { crumbs: ReactNode; children?:
 
 export function Crumbs({ items }: { items: { label: string; to?: string }[] }) {
   return (
-    <nav aria-label="Breadcrumb">
+    // One line: a long title is cut with an ellipsis here and shown in full as the page heading.
+    <nav aria-label="Breadcrumb" className="truncate">
       {items.map((c, i) => (
         <span key={i}>
           {i > 0 && <span aria-hidden="true"> › </span>}
-          {c.to ? <Link to={c.to}>{c.label}</Link> : <span aria-current="page">{c.label}</span>}
+          {c.to ? <Link to={c.to}>{c.label}</Link> : <span aria-current="page" title={c.label}>{c.label}</span>}
         </span>
       ))}
     </nav>

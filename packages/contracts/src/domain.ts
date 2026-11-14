@@ -37,10 +37,20 @@ export interface Change {
   source?: SubjectRef & { kind: "session" };
 }
 
+/** Where a session someone shared with this hub came from. */
+export interface SessionOrigin {
+  author?: string;
+  /** Whether the bundle was signed by a key this hub trusts. */
+  verification?: "verified" | "unsigned" | "unknown_key";
+}
+
 export interface SessionSummaryRow {
   id: SessionId;
   title: string;
+  /** The tool the session ran in. `shared` for a session received from someone else, which no tool on this hub ran. */
   harness: HarnessId;
+  /** Set on a session received from someone else. Absent on sessions captured here. */
+  origin?: SessionOrigin;
   startedAt: IsoTime;
   endedAt?: IsoTime;
   messageCount: number;
@@ -263,7 +273,8 @@ export interface HarnessStatus {
   version?: string;
   capture: {
     method: CaptureMethod;
-    state: "receiving" | "stale" | "not-connected";
+    /** `idle`: set up, and nothing has been captured from it yet. `stale`: it sent sessions before and has stopped. */
+    state: "receiving" | "stale" | "idle" | "not-connected";
     lastCaptureAt?: IsoTime;
     detail: string;
   };

@@ -51,6 +51,17 @@ describe("Today on a busy hub", () => {
   });
 });
 
+describe("Today on a hub where a tool is set up and has sent nothing", () => {
+  it("does not say the tool stopped", async () => {
+    renderWith("/", (c) => ({
+      harnesses: async () => (await c.harnesses()).map((h, i) => ({ ...h, capture: { method: h.capture.method, state: i === 0 ? "idle" as const : "not-connected" as const, detail: "nothing captured yet" } })),
+      modelJobs: async () => [],
+    }));
+    expect(await screen.findByText(/No tool is sending sessions yet/)).toBeInTheDocument();
+    expect(screen.queryByText(/stopped sending sessions/)).not.toBeInTheDocument();
+  });
+});
+
 describe("Sessions on a busy hub", () => {
   const rows = [row("s-1", "Untitled session", 0), row("s-2", "Untitled session", 0), row("s-3", "Review the entity worker", 19, { gist: "Checked retries and merges." })];
 
@@ -103,6 +114,24 @@ describe("Sessions on a busy hub", () => {
     }));
     expect(await screen.findByText("Where do the backups go now?")).toBeInTheDocument();
     expect(screen.queryByText(/Nothing was said in this session/)).not.toBeInTheDocument();
+  });
+
+  it("says who a shared session came from, in the list and on its page", async () => {
+    const shared = row("import:abc", "Move the backups", 3, { harness: "shared", origin: { author: "phil", verification: "unknown_key" } });
+    renderWith("/sessions", () => ({ sessions: async () => ({ items: [shared] }) }));
+    expect(await screen.findByRole("link", { name: /Move the backups/ })).toHaveTextContent("From phil");
+  });
+
+  it("says on a shared session's page that the sender is not confirmed", async () => {
+    const detail: SessionDetail = { ...row("import:abc", "Move the backups", 3, { harness: "shared", origin: { author: "phil", verification: "unknown_key" } }), changed: [], entities: [], tags: [] };
+    renderWith("/sessions/import:abc?tab=transcript", () => ({
+      session: async () => detail,
+      transcript: async () => [{ index: 1, role: "user", at: now, parts: [{ kind: "text", text: "Where do the backups go now?" }] }],
+    }));
+    expect(await screen.findByText(/phil shared this session with you.*not trusted yet/)).toBeInTheDocument();
+    // The person who shared it wrote its prompts, not the person reading it.
+    expect(await screen.findByText(/#1 · phil ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/#1 · You ·/)).not.toBeInTheDocument();
   });
 });
 
