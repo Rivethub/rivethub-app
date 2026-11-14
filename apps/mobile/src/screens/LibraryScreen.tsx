@@ -1,4 +1,4 @@
-import { entityTypes, harnessNames, originLabel } from "@rivethub/client-runtime/format";
+import { groupEntities, harnessNames, originLabel } from "@rivethub/client-runtime/format";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { EntitySummary, EntityType, HarnessId, SessionQuery, SessionSummaryRow, TopicNode } from "@rivethub/contracts";
 import { useEffect, useMemo, useState } from "react";
@@ -15,8 +15,6 @@ import { NewTopic } from "./NewTopic";
 
 type Props = BottomTabScreenProps<TabParams, "Library">;
 type SessionView = NonNullable<SessionQuery["view"]>;
-
-const TYPE_ORDER: EntityType[] = ["machine", "service", "person", "repository", "model", "database", "software", "hardware", "agent", "domain"];
 
 const STATE: Partial<Record<SessionSummaryRow["memoryState"], { label: string; tone: "info" | "muted" | "error" }>> = {
   capturing: { label: "Capturing", tone: "info" },
@@ -146,12 +144,12 @@ function Entities() {
   const [text, setText] = useState("");
   const [only, setOnly] = useState<EntityType | "">("");
   const [sort, setSort] = useState<"name" | "sessions">("name");
-  const types = TYPE_ORDER.map((type) => ({ type, items: all.filter((entity) => entity.type === type) })).filter((group) => group.items.length);
+  const types = groupEntities(all);
   const needle = text.trim().toLowerCase();
   const shown = all
     .filter((entity) => (!only || entity.type === only) && (!needle || entity.title.toLowerCase().includes(needle)))
     .sort((left, right) => (sort === "sessions" ? right.sessionCount - left.sessionCount : 0) || left.title.localeCompare(right.title, undefined, { sensitivity: "base" }));
-  const groups = TYPE_ORDER.map((type) => ({ type, items: shown.filter((entity) => entity.type === type) })).filter((group) => group.items.length);
+  const groups = types.map((group) => ({ ...group, items: shown.filter((entity) => entity.type === group.type) })).filter((group) => group.items.length > 0);
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
       {all.length > 0 ? (
@@ -175,7 +173,7 @@ function Entities() {
             {types.map((group) => (
               <SortChip
                 key={group.type}
-                label={`${entityTypes[group.type].many} ${group.items.length}`}
+                label={`${group.label} ${group.items.length}`}
                 selected={only === group.type}
                 onPress={() => setOnly(only === group.type ? "" : group.type)}
               />
@@ -195,7 +193,7 @@ function Entities() {
         groups.map((group) => (
           <View key={group.type}>
             <Text style={{ paddingHorizontal: 16, paddingTop: 12, color: palette.muted, fontSize: 12, fontWeight: "600" }}>
-              {entityTypes[group.type].many.toUpperCase()} {group.items.length}
+              {group.label.toUpperCase()} {group.items.length}
             </Text>
             {group.items.map((entity) => (
               <EntityRow key={entity.id} entity={entity} />

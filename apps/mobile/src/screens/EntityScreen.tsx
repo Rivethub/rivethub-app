@@ -1,4 +1,4 @@
-import { factLabel, harnessNames } from "@rivethub/client-runtime/format";
+import { entityTypeLabel, factLabel, harnessNames } from "@rivethub/client-runtime/format";
 import { articleBody } from "@rivethub/client-runtime/markdown";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EntityId, Fact, IsoTime } from "@rivethub/contracts";
@@ -12,7 +12,7 @@ import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
 import { BackButton, DataBanner, GhostButton, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
 import { MarkdownView } from "../ui/markdown";
-import { changeLabel, entityTypeLabel, errorText, shortDate, when } from "../ui/format";
+import { changeLabel, errorText, shortDate, when } from "../ui/format";
 
 type Props = NativeStackScreenProps<RootParams, "Entity">;
 type Tab = "overview" | "sessions" | "history";
@@ -32,7 +32,7 @@ export function EntityScreen({ route, navigation }: Props) {
     <Screen>
       <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8 }}>
         <BackButton onPress={() => navigation.goBack()} />
-        <Text style={{ flex: 1, color: palette.muted, fontSize: 13 }}>{article ? entityTypeLabel(article.type) : "Entity"}</Text>
+        <Text style={{ flex: 1, color: palette.muted, fontSize: 13 }}>{article ? entityTypeLabel(article) : "Entity"}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="More"
@@ -57,7 +57,7 @@ export function EntityScreen({ route, navigation }: Props) {
           <View style={{ paddingHorizontal: 16, gap: 12 }}>
             <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.title}</Text>
             <Text style={{ color: palette.muted, fontSize: 13 }}>
-              {entityTypeLabel(article.type)}
+              {entityTypeLabel(article)}
               {article.lastVerified ? ` · last checked ${shortDate(article.lastVerified)}` : ""}
               {article.topic ? ` · ${article.topic.path.join(" › ")}` : ""}
             </Text>

@@ -129,11 +129,6 @@ export function originNote(origin: SessionOrigin): string {
 const ACRONYMS = new Set(["ip", "os", "gpu", "gpus", "cpu", "cpus", "url", "ssh", "dns", "id", "api", "ram", "vm", "pr", "ui", "mcp", "tls", "nfs"]);
 
 /**
- * A fact's key as a label. The entity worker writes keys as kebab-case attribute names and files
- * one-off facts under `other-`: `ip` reads "IP", `other-incident-silent-stop` reads "Incident silent stop".
- * A key a person typed with capitals or spaces is left as they wrote it.
- */
-/**
  * A tool step as one line. The part's name is the tool; the summary is what it did.
  * A summary that already begins with the name is not prefixed again.
  */
@@ -146,6 +141,11 @@ export function toolLine(part: { name: string; summary: string }): string {
   return `${name}: ${summary}`;
 }
 
+/**
+ * A fact's key as a label. The entity worker writes keys as kebab-case attribute names and files
+ * one-off facts under `other-`: `ip` reads "IP", `other-incident-silent-stop` reads "Incident silent stop".
+ * A key a person typed with capitals or spaces is left as they wrote it.
+ */
 export function factLabel(key: string): string {
   if (/[A-Z ]/.test(key)) return key;
   const words = key.replace(/^other[-_]/, "").split(/[-_]+/).filter(Boolean);
