@@ -110,7 +110,6 @@ export function createRhClient(options: RhOptions): RhClient {
       },
       tag: tags.tag,
       tagOperations: tags.tagOperations,
-      me: account.me,
       trash: catalog.trash,
       restore: catalog.restore,
       entities: entities.entities,

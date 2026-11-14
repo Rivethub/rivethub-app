@@ -269,12 +269,6 @@ export interface SearchOptions {
 
 export type CaptureMethod = "hook" | "plugin" | "store-scan" | "client-push" | (string & {});
 
-export interface Me {
-  user: string;
-  spaces: { id: string; kind: string; name: string }[];
-  settings: { defaultVisibility: string; chosen: boolean };
-}
-
 export interface HarnessStatus {
   capabilities?: { renameSession: boolean };
   id: HarnessId;
@@ -336,6 +330,7 @@ export interface SpaceMembership {
 export interface Me {
   user: string;
   spaces: SpaceMembership[];
+  settings: { defaultVisibility: string; chosen: boolean };
 }
 
 export type SignInProgress = { status: "pending" } | { status: "signed-in"; account: Account };
