@@ -1,4 +1,4 @@
-import { entityTypes, harnessNames } from "@rivethub/client-runtime/format";
+import { entityTypes, harnessNames, originLabel } from "@rivethub/client-runtime/format";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { EntitySummary, EntityType, HarnessId, SessionQuery, SessionSummaryRow, TopicNode } from "@rivethub/contracts";
 import { useEffect, useMemo, useState } from "react";
@@ -243,7 +243,6 @@ function Sessions() {
   const filtered = text.trim().length > 0 || harness.length > 0;
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
-      <DataBanner reaching={pages.isFetching && !pages.data} />
       <TextInput
         value={text}
         onChangeText={setText}
@@ -314,6 +313,7 @@ function SessionRow({ session }: { session: SessionSummaryRow }) {
     <Pressable accessibilityRole="button" onPress={() => openSubject({ kind: "session", id: session.id, title: session.title })} style={{ minHeight: 72, justifyContent: "center", gap: 3, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: palette.border }}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
         <Text style={{ color: palette.foreground, fontWeight: "600", flexShrink: 1 }} numberOfLines={2}>{session.title}</Text>
+        {session.origin ? <KindTag label={originLabel(session.origin)} color={palette.info} /> : null}
         {session.kept ? <KindTag label="Kept" color={palette.primary} /> : null}
         {state ? <KindTag label={state.label} color={tone} /> : null}
       </View>

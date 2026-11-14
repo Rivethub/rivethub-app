@@ -1,4 +1,4 @@
-import { factLabel } from "@rivethub/client-runtime/format";
+import { factLabel, harnessNames } from "@rivethub/client-runtime/format";
 import { articleBody } from "@rivethub/client-runtime/markdown";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EntityId, Fact, IsoTime } from "@rivethub/contracts";
@@ -107,7 +107,7 @@ export function EntityScreen({ route, navigation }: Props) {
                     onPress={() => openSubject({ kind: "session", id: session.id, title: session.title })}
                     style={{ minHeight: 56, justifyContent: "center", borderBottomWidth: 1, borderBottomColor: palette.border }}
                   >
-                    <Text style={{ color: palette.muted, fontSize: 12 }}>{session.harness} · {when(session.startedAt)}</Text>
+                    <Text style={{ color: palette.muted, fontSize: 12 }}>{harnessNames[session.harness] ?? session.harness} · {when(session.startedAt)}</Text>
                     <Text style={{ color: palette.foreground }}>{session.title}</Text>
                   </Pressable>
                 ))

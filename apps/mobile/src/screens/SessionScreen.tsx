@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
 import { splitInjected } from "@rivethub/client";
+import { harnessNames, originNote } from "@rivethub/client-runtime/format";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -58,7 +59,7 @@ export function SessionScreen({ route, navigation }: Props) {
       <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 12 }}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={{ flex: 1, color: palette.muted, fontSize: 13 }} numberOfLines={1}>
-          {detail ? `${detail.harness} · ${shortDate(detail.startedAt)}` : "Session"}
+          {detail ? `${harnessNames[detail.harness] ?? detail.harness} · ${shortDate(detail.startedAt)}` : "Session"}
         </Text>
         {detail?.resumeCommand ? (
           <Pressable accessibilityRole="button" onPress={() => void resume()} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
@@ -72,7 +73,8 @@ export function SessionScreen({ route, navigation }: Props) {
       ) : (
         <View style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 24 }}>
-            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }}>{detail.title}</Text>
+            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }} numberOfLines={4}>{detail.title}</Text>
+            {detail.origin ? <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{originNote(detail.origin)} It stays private here, and cannot be filed under a topic yet.</Text> : null}
             {detail.changed.length > 0 ? (
               <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
                 <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
@@ -92,7 +94,7 @@ export function SessionScreen({ route, navigation }: Props) {
                 { id: "transcript", label: "Transcript" },
               ]}
             />
-            {active === "transcript" ? <Transcript id={detail.id} empty={empty} range={range} onClear={() => setRange(null)} /> : null}
+            {active === "transcript" ? <Transcript id={detail.id} empty={empty} range={range} onClear={() => setRange(null)} sender={detail.origin ? (detail.origin.author ?? "Sender") : undefined} /> : null}
             {active === "summary" ? (
               <Summary
                 id={detail.id}
@@ -106,12 +108,15 @@ export function SessionScreen({ route, navigation }: Props) {
             ) : null}
           </ScrollView>
           <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.sidebar, paddingBottom: insets.bottom }}>
-            <Action label="File" onPress={() => setFiling(true)} icon={<IconFile color={palette.foreground} />} />
-            <Action
-              label={detail.visibility.kind === "space" ? detail.visibility.space : "Share"}
-              onPress={() => setSharing(true)}
-              icon={<IconShare color={palette.foreground} />}
-            />
+            {/* The hub files and re-shares only sessions its own tools ran. */}
+            {detail.origin ? null : <Action label="File" onPress={() => setFiling(true)} icon={<IconFile color={palette.foreground} />} />}
+            {detail.origin ? null : (
+              <Action
+                label={detail.visibility.kind === "space" ? detail.visibility.space : "Share"}
+                onPress={() => setSharing(true)}
+                icon={<IconShare color={palette.foreground} />}
+              />
+            )}
             <Action
               label={detail.kept ? "Kept" : "Keep"}
               onPress={() => keep.mutate({ id: detail.id, keep: !detail.kept }, { onError: (error) => Alert.alert("Could not update", errorText(error)) })}
@@ -156,7 +161,8 @@ function StateNote({ state }: { state: SessionDetail["memoryState"] }) {
   return <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{text}</Text>;
 }
 
-function Transcript({ id, empty, range, onClear }: { id: SessionId; empty: boolean; range: [number, number] | null; onClear: () => void }) {
+/** `sender` names who wrote the prompts of a session someone else shared; without it they are yours. */
+function Transcript({ id, empty, range, onClear, sender }: { id: SessionId; empty: boolean; range: [number, number] | null; onClear: () => void; sender: string | undefined }) {
   const { palette } = useTheme();
   const transcript = useTranscript(id, !empty);
   if (empty) return <Text style={{ color: palette.muted, fontSize: 15 }}>Nothing was said in this session</Text>;
@@ -169,9 +175,11 @@ function Transcript({ id, empty, range, onClear }: { id: SessionId; empty: boole
           <Text style={{ color: palette.info }}>Showing messages {range[0]}–{range[1]}. Clear</Text>
         </Pressable>
       ) : null}
+      {turns[0]?.missing === "before" ? <MissingNote side="before" /> : null}
       {turns.map((turn) => (
-        <Bubble key={turn.index} turn={turn} />
+        <Bubble key={turn.index} turn={turn} sender={sender} />
       ))}
+      {turns.at(-1)?.missing === "after" ? <MissingNote side="after" /> : null}
     </View>
   );
 }
@@ -180,7 +188,17 @@ const LONG_TURN = 1200;
 
 type Shown = { key: string; kind: "said" | "tool"; text: string };
 
-function Bubble({ turn }: { turn: TranscriptTurn }) {
+/** Shown where a transcript read from memory stops short, so a part is never taken for the whole. */
+function MissingNote({ side }: { side: "before" | "after" }) {
+  const { palette } = useTheme();
+  return (
+    <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18, borderWidth: 1, borderStyle: "dashed", borderColor: palette.input, borderRadius: 10, padding: 10 }}>
+      {side === "before" ? "Earlier messages are not shown." : "Later messages are not shown."} Memory holds too many messages from the same hours to read through all of them here. Search still finds every message.
+    </Text>
+  );
+}
+
+function Bubble({ turn, sender }: { turn: TranscriptTurn; sender: string | undefined }) {
   const { palette } = useTheme();
   const [contextOpen, setContextOpen] = useState(false);
   const [full, setFull] = useState(false);
@@ -221,7 +239,7 @@ function Bubble({ turn }: { turn: TranscriptTurn }) {
   if (said.length === 0) return context ? <View style={{ alignSelf: "stretch", paddingHorizontal: 4 }}>{context}</View> : null;
   return (
     <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "92%", borderRadius: 14, backgroundColor: mine ? palette.message : palette.card, padding: 12, gap: 6 }}>
-      <Text style={{ color: palette.muted, fontSize: 11 }}>{mine ? "You" : "Assistant"} · {clock(turn.at)}</Text>
+      <Text style={{ color: palette.muted, fontSize: 11 }}>{mine ? (sender ?? "You") : "Assistant"} · {clock(turn.at)}</Text>
       {context}
       <View style={{ gap: 6, maxHeight: clipped ? 320 : undefined, overflow: "hidden" }}>
         {said.map((piece) =>

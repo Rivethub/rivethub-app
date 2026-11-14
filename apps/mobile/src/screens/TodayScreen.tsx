@@ -1,3 +1,4 @@
+import { harnessNames } from "@rivethub/client-runtime/format";
 import type { ReviewItem } from "@rivethub/contracts";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../data/queries";
@@ -49,7 +50,7 @@ export function TodayScreen() {
               {entries.map((entry) => (
                 <Pressable key={entry.session.id} accessibilityRole="button" onPress={() => openSubject({ kind: "session", id: entry.session.id, title: entry.session.title })} style={{ gap: 6, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: palette.border }}>
                   <Text style={{ color: palette.muted, fontSize: 12 }}>
-                    {clock(entry.session.startedAt)} · {entry.session.harness}
+                    {clock(entry.session.startedAt)} · {harnessNames[entry.session.harness] ?? entry.session.harness}
                     {entry.session.topic ? ` · ${entry.session.topic.path.slice(-2).join(" › ")}` : ""}
                   </Text>
                   <Text style={{ color: palette.foreground, fontWeight: "600", fontSize: 15 }}>{entry.session.title}</Text>
@@ -75,7 +76,8 @@ function Health() {
   const jobs = useModelJobs().data;
   if (!harnesses) return null;
   const stale = harnesses.filter((harness) => harness.capture.state === "stale");
-  const none = !harnesses.some((harness) => harness.capture.state !== "not-connected");
+  // A tool that is set up and has sent nothing yet is not sending, and has not stopped either.
+  const none = !harnesses.some((harness) => harness.capture.state === "receiving" || harness.capture.state === "stale");
   const failing = (jobs ?? []).filter((job) => job.health === "failing");
   const problems = [
     none ? "No tool is sending sessions yet" : "",
