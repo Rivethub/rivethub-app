@@ -133,6 +133,19 @@ const ACRONYMS = new Set(["ip", "os", "gpu", "gpus", "cpu", "cpus", "url", "ssh"
  * one-off facts under `other-`: `ip` reads "IP", `other-incident-silent-stop` reads "Incident silent stop".
  * A key a person typed with capitals or spaces is left as they wrote it.
  */
+/**
+ * A tool step as one line. The part's name is the tool; the summary is what it did.
+ * A summary that already begins with the name is not prefixed again.
+ */
+export function toolLine(part: { name: string; summary: string }): string {
+  const name = part.name.trim();
+  const summary = part.summary.trim();
+  if (!summary) return name;
+  if (!name || name === "tool") return summary;
+  if (summary === name || summary.startsWith(`${name}:`) || summary.startsWith(`${name} `)) return summary;
+  return `${name}: ${summary}`;
+}
+
 export function factLabel(key: string): string {
   if (/[A-Z ]/.test(key)) return key;
   const words = key.replace(/^other[-_]/, "").split(/[-_]+/).filter(Boolean);

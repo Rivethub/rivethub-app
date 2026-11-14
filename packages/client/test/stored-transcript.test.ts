@@ -27,13 +27,31 @@ describe("a session's messages", () => {
     const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
     expect(turns.map((t) => [t.index, t.role, t.parts[0]])).toEqual([
       [1, "user", { kind: "text", text: "Raise retention to two weeks." }],
-      [2, "assistant", { kind: "tool", name: "Bash", summary: "Bash: zpool list NAME SIZE" }],
+      [2, "assistant", { kind: "tool", name: "Bash", summary: "zpool list NAME SIZE" }],
       [3, "assistant", { kind: "text", text: "14 days fits." }],
     ]);
     const browse = new URL(BASE + rh.calls.find((c) => c.path.startsWith("/api/memory/browse"))!.path).searchParams;
     expect(browse.get("agent")).toBeNull();
     expect(browse.get("since")).toBe("2026-11-13T20:36:20.596Z");
     expect(browse.get("before")).not.toBeNull();
+  });
+
+  it("keeps a tool's name on the part when the stored text already starts with it", async () => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: "2026-11-12T17:00:00.000Z" },
+      "GET /api/memory/browse": {
+        messages: [
+          { id: "r", role: "assistant", toolName: "Read", content: "Read /tmp/synthetic/tool-marathon-2.txt", createdAt: "2026-11-12T17:00:02.000Z", sessionId: SID },
+          { id: "b", role: "assistant", toolName: "Bash", content: "Bash: Bash /tmp/synthetic/tool-marathon-6.txt", createdAt: "2026-11-12T17:00:06.000Z", sessionId: SID },
+        ],
+      },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(turns.map((t) => t.parts[0])).toEqual([
+      { kind: "tool", name: "Read", summary: "/tmp/synthetic/tool-marathon-2.txt" },
+      { kind: "tool", name: "Bash", summary: "/tmp/synthetic/tool-marathon-6.txt" },
+    ]);
   });
 
   it("come from what the hub stored when rh answers an empty transcript, as 0.8.3 does", async () => {

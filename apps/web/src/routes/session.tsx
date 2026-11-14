@@ -1,5 +1,5 @@
 import { splitInjected } from "@rivethub/client";
-import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time } from "@rivethub/client-runtime/format";
+import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time, toolLine } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../compo
 import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
 import { Frame, MainSidebar } from "../components/shell";
+import { ToolStep } from "../components/tool-step";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind, plural, subjectHref } from "../lib/format";
 import { markStep } from "../lib/journey";
@@ -523,7 +524,7 @@ function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; ra
             <details key={group.turns[0]!.index} className="text-[13px] text-muted-foreground">
               <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">› {group.turns.length} steps</summary>
               <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 pl-3">
-                {group.turns.flatMap((t) => t.parts).map((p, i) => <li key={i}>{p.kind === "tool" ? p.summary : ""}</li>)}
+                {group.turns.flatMap((t) => t.parts).map((p, i) => <li key={i}>{p.kind === "tool" ? toolLine(p) : ""}</li>)}
               </ul>
             </details>
           );
@@ -584,7 +585,7 @@ function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolea
         </p>
       ))}
       {tools.map((p, i) => (
-        <span key={i} className="text-[13px] text-muted-foreground">› {p.kind === "tool" && p.summary}</span>
+        <span key={i}>{p.kind === "tool" ? <ToolStep name={p.name} summary={p.summary} /> : null}</span>
       ))}
     </div>
   );

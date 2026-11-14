@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
 import { splitInjected } from "@rivethub/client";
-import { harnessNames, originNote } from "@rivethub/client-runtime/format";
+import { harnessNames, originNote, toolLine } from "@rivethub/client-runtime/format";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -80,7 +80,7 @@ export function SessionScreen({ route, navigation }: Props) {
                 <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
                 {detail.changed.map((change, index) => (
                   <Text key={`${change.at}:${index}`} style={{ color: palette.foreground }}>
-                    {changeLabel(change.kind)} · {change.text}
+                    {changeLabel(change.kind)} · <RichText text={change.text} style={{ color: palette.foreground }} />
                   </Text>
                 ))}
               </View>
@@ -207,7 +207,7 @@ function Bubble({ turn, sender }: { turn: TranscriptTurn; sender: string | undef
   const said: Shown[] = [];
   turn.parts.forEach((part, index) => {
     if (part.kind !== "text") {
-      said.push({ key: `${index}`, kind: "tool", text: `${part.name}: ${part.summary}` });
+      said.push({ key: `${index}`, kind: "tool", text: toolLine(part) });
       return;
     }
     splitInjected(part.text).forEach((piece, at) => {
@@ -289,7 +289,7 @@ function Summary({ id, state, onLeaf, onOpenTranscript }: { id: SessionId; state
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
         <KindTag label="Root" color={palette.primary} />
         <Text style={{ color: palette.foreground, fontWeight: "600" }}>{root.title ?? "Whole session"}</Text>
-        <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }}>{root.text}</Text>
+        <RichText text={root.text} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} />
       </View>
       {root.children.map((branch, index) => (
         <Branch key={`${branch.messageRange[0]}:${index}`} node={branch} onLeaf={onLeaf} />
@@ -309,13 +309,13 @@ function Branch({ node, onLeaf }: { node: SummaryNode; onLeaf: (range: [number, 
           <Text style={{ flex: 1, color: palette.foreground, fontWeight: "600" }}>{node.title ?? node.text}</Text>
           <Text style={{ color: palette.muted }}>{open ? "▾" : "▸"}</Text>
         </View>
-        <Text style={{ color: palette.muted, fontSize: 13 }}>{node.text}</Text>
+        <RichText text={node.text} style={{ color: palette.muted, fontSize: 13 }} />
       </Pressable>
       {open
         ? node.children.map((leaf, index) => (
             <View key={`${leaf.messageRange[0]}:${index}`} style={{ gap: 4, paddingBottom: 8 }}>
               <Text style={{ color: palette.muted, fontSize: 11, fontWeight: "600" }}>LEAF · {leaf.messageRange[0]}–{leaf.messageRange[1]}</Text>
-              <Text style={{ color: palette.foreground, lineHeight: 20 }}>{leaf.text}</Text>
+              <RichText text={leaf.text} style={{ color: palette.foreground, lineHeight: 20 }} />
               <Pressable accessibilityRole="button" onPress={() => onLeaf(leaf.messageRange)} style={{ minHeight: 44, justifyContent: "center" }}>
                 <Text style={{ color: palette.info }}>View in transcript</Text>
               </Pressable>

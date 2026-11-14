@@ -7,7 +7,7 @@ import { markStep } from "../lib/journeyStore";
 import { openReview, openSubject } from "../nav/go";
 import { navigationRef } from "../nav/ref";
 import { useTheme } from "../theme/Theme";
-import { DataBanner, Screen } from "../ui/chrome";
+import { DataBanner, RichText, Screen } from "../ui/chrome";
 
 const WINDOWS: { id: SearchWindow | ""; label: string }[] = [
   { id: "", label: "Any time" },
@@ -127,7 +127,7 @@ export function SearchScreen() {
                   <Pressable key={`${hit.subject.kind}:${hit.subject.id}`} accessibilityRole="button" onPress={() => openSubject(hit.subject)} style={rowStyle(palette.border)}>
                     <Text style={{ color: palette.muted, fontSize: 12 }}>{KIND_LABEL[hit.subject.kind]}</Text>
                     <Text style={{ color: palette.foreground, fontSize: 16 }}>{hit.subject.title}</Text>
-                    {hit.snippet ? <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }} numberOfLines={3}>{hit.snippet}</Text> : null}
+                    {hit.snippet ? <RichText text={hit.snippet} numberOfLines={3} style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }} /> : null}
                   </Pressable>
                 ))
               )}
@@ -180,7 +180,7 @@ export function SearchScreen() {
 function Highlight({ text, query }: { text: string; query: string }) {
   const { palette } = useTheme();
   const words = query.split(/\s+/).filter((word) => word.length > 1).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  if (!words.length) return <Text style={{ color: palette.muted, fontSize: 14, lineHeight: 20 }}>{text}</Text>;
+  if (!words.length || /\[[^\]]+\]\([^)]+\)|\*\*|`/.test(text)) return <RichText text={text} style={{ color: palette.muted, fontSize: 14, lineHeight: 20 }} />;
   const parts = text.split(new RegExp(`(${words.join("|")})`, "gi"));
   return (
     <Text style={{ color: palette.muted, fontSize: 14, lineHeight: 20 }}>

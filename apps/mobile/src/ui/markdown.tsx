@@ -1,7 +1,8 @@
 import { parseInline, parseMarkdown, type Block, type Inline } from "@rivethub/client-runtime/markdown";
-import { Linking, ScrollView, Text, View, type TextStyle } from "react-native";
+import { Linking, ScrollView, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { navigationRef } from "../nav/ref";
 import { useTheme } from "../theme/Theme";
+import { inAppTarget } from "./links";
 
 /** The shared article blocks, drawn with the phone's type and colors. Raw HTML is never interpreted. */
 export function MarkdownView({ source }: { source: string }) {
@@ -17,17 +18,26 @@ export function MarkdownView({ source }: { source: string }) {
 }
 
 function openHref(href: string) {
-  if (/^https?:\/\//i.test(href)) {
-    void Linking.openURL(href);
+  const target = inAppTarget(href);
+  if (!target) return;
+  if (target.kind === "external") {
+    void Linking.openURL(target.href);
     return;
   }
   if (!navigationRef.isReady()) return;
-  const topic = /^\/topics\/([^/?#]+)/.exec(href);
-  const entity = /^\/entities\/([^/?#]+)/.exec(href);
-  const session = /^\/sessions\/([^/?#]+)/.exec(href);
-  if (topic?.[1]) navigationRef.navigate("Topic", { id: decodeURIComponent(topic[1]) });
-  else if (entity?.[1]) navigationRef.navigate("Entity", { id: decodeURIComponent(entity[1]) });
-  else if (session?.[1]) navigationRef.navigate("Session", { id: decodeURIComponent(session[1]) });
+  if (target.kind === "topic") navigationRef.navigate("Topic", { id: target.id });
+  else if (target.kind === "entity") navigationRef.navigate("Entity", { id: target.id });
+  else navigationRef.navigate("Session", { id: target.id });
+}
+
+/** One paragraph of hub Markdown: code, emphasis, and links that open in the app. */
+export function InlineText({ text, style, numberOfLines }: { text: string; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
+  const lines = numberOfLines === undefined ? {} : { numberOfLines };
+  return (
+    <Text style={style} {...lines}>
+      <InlineRuns nodes={parseInline(text)} base={{}} />
+    </Text>
+  );
 }
 
 function InlineRuns({ nodes, base }: { nodes: Inline[]; base: TextStyle }) {

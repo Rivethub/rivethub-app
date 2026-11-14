@@ -308,7 +308,7 @@ export async function storedTranscript(http: Http, id: SessionId): Promise<Store
       index: i + 1,
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${content}` : content) } : { kind: "text", text: content }],
+      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: toolWhat(message.toolName, content) } : { kind: "text", text: content }],
     };
   });
   return cut ? { turns, cut } : { turns };
@@ -318,6 +318,30 @@ const oneLine = (text: string) => {
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > 160 ? `${flat.slice(0, 157)}...` : flat;
 };
+
+/** What a stored tool did. The tool's name lives on the part, so a summary that repeats it loses that prefix. */
+function toolWhat(toolName: string | undefined, content: string): string {
+  let text = content.replace(/\s+/g, " ").trim();
+  const name = toolName?.trim();
+  if (name) {
+    for (;;) {
+      if (text === name) {
+        text = "";
+        break;
+      }
+      if (text.startsWith(`${name}:`)) {
+        text = text.slice(name.length + 1).trim();
+        continue;
+      }
+      if (text.startsWith(`${name} `)) {
+        text = text.slice(name.length + 1).trim();
+        continue;
+      }
+      break;
+    }
+  }
+  return oneLine(text);
+}
 
 function matches(row: SessionSummaryRow, query: SessionQuery): boolean {
   if (query.harness !== undefined && row.harness !== query.harness) return false;

@@ -126,7 +126,7 @@ export function EntityScreen({ route, navigation }: Props) {
                     style={{ minHeight: 48, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}
                   >
                     <Text style={{ color: palette.muted, fontSize: 12 }}>{changeLabel(change.kind)} · {shortDate(change.at)}</Text>
-                    <Text style={{ color: palette.foreground }}>{change.text}</Text>
+                    <RichText text={change.text} style={{ color: palette.foreground }} />
                   </Pressable>
                 ))
               : null}

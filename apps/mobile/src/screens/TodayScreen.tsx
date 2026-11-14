@@ -8,7 +8,7 @@ import { openGuide, openReview, openStep, openSubject } from "../nav/go";
 import { navigationRef } from "../nav/ref";
 import { alpha } from "../theme/tokens";
 import { useTheme } from "../theme/Theme";
-import { DataBanner, HubChip, KindTag, Screen } from "../ui/chrome";
+import { DataBanner, HubChip, KindTag, RichText, Screen } from "../ui/chrome";
 import { changeColor, changeLabel, clock, errorText, groupColor, groupLabel, longDate } from "../ui/format";
 import { Progress } from "./GuideScreen";
 
@@ -29,7 +29,7 @@ export function TodayScreen() {
           <View style={{ paddingHorizontal: 16, gap: 18 }}>
             <View style={{ gap: 8 }}>
               <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 27, fontWeight: "600", lineHeight: 34 }}>{digest.headline}</Text>
-              <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 25 }}>{digest.summary}</Text>
+              <RichText text={digest.summary} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 25 }} />
             </View>
             <Health />
             {digest.needsYou.length > 0 ? (
@@ -57,7 +57,7 @@ export function TodayScreen() {
                   {entry.changes.map((change, index) => (
                     <View key={`${change.at}-${index}`} style={{ flexDirection: "row", gap: 8 }}>
                       <Text style={{ width: 58, color: changeColor(change.kind, palette), fontSize: 11, fontWeight: "600", paddingTop: 2 }}>{changeLabel(change.kind)}</Text>
-                      <Text style={{ flex: 1, color: palette.foreground, fontSize: 14, lineHeight: 20 }}>{change.text}</Text>
+                      <RichText text={change.text} style={{ flex: 1, color: palette.foreground, fontSize: 14, lineHeight: 20 }} />
                     </View>
                   ))}
                 </Pressable>
@@ -140,7 +140,7 @@ function NeedCard({ item }: { item: ReviewItem }) {
         <KindTag label={groupLabel(item.group)} color={color} />
         <Text style={{ flexShrink: 1, color: palette.foreground, fontWeight: "600", fontSize: 14 }} numberOfLines={2}>{item.subject.title}</Text>
       </View>
-      <Text style={{ color: palette.foreground, fontSize: 14, lineHeight: 20 }}>{item.text}</Text>
+      <RichText text={item.text} style={{ color: palette.foreground, fontSize: 14, lineHeight: 20 }} />
     </Pressable>
   );
 }

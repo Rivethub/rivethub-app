@@ -9,7 +9,7 @@ import { quietSessionNote, showsMessageCount, visibleSessions } from "../lib/ses
 import { openSubject } from "../nav/go";
 import type { LibrarySegment, TabParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
-import { DataBanner, HubChip, KindTag, Screen } from "../ui/chrome";
+import { DataBanner, HubChip, KindTag, RichText, Screen } from "../ui/chrome";
 import { clock, count, dayKey, longDate } from "../ui/format";
 import { NewTopic } from "./NewTopic";
 
@@ -317,7 +317,7 @@ function SessionRow({ session }: { session: SessionSummaryRow }) {
         {session.kept ? <KindTag label="Kept" color={palette.primary} /> : null}
         {state ? <KindTag label={state.label} color={tone} /> : null}
       </View>
-      {session.gist ? <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }} numberOfLines={2}>{session.gist}</Text> : null}
+      {session.gist ? <RichText text={session.gist} numberOfLines={2} style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }} /> : null}
       <Text style={{ color: palette.muted, fontSize: 12 }}>
         {clock(session.startedAt)} · {harnessNames[session.harness] ?? session.harness}
         {" · "}

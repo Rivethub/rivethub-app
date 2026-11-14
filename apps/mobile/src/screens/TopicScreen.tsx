@@ -59,7 +59,7 @@ export function TopicScreen({ route, navigation }: Props) {
           <Section title="Decisions">
             {article.decisions.length === 0 ? <Muted>No decisions yet.</Muted> : article.decisions.map((decision) => (
               <View key={decision.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}>
-                <Text style={{ color: decision.superseded ? palette.muted : palette.foreground, textDecorationLine: decision.superseded ? "line-through" : "none" }}>{decision.text}</Text>
+                <RichText text={decision.text} style={{ color: decision.superseded ? palette.muted : palette.foreground, textDecorationLine: decision.superseded ? "line-through" : "none" }} />
                 <Text style={{ color: palette.muted, fontSize: 12 }}>{shortDate(decision.at)}</Text>
               </View>
             ))}

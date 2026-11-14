@@ -5,7 +5,7 @@ import { useNotice } from "../data/queries";
 import { useHub } from "../hub/HubContext";
 import { alpha } from "../theme/tokens";
 import { useTheme } from "../theme/Theme";
-import { inlineSpans } from "./inline";
+import { InlineText } from "./markdown";
 
 export function Screen({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const { palette } = useTheme();
@@ -203,23 +203,7 @@ export function GhostButton({ label, onPress, danger }: { label: string; onPress
   );
 }
 
-export function RichText({ text, style }: { text: string; style?: StyleProp<TextStyle> }) {
-  const { palette } = useTheme();
-  return (
-    <Text style={style}>
-      {inlineSpans(text).map((span, index) =>
-        span.kind === "code" ? (
-          <Text key={index} style={{ fontFamily: "monospace", fontSize: 14, color: palette.foreground, backgroundColor: alpha(palette.muted, 0.12) }}>
-            {span.text}
-          </Text>
-        ) : span.kind === "strong" ? (
-          <Text key={index} style={{ fontWeight: "700" }}>
-            {span.text}
-          </Text>
-        ) : (
-          span.text
-        ),
-      )}
-    </Text>
-  );
+export function RichText({ text, style, numberOfLines }: { text: string; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
+  const lines = numberOfLines === undefined ? {} : { numberOfLines };
+  return <InlineText text={text} style={style} {...lines} />;
 }
