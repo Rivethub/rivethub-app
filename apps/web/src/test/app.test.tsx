@@ -140,7 +140,7 @@ describe("Connect", () => {
 });
 
 describe("Account", () => {
-  it("signs out, signs in with an email, and deletes after a confirm", async () => {
+  it("signs out, signs in with device approval, and deletes after a confirm", async () => {
     const { user, client } = renderAt("/settings/account");
     const card = await screen.findByRole("region", { name: "Account" });
     expect(within(card).getByText("phil@example.com")).toBeInTheDocument();
@@ -149,18 +149,19 @@ describe("Account", () => {
     await within(card).findByText("Not signed in");
 
     const signIn = vi.spyOn(client, "signIn");
-    await user.type(within(card).getByRole("textbox", { name: "Email" }), "new@example.com");
-    await user.click(within(card).getByRole("button", { name: "Send sign-in link" }));
-    await within(card).findByText("new@example.com");
-    expect(signIn).toHaveBeenCalledWith("new@example.com");
+    await user.click(within(card).getByRole("button", { name: "Sign in with your RivetHub account" }));
+    await within(card).findByText("RVTB-HUBS");
+    expect(within(card).getByRole("link", { name: "Open RivetHub sign-in" })).toHaveAttribute("target", "_blank");
+    await within(card).findByText("you@example.com", {}, { timeout: 8000 });
+    expect(signIn).toHaveBeenCalledWith();
 
     const del = vi.spyOn(client, "deleteAccount");
     await user.click(within(card).getByRole("button", { name: "Delete account…" }));
     expect(del).not.toHaveBeenCalled();
-    await user.click(within(card).getByRole("button", { name: "Delete account" }));
+    await user.click(within(card).getByRole("button", { name: "Sign this node out" }));
     await within(card).findByText("Not signed in");
     expect(del).toHaveBeenCalledOnce();
-  });
+  }, 12000);
 });
 
 describe("History", () => {

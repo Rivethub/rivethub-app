@@ -78,6 +78,17 @@ The app's version is independent of rh's. Each app build ships the rh pinned in 
 
 `pnpm dist:desktop:linux` writes the manifests next to the packages. A version like `0.2.0-nightly.20261111.1` builds for `nightly`, and anything else builds for `stable`. Running the `Release desktop` workflow with `publish` set uploads both arches to the channel's directory. That job stays off until `DESKTOP_PUBLISH_ENABLED` is set; see its TODO.
 
+### Account sign-in
+
+Account sign-in uses device approval in your browser. It requires runtime commit
+`22d556c8a890e40b5c65b66d38de99070c25fae9` (`fix/account-device-login`, CONTRACT note 155).
+The runtime version remains 0.8.3; an unpatched 0.8.3 or earlier node cannot use this flow.
+The app explains that limitation and offers GitHub updates without an account.
+Signing in here and `rh share login` use the same node login; signing out ends it for both.
+Account deletion signs this node out and provides a link to finish deletion on the cloud account page.
+
+For sample screens, use `?sample&accountLogin=pending` (`expired` or `denied` exercises those outcomes).
+
 ### Sharing sessions
 
 The desktop app can share sessions with someone else and receive theirs. Both start from **Shared** in the sidebar, which also lists what is shared with each space on this hub, and a session's own **Share…** button opens the flow with that session already found and ticked. The send and receive routes in `apps/web` work only when the Electron bridge (`window.rivethub`) is present, so the plain browser build and mobile explain sharing but don't offer the two actions. They call rh's local `/api/share/**` routes (rivethub-runtime CONTRACT notes 151 and 152) through `createShareClient` in `packages/client`; `packages/contracts` has the types.

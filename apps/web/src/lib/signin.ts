@@ -1,11 +1,11 @@
 import { keys } from "@rivethub/client-runtime/query-keys";
-import { signInWithEmail, type SignInState } from "@rivethub/client-runtime/sign-in";
+import { signInWithDevice, type SignInState } from "@rivethub/client-runtime/sign-in";
 import type { Account } from "@rivethub/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useClient } from "../client/context";
 
-export function useEmailSignIn(onSignedIn?: (account: Account) => void) {
+export function useDeviceSignIn(onSignedIn?: (account: Account) => void) {
   const client = useClient();
   const qc = useQueryClient();
   const [state, setState] = useState<SignInState>({ phase: "idle" });
@@ -21,13 +21,14 @@ export function useEmailSignIn(onSignedIn?: (account: Account) => void) {
   }, []);
 
   const start = useCallback(
-    async (email: string) => {
+    async () => {
       running.current?.abort();
       const controller = new AbortController();
       running.current = controller;
-      setState({ phase: "waiting", email });
+      setState({ phase: "starting" });
       try {
-        const account = await signInWithEmail(client, email, controller.signal);
+        const account = await signInWithDevice(client, controller.signal, (details) => { if (!controller.signal.aborted) setState({ phase: "waiting", details }); });
+        if (controller.signal.aborted) return;
         running.current = null;
         setState({ phase: "idle" });
         await qc.invalidateQueries({ queryKey: keys.account });
