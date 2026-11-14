@@ -6,12 +6,12 @@ import * as Clipboard from "expo-clipboard";
 import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useKeep, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
+import { useKeep, useMe, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
 import { markStep } from "../lib/journeyStore";
 import { countedNoMessages } from "../lib/sessions";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
-import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
+import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet } from "../ui/chrome";
 import { NewTopic } from "./NewTopic";
 import { changeLabel, clock, errorText, shortDate } from "../ui/format";
 import { IconFile, IconKeep, IconShare, IconTrash } from "../ui/icons";
@@ -85,27 +85,33 @@ export function SessionScreen({ route, navigation }: Props) {
                 ))}
               </View>
             ) : null}
-            {detail.memoryState !== "summarized" && !empty ? <StateNote state={detail.memoryState} /> : null}
-            <Segment
-              value={active}
-              onChange={(next) => setPane(next as Pane)}
-              options={[
-                { id: "summary", label: "Summary" },
-                { id: "transcript", label: "Transcript" },
-              ]}
-            />
-            {active === "transcript" ? <Transcript id={detail.id} empty={empty} range={range} onClear={() => setRange(null)} sender={detail.origin ? (detail.origin.author ?? "Sender") : undefined} /> : null}
-            {active === "summary" ? (
-              <Summary
-                id={detail.id}
-                state={detail.memoryState}
-                onOpenTranscript={() => setPane("transcript")}
-                onLeaf={(next) => {
-                  setRange(next);
-                  setPane("transcript");
-                }}
-              />
-            ) : null}
+            {empty ? (
+              <Text style={{ color: palette.muted, fontSize: 15 }}>Nothing was said in this session</Text>
+            ) : (
+              <>
+                {detail.memoryState !== "summarized" ? <StateNote state={detail.memoryState} /> : null}
+                <Segment
+                  value={active}
+                  onChange={(next) => setPane(next as Pane)}
+                  options={[
+                    { id: "summary", label: "Summary" },
+                    { id: "transcript", label: "Transcript" },
+                  ]}
+                />
+                {active === "transcript" ? <Transcript id={detail.id} empty={false} range={range} onClear={() => setRange(null)} sender={detail.origin ? (detail.origin.author ?? "Sender") : undefined} /> : null}
+                {active === "summary" ? (
+                  <Summary
+                    id={detail.id}
+                    state={detail.memoryState}
+                    onOpenTranscript={() => setPane("transcript")}
+                    onLeaf={(next) => {
+                      setRange(next);
+                      setPane("transcript");
+                    }}
+                  />
+                ) : null}
+              </>
+            )}
           </ScrollView>
           <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.sidebar, paddingBottom: insets.bottom }}>
             {/* The hub files and re-shares only sessions its own tools ran. */}
@@ -339,6 +345,7 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
   };
   return (
     <Sheet title="File in a topic" onClose={onClose}>
+      <NewTopic label="New topic" onCreated={(id) => file(id)} />
       <ScrollView style={{ maxHeight: 320 }}>
         <Pressable accessibilityRole="button" onPress={() => file(null)} style={{ minHeight: 48, justifyContent: "center" }}>
           <Text style={{ color: current === null ? palette.primary : palette.foreground }}>Unfiled</Text>
@@ -348,10 +355,6 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
             <Text style={{ color: choice.id === current ? palette.primary : palette.foreground }}>{choice.label}</Text>
           </Pressable>
         ))}
-        <NewTopic
-          label="New topic"
-          onCreated={(id) => file(id)}
-        />
       </ScrollView>
     </Sheet>
   );
@@ -359,17 +362,24 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
 
 function ShareSheet({ session, space, onClose }: { session: SessionId; space: string; onClose: () => void }) {
   const setVisibility = useSetVisibility();
-  const [name, setName] = useState(space);
+  const me = useMe();
   const { palette } = useTheme();
+  const [choice, setChoice] = useState(space || "private");
   const [error, setError] = useState<string | null>(null);
+  const memberships = me.data?.spaces ?? [];
+  const choices = [
+    { id: "private", name: "Private" },
+    ...memberships.map((membership) => ({ id: membership.id, name: membership.name })),
+  ];
+  if (space && !choices.some((option) => option.id === space)) choices.push({ id: space, name: space });
   const save = () => {
-    const trimmed = name.trim();
-    const visibility = trimmed ? { kind: "space" as const, space: trimmed } : { kind: "private" as const };
+    setError(null);
+    const visibility = choice === "private" ? { kind: "private" as const } : { kind: "space" as const, space: choice };
     setVisibility.mutate(
       { id: session, visibility },
       {
         onSuccess: () => {
-          if (trimmed) markStep("share");
+          if (choice !== "private") markStep("share");
           onClose();
         },
         onError: (caught) => setError(errorText(caught)),
@@ -378,7 +388,21 @@ function ShareSheet({ session, space, onClose }: { session: SessionId; space: st
   };
   return (
     <Sheet title="Share" onClose={onClose}>
-      <TextField label="Space name" value={name} onChangeText={setName} placeholder="Leave empty to keep it private" />
+      {choices.map((option) => {
+        const selected = option.id === choice;
+        return (
+          <Pressable
+            key={option.id}
+            accessibilityRole="radio"
+            accessibilityState={{ selected, checked: selected }}
+            onPress={() => setChoice(option.id)}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <Text style={{ color: palette.foreground, fontSize: 16 }}>{option.name}</Text>
+            {selected ? <Text style={{ color: palette.primary, fontSize: 16 }}>✓</Text> : null}
+          </Pressable>
+        );
+      })}
       {error ? <Text style={{ color: palette.error }}>{error}</Text> : null}
       <PrimaryButton label={setVisibility.isPending ? "Saving…" : "Save"} onPress={save} disabled={setVisibility.isPending} />
       <GhostButton label="Cancel" onPress={onClose} />

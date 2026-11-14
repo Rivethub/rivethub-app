@@ -2,6 +2,7 @@ import { harnessNames } from "@rivethub/client-runtime/format";
 import type { ReviewItem } from "@rivethub/contracts";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../data/queries";
+import { DESKTOP_NOTE, type StepAction } from "../lib/journey";
 import { markStep, setGuideHidden, useJourney } from "../lib/journeyStore";
 import { visibleTodayEntries } from "../lib/sessions";
 import { openGuide, openReview, openStep, openSubject } from "../nav/go";
@@ -176,6 +177,15 @@ function FilingCard({ items }: { items: ReviewItem[] }) {
   );
 }
 
+function PhoneStepButton({ action }: { action: Extract<StepAction, { kind: "phone" }> }) {
+  const { palette } = useTheme();
+  return (
+    <Pressable accessibilityRole="button" onPress={() => openStep(action.to)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 14, borderRadius: 10, backgroundColor: palette.primary }}>
+      <Text style={{ color: palette.primaryForeground, fontWeight: "600" }}>{action.label}</Text>
+    </Pressable>
+  );
+}
+
 function NextStep() {
   const { palette } = useTheme();
   const journey = useJourney();
@@ -188,11 +198,10 @@ function NextStep() {
       </Text>
       <Text style={{ color: palette.foreground, fontSize: 15, fontWeight: "600" }}>{next.title}</Text>
       <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{next.why}</Text>
+      {next.action.kind === "desktop" ? <Text style={{ color: palette.foreground, fontSize: 14, lineHeight: 20 }}>{DESKTOP_NOTE}</Text> : null}
       <Progress done={journey.doneCount} total={journey.steps.length} />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Pressable accessibilityRole="button" onPress={() => openStep(next.action.to)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 14, borderRadius: 10, backgroundColor: palette.primary }}>
-          <Text style={{ color: palette.primaryForeground, fontWeight: "600" }}>{next.action.label}</Text>
-        </Pressable>
+        {next.action.kind === "phone" ? <PhoneStepButton action={next.action} /> : null}
         <Pressable accessibilityRole="button" onPress={openGuide} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
           <Text style={{ color: palette.info }}>All steps</Text>
         </Pressable>

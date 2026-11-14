@@ -119,6 +119,7 @@ export function createRhClient(options: RhOptions): RhClient {
       reviewQueue: review.reviewQueue,
       decide: review.decide,
       account: account.account,
+      me: account.me,
       updateAccount: account.updateAccount,
       signIn: account.signIn,
       pollSignIn: account.pollSignIn,

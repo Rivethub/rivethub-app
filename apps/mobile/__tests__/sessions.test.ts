@@ -70,4 +70,20 @@ describe("journey", () => {
     expect(journey.doneCount).toBe(9);
     expect(journey.stage.id).toBe("share");
   });
+
+  it("sends tool, recall, and model setup to the desktop app and still marks them from the hub", () => {
+    const freshJourney = buildJourney(fresh);
+    const desktop = freshJourney.steps.filter((step) => step.action.kind === "desktop").map((step) => step.id);
+    expect(desktop).toEqual(["capture", "recall", "model"]);
+    expect(freshJourney.steps.filter((step) => step.action.kind === "phone").map((step) => step.id)).toEqual([
+      "first-session",
+      "search",
+      "summary",
+      "review",
+      "pin",
+      "share",
+    ]);
+    const done = buildJourney({ ...fresh, capturing: true, recalling: true, hasModel: true });
+    expect(done.steps.filter((step) => step.action.kind === "desktop").every((step) => step.done)).toBe(true);
+  });
 });

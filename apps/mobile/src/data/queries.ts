@@ -159,6 +159,11 @@ export function useAccount() {
   return useQuery({ queryKey: ["account", client.scope], queryFn: () => client.account() });
 }
 
+export function useMe() {
+  const { client } = useHub();
+  return useQuery({ queryKey: ["me", client.scope], queryFn: () => client.me() });
+}
+
 function useWrite<A>(fn: (client: ReturnType<typeof useHub>["client"], arg: A) => Promise<unknown>) {
   const { client } = useHub();
   const queryClient = useQueryClient();

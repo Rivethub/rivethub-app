@@ -84,10 +84,10 @@ function Topics({ tree }: { tree: TopicNode[] }) {
   const rows = flatten(tree, expanded, 0);
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 8 }}>
-        <Text style={{ flex: 1, paddingHorizontal: 16, paddingTop: 8, color: palette.muted, fontSize: 12, fontWeight: "600" }}>ALL TOPICS</Text>
-        <NewTopic onCreated={(id) => openSubject({ kind: "topic", id, title: "Topic" })} />
-      </View>
+      <NewTopic
+        heading={<Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>ALL TOPICS</Text>}
+        onCreated={(id) => openSubject({ kind: "topic", id, title: "Topic" })}
+      />
       {pins.length > 0 ? (
         <>
           <Text style={{ paddingHorizontal: 16, paddingTop: 8, color: palette.muted, fontSize: 12, fontWeight: "600" }}>PINNED</Text>

@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { STAGES, type Step } from "../lib/journey";
+import { DESKTOP_NOTE, STAGES, type Step, type StepAction } from "../lib/journey";
 import { setGuideHidden, useJourney } from "../lib/journeyStore";
 import { openStep } from "../nav/go";
 import type { RootParams } from "../nav/types";
@@ -93,13 +93,21 @@ function StepRow({ step, current }: { step: Step; current: boolean }) {
           {step.title}
         </Text>
         <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{step.why}</Text>
+        {!step.done && step.action.kind === "desktop" ? (
+          <Text style={{ color: palette.foreground, fontSize: 13, lineHeight: 18 }}>{DESKTOP_NOTE}</Text>
+        ) : null}
       </View>
-      {step.done ? null : (
-        <Pressable accessibilityRole="button" onPress={() => openStep(step.action.to)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
-          <Text style={{ color: palette.info, fontSize: 13 }}>{step.action.label}</Text>
-        </Pressable>
-      )}
+      {!step.done && step.action.kind === "phone" ? <PhoneStepButton action={step.action} /> : null}
     </View>
+  );
+}
+
+function PhoneStepButton({ action }: { action: Extract<StepAction, { kind: "phone" }> }) {
+  const { palette } = useTheme();
+  return (
+    <Pressable accessibilityRole="button" onPress={() => openStep(action.to)} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
+      <Text style={{ color: palette.info, fontSize: 13 }}>{action.label}</Text>
+    </Pressable>
   );
 }
 

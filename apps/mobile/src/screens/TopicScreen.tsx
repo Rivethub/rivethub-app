@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useTopic } from "../data/queries";
 import { useHub } from "../hub/HubContext";
 import { isPinned } from "../hub/pins";
+import { textUnderTitle } from "../lib/topicText";
 import { openSubject } from "../nav/go";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
@@ -98,11 +99,14 @@ export function TopicScreen({ route, navigation }: Props) {
 }
 
 function ArticleBody({ name, article, lead, current, reading, foreground, muted }: { name: string; article: string | undefined; lead: string; current: string | undefined; reading: string | undefined; foreground: string; muted: string }) {
-  const body = article ? articleBody(article, name) : "";
+  const body = article ? articleBody(article, name).trim() : "";
+  const intro = body ? null : textUnderTitle(name, lead);
+  const aside = current && !body.includes(current) ? textUnderTitle(name, current) : null;
+  if (!body && !intro && !aside) return null;
   return (
     <>
-      {body ? <MarkdownView source={body} /> : lead ? <RichText text={lead} style={{ fontFamily: reading, color: foreground, fontSize: 16, lineHeight: 24 }} /> : null}
-      {current && !body.includes(current) ? <Text style={{ color: muted, fontSize: 15, lineHeight: 22 }}>{current}</Text> : null}
+      {body ? <MarkdownView source={body} /> : intro ? <RichText text={intro} style={{ fontFamily: reading, color: foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+      {aside ? <Text style={{ color: muted, fontSize: 15, lineHeight: 22 }}>{aside}</Text> : null}
     </>
   );
 }

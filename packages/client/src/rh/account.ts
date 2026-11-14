@@ -1,4 +1,4 @@
-import type { Account, Hub, SignInProgress } from "@rivethub/contracts";
+import type { Account, Hub, Me, SignInProgress } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { strip } from "./util.js";
@@ -10,6 +10,10 @@ export function accountApi(http: Http) {
   return {
     async account(): Promise<Account> {
       return mapAccount(await http.get("/api/account", wire.account));
+    },
+
+    async me(): Promise<Me> {
+      return strip<Me>(await http.get("/api/me", wire.me));
     },
 
     updateAccount: (patch: Partial<Pick<Account, "channel" | "autoDownload" | "crashReports" | "usageCounts" | "updateSource">>) =>

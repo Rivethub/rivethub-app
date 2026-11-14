@@ -10,6 +10,7 @@ import type {
   HarnessStatus,
   Hub,
   IsoTime,
+  Me,
   ModelJob,
   ReviewDecision,
   ReviewItem,
@@ -107,6 +108,8 @@ export interface MemoryClient {
 
   hubs(): Promise<Hub[]>;
   account(): Promise<Account>;
+  /** Who is signed in, and the spaces they can share a session with. */
+  me(): Promise<Me>;
   updateAccount(patch: Partial<Pick<Account, "channel" | "autoDownload" | "crashReports" | "usageCounts" | "updateSource">>): Promise<void>;
   /** Starts an email sign-in. `pollSignIn` reports when the link has been followed. */
   signIn(email: string): Promise<{ requestId: string }>;

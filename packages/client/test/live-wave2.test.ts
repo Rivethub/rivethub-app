@@ -161,6 +161,17 @@ describe("today and changes", () => {
 });
 
 describe("account and hubs", () => {
+  it("reads the spaces a person belongs to from /api/me", async () => {
+    const { client, calls } = rh({
+      "GET /api/me": { user: "owner", settings: { theme: "dark" }, spaces: [{ id: "household", kind: "household", name: "Household" }] },
+    });
+    expect(await client.methods.me!()).toEqual({
+      user: "owner",
+      spaces: [{ id: "household", kind: "household", name: "Household" }],
+    });
+    expect(calls.at(-1)!.path).toBe("/api/me");
+  });
+
   it("maps a signed-out account without an email and a signed-in one with a pending update", async () => {
     const signed = rh({ "GET /api/account": signedIn }).client;
     const out = rh({ "GET /api/account": signedOut }).client;
