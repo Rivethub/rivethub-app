@@ -17,6 +17,12 @@ export interface MintOptions {
   /** The rh binary: the bundled one in a packaged app, `rh` on PATH in development. */
   rh: string;
   env?: NodeJS.ProcessEnv;
+  /**
+   * How the request is sent. A packaged app passes Electron's `net.fetch`, which trusts what the window
+   * trusts (the system and user certificate stores), so a node serving HTTPS from a private authority
+   * signs in the same way it loads. Node's own `fetch` knows only its bundled roots.
+   */
+  fetch?: typeof fetch;
 }
 
 /**
@@ -30,7 +36,7 @@ export async function mintLoginCode(origin: string, options: MintOptions): Promi
   try {
     const { stdout } = await execFileAsync(options.rh, ["auth", "token-path", "--json"], { env: options.env ?? process.env, timeout: TIMEOUT_MS });
     const token = await readOwnerToken(TokenPath.parse(JSON.parse(stdout)).path);
-    const response = await fetch(new URL("/api/auth/login-codes", origin), {
+    const response = await (options.fetch ?? fetch)(new URL("/api/auth/login-codes", origin).href, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
       redirect: "error",

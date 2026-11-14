@@ -304,7 +304,7 @@ describe("rh.lock.json", () => {
   it("rejects an asset name that does not match its version and target", () => {
     const lock = structuredClone(rhLock);
     lock.targets["universal-apple-darwin"].asset = "rh-0.7.0-universal-apple-darwin.tar.gz";
-    expect(() => RhLock.parse(lock)).toThrow(/expected rh-0\.8\.0-universal-apple-darwin\.tar\.gz/);
+    expect(() => RhLock.parse(lock)).toThrow(/expected rh-0\.8\.3-universal-apple-darwin\.tar\.gz/);
   });
 
   it("maps hosts to the archive that runs there", () => {

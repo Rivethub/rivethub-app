@@ -57,6 +57,17 @@ describe("mintLoginCode", () => {
     return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   };
 
+  it("sends the request with the fetch it is given, so a packaged app can use the window's certificate trust", async () => {
+    const calls: { url: string; authorization: string | null; redirect: RequestRedirect | undefined }[] = [];
+    const given: typeof fetch = async (input, init) => {
+      calls.push({ url: String(input), authorization: new Headers(init?.headers).get("authorization"), redirect: init?.redirect });
+      return new Response(JSON.stringify({ code: "from-given-fetch" }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const rh = await fakeRh(await token(0o600));
+    expect(await mintLoginCode("https://localhost:5174", { rh, fetch: given })).toBe("from-given-fetch");
+    expect(calls).toEqual([{ url: "https://localhost:5174/api/auth/login-codes", authorization: "Bearer owner-token-xyz", redirect: "error" }]);
+  });
+
   it("reads the owner token from the path rh names and returns only the one-time code", async () => {
     const origin = await node(200, { code: "one-time-code", expiresInSecs: 60 });
     const code = await mintLoginCode(origin, { rh: await fakeRh(await token(0o600)) });

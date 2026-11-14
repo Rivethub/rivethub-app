@@ -1,18 +1,18 @@
 {
   "repository": "Rivethub/rivethub-runtime",
-  "version": "0.8.0",
+  "version": "0.8.3",
   "targets": {
     "x86_64-unknown-linux-gnu": {
-      "asset": "rh-0.8.0-x86_64-unknown-linux-gnu.tar.gz",
-      "sha256": "59978393572ac4141d72f86b2fd6d30a8aacf40f0eaa85f4172e826cb070049f"
+      "asset": "rh-0.8.3-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "aff000de3c55f87260bb4f1593195f96d7218fb6468870e04716a8682af9fdda"
     },
     "aarch64-unknown-linux-gnu": {
-      "asset": "rh-0.8.0-aarch64-unknown-linux-gnu.tar.gz",
-      "sha256": "2ec035b0e26a7ccce4191b3a2b6f7350b002691bdcac7818fbfb0c72a5370512"
+      "asset": "rh-0.8.3-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "ca8e21106f7559373245895bbbaa22acefba640d89715bb1c472a3b6a2431757"
     },
     "universal-apple-darwin": {
-      "asset": "rh-0.8.0-universal-apple-darwin.tar.gz",
-      "sha256": "75396ab8f5fea3509358702547e4bf00e101450f03b20637864e8abaed4e01d8"
+      "asset": "rh-0.8.3-universal-apple-darwin.tar.gz",
+      "sha256": "8876775a4c8bbacc1579277494eb29bfb8b3360c5b38096835a1bd8ee3da6efc"
     }
   }
 }
