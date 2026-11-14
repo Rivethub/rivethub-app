@@ -59,7 +59,7 @@ it("pages 758 review items and labels fact keys without changing stored text", a
 it("attributes teammate prompts and hides owner-only controls", async () => {
   show("/sessions/s-alex?tab=transcript", () => ({}));
   expect(await screen.findByText("Alex’s session")).toBeInTheDocument();
-  expect(await screen.findByText(/#1 · Alex ·/)).toBeInTheDocument();
+  expect(await within(await screen.findByRole("log", { name: "Transcript" })).findByText("Alex")).toBeInTheDocument();
   for (const name of ["Keep", "Trash", "Restore", "Session title", "Filed under", "Shared with"]) {
     expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name })).not.toBeInTheDocument();

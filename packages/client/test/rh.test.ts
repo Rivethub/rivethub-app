@@ -125,12 +125,20 @@ describe("sessions", () => {
     const { client } = rh({ [`GET /api/harness-sessions/${seg}/transcript`]: body.transcriptBody });
     const turns = await client.transcript!(SID);
     expect(turns).toHaveLength(3);
-    expect(turns[0]).toEqual({ index: 0, role: "user", at: "2026-11-06T09:00:00.000Z", parts: [{ kind: "text", text: "Wire the stream." }] });
-    expect(turns[1]!.parts).toEqual([
-      { kind: "tool", name: "Read", summary: "/src/stream.rs" },
-      { kind: "tool", name: "Bash", summary: "failed" },
+    expect(turns[0]).toEqual({ index: 0, role: "user", at: "2026-11-06T09:00:00.000Z", endedAt: "2026-11-06T09:00:05.000Z", parts: [{ kind: "text", text: "Wire the stream." }] });
+    expect(turns[1]!.parts).toMatchObject([
+      { kind: "tool", name: "Read", summary: "/src/stream.rs", status: "done", input: { file_path: "/src/stream.rs" } },
+      { kind: "tool", name: "Bash", summary: "failed", status: "error" },
     ]);
+    // The model's thinking comes before what it said, as its own part.
+    expect(turns[2]!.parts).toEqual([{ kind: "thought", text: "hidden" }, { kind: "text", text: "Done." }]);
     expect(await client.transcript!(SID, [2, 2])).toHaveLength(1);
+  });
+
+  it("reads one tool call's output from the session's own route", async () => {
+    const { client, calls } = rh({ [`GET /api/harness-sessions/${seg}/tools/tool-1/output`]: { text: "fn stream() {}", isError: false, truncated: true } });
+    expect(await client.toolOutput!(SID, "tool-1")).toEqual({ text: "fn stream() {}", failed: false, truncated: true });
+    expect(calls[0]!.path).toBe(`/api/harness-sessions/${seg}/tools/tool-1/output`);
   });
 
   it("rebuilds the summary tree from parent links with message ranges", async () => {

@@ -422,6 +422,10 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       return clone(range ? turns.slice(range[0], range[1] + 1) : turns);
     },
 
+    async toolOutput() {
+      return { text: "", failed: false, truncated: false };
+    },
+
     async summaryTree(id): Promise<SummaryNode> {
       const rec = sessionById(id);
       if (rec.summary) return clone(rec.summary);

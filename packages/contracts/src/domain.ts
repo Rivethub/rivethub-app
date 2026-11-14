@@ -74,12 +74,45 @@ export interface SessionSummaryRow {
 
 export type TranscriptPart =
   | { kind: "text"; text: string }
-  | { kind: "tool"; name: string; summary: string };
+  /** The model's reasoning before it answered or called a tool. */
+  | { kind: "thought"; text: string }
+  | {
+      kind: "tool";
+      name: string;
+      summary: string;
+      status?: "running" | "done" | "error";
+      /** The call's id in the tool's own files. With it, the call's output can be asked for. */
+      id?: string;
+      /** What the tool was called with, when the hub read the session from the tool's own files. */
+      input?: Record<string, unknown>;
+      /** What the tool answered, when the hub has it. */
+      result?: string;
+    };
+
+/** What a tool call answered, read from the tool's own files. */
+export interface ToolOutput {
+  text: string;
+  failed: boolean;
+  /** The hub sent only part of a long output. */
+  truncated: boolean;
+}
+
+/** Tokens a reply read and wrote. */
+export interface TurnUsage {
+  input: number;
+  output: number;
+  cached: number;
+}
 
 export interface TranscriptTurn {
   index: number;
   role: "user" | "assistant";
   at: IsoTime;
+  /** When the turn finished, where the hub knows. */
+  endedAt?: IsoTime;
+  /** The model that wrote an assistant turn, where the hub knows. */
+  model?: string;
+  usage?: TurnUsage;
   parts: TranscriptPart[];
   /**
    * Set on the first or last turn when the hub could not hand over the messages before it or after it,

@@ -1,5 +1,4 @@
 import { VisibilityName } from "../components/visibility";
-import { splitInjected } from "@rivethub/client";
 import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time, toolLine } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
@@ -7,13 +6,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useClient, useShareClient } from "../client/context";
 import { useMe, useTagOperations, useCreateTopic, useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
+import { exchanges } from "@rivethub/client-runtime/exchange";
 import { ArticleBar, ArticleTabs, Crumbs, MobileBack } from "../components/article";
+import { ExchangeView } from "../components/exchange";
+import { OpenIn } from "../components/open-in";
 import { EditableText } from "../components/editable";
 import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
 import { Modal } from "../components/modal";
 import { Frame, MainSidebar } from "../components/shell";
-import { ToolStep } from "../components/tool-step";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind, plural, subjectHref } from "../lib/format";
 import { markStep } from "../lib/journey";
@@ -378,14 +379,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
         {d.origin && <span className="text-[13px] text-muted-foreground">{originNote(d.origin)}</span>}
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
       </div>
-      {d.resumeCommand && (
-        <div className="flex max-w-full items-center gap-2" role="group" aria-label="Resume session">
-          <code className="min-w-0 break-all rounded-md bg-code px-2 py-1 font-mono text-[12px]">{d.resumeCommand}</code>
-          <span className="shrink-0" title={`Paste in a terminal to pick this session back up in ${harnessNames[d.harness] ?? d.harness}`}>
-            <CopyButton text={d.resumeCommand} label="Copy resume command" className="rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground" />
-          </span>
-        </div>
-      )}
+      <OpenIn d={d} harnesses={harnesses.data ?? []} />
     </div>
   );
 }
@@ -494,7 +488,8 @@ function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boo
 /** `empty` is true only when the hub counted the messages and found none; then there is nothing to ask for. */
 function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; range: [number, number] | undefined; phone?: boolean; empty: boolean; sender?: string }) {
   const transcript = useTranscript(id, !empty);
-  const first = useRef<HTMLDivElement>(null);
+  const first = useRef<HTMLElement>(null);
+  const folded = useMemo(() => exchanges(transcript.data ?? []), [transcript.data]);
   useEffect(() => {
     first.current?.scrollIntoView?.({ block: "start" });
   }, [range?.[0], transcript.data]);
@@ -517,43 +512,21 @@ function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; ra
   const inRange = (t: TranscriptTurn) => !!range && t.index >= range[0] && t.index <= range[1];
   const hit0 = (t: TranscriptTurn) => !!range && t.index === range[0];
   return (
-    <div aria-label="Transcript" role="log" className="flex flex-col gap-2.5">
+    <div aria-label="Transcript" role="log" className={cx("mx-auto flex w-full flex-col gap-1", !phone && "max-w-[820px]")}>
       {range && (
         <p className="m-0 flex items-center gap-2 text-[13px] text-muted-foreground">
           Showing messages {rangeLabel(range)} from the summary. <Link to="." search={{ tab: "transcript" } as never}>Clear</Link>
         </p>
       )}
       {transcript.data[0]?.missing === "before" && <MissingNote side="before" />}
-      {groupTurns(transcript.data).map((group) => {
-        if (group.kind === "steps" && !group.turns.some(inRange)) {
-          return (
-            <details key={group.turns[0]!.index} className="text-[13px] text-muted-foreground">
-              <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">› {group.turns.length} steps</summary>
-              <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 pl-3">
-                {group.turns.flatMap((t) => t.parts).map((p, i) => <li key={i}>{p.kind === "tool" ? toolLine(p) : ""}</li>)}
-              </ul>
-            </details>
-          );
-        }
-        return group.turns.map((t) => <Turn key={t.index} t={t} hit={inRange(t)} first={hit0(t) ? first : undefined} phone={phone} sender={sender} />);
+      {folded.map((exchange) => {
+        const turns = [...(exchange.prompt ? [exchange.prompt] : []), ...exchange.replies];
+        const hit = turns.some(inRange);
+        return <ExchangeView key={exchange.index} exchange={exchange} session={id} sender={sender} hit={hit} open={hit} anchor={turns.some(hit0) ? first : undefined} />;
       })}
       {transcript.data.at(-1)?.missing === "after" && <MissingNote side="after" />}
     </div>
   );
-}
-
-type TurnGroup = { kind: "turn" | "steps"; turns: TranscriptTurn[] };
-
-/** Runs of two or more tool-only turns fold into one "N steps" line. */
-function groupTurns(turns: TranscriptTurn[]): TurnGroup[] {
-  const out: TurnGroup[] = [];
-  for (const t of turns) {
-    const toolOnly = t.parts.every((p) => p.kind === "tool");
-    const last = out.at(-1);
-    if (toolOnly && last?.kind === "steps") last.turns.push(t);
-    else out.push({ kind: toolOnly ? "steps" : "turn", turns: [t] });
-  }
-  return out.map((g) => (g.kind === "steps" && g.turns.length < 2 ? { ...g, kind: "turn" } : g));
 }
 
 /** Shown where a transcript read from memory stops short, so a part is never taken for the whole. */
@@ -562,38 +535,6 @@ function MissingNote({ side }: { side: "before" | "after" }) {
     <p role="note" className="m-0 rounded-lg border border-dashed border-input px-3 py-2 text-[13px] text-muted-foreground">
       {side === "before" ? "Earlier messages are not shown." : "Later messages are not shown."} Memory holds too many messages from the same hours to read through all of them here. Search still finds every message.
     </p>
-  );
-}
-
-/** `sender` names who wrote the user turns of a session someone else shared; without it they are yours. */
-function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolean; first: React.Ref<HTMLDivElement> | undefined; phone: boolean | undefined; sender: string | undefined }) {
-  // Assistant output often contains XML/custom-element examples that match the tag heuristic.
-  const text = t.parts.filter((p) => p.kind === "text").flatMap((p) =>
-    t.role === "user" ? splitInjected(p.text) : [{ kind: "said" as const, text: p.text }],
-  );
-  const tools = t.parts.filter((p) => p.kind === "tool");
-  return (
-    <div
-      ref={first}
-      id={`m${t.index}`}
-      className={cx("flex scroll-mt-4 flex-col gap-1", t.role === "user" ? "items-end" : "items-stretch", hit && "rounded-lg border-l-2 border-primary py-1 pl-2.5")}
-      style={hit ? { background: "color-mix(in srgb, var(--primary) 6%, transparent)" } : undefined}
-    >
-      <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? (sender ?? "You") : "Agent"} · {time(t.at)}</span>
-      {text.map((p, i) => p.kind === "injected" ? (
-        <details key={i} className="w-full min-w-0 rounded-lg border border-border px-3 py-2 text-[12px] text-muted-foreground">
-          <summary className="cursor-pointer">Context: {p.tag.replace(/[_-]/g, " ")}</summary>
-          <pre className="m-0 mt-2 whitespace-pre-wrap break-words font-mono">{p.text}</pre>
-        </details>
-      ) : (
-        <p key={i} className={cx("m-0 leading-[1.55]", t.role === "user" && "max-w-[85%] rounded-2xl bg-message-surface px-3.5 py-2.5")}>
-          {p.text}
-        </p>
-      ))}
-      {tools.map((p, i) => (
-        <span key={i}>{p.kind === "tool" ? <ToolStep name={p.name} summary={p.summary} /> : null}</span>
-      ))}
-    </div>
   );
 }
 

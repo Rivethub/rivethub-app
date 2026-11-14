@@ -27,6 +27,7 @@ import type {
   TopicArticle,
   TopicId,
   TopicNode,
+  ToolOutput,
   TranscriptTurn,
   Visibility,
 } from "./domain.js";
@@ -90,6 +91,8 @@ export interface MemoryClient {
   sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>>;
   session(id: SessionId): Promise<SessionDetail>;
   transcript(id: SessionId, range?: [number, number]): Promise<TranscriptTurn[]>;
+  /** One tool call's output. Only the machine that ran the session has it. */
+  toolOutput(id: SessionId, tool: string): Promise<ToolOutput>;
   summaryTree(id: SessionId): Promise<SummaryNode>;
   renameSession(id: SessionId, title: string): Promise<void>;
   setVisibility(id: SessionId, visibility: Visibility): Promise<void>;

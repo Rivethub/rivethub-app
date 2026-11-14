@@ -78,5 +78,73 @@ for (const phone of [false, true]) {
       expect(document.querySelector("#m2 p")).toBeNull();
       expect(screen.getByText(example).closest("details")).toBeNull();
     });
+
+    it("lays a session out as a chat: prompt, folded steps, then the formatted reply", async () => {
+      (window as { __phone?: boolean }).__phone = phone;
+      const at = (seconds: number) => new Date(Date.UTC(2026, 10, 14, 12, 0, seconds)).toISOString() as IsoTime;
+      renderWith("/sessions/test?tab=transcript", c => ({
+        session: async () => ({ ...(await c.session("s-retention" as SessionId)), id: "test" as SessionId, messageCount: 4 }),
+        transcript: async () => [
+          { index: 0, role: "user", at: at(0), parts: [{ kind: "text", text: "Fix the build." }] },
+          { index: 1, role: "assistant", at: at(2), parts: [
+            { kind: "thought", text: "The user wants the build fixed.\n\nStart with the log." },
+            { kind: "text", text: "I'll read the log first." },
+            { kind: "tool", name: "Read", summary: "/tmp/build.log", input: { file_path: "/tmp/build.log" }, result: "error: missing semicolon" },
+            { kind: "tool", name: "Bash", summary: "make", status: "error", input: { command: "make", description: "Build it" } },
+            { kind: "tool", name: "Grep", summary: "TODO", id: "tool-9", input: { pattern: "TODO" } },
+          ] },
+          { index: 2, role: "assistant", at: at(72), model: "claude-opus-5-5", usage: { input: 24000, output: 1200, cached: 19200 }, parts: [{ kind: "text", text: "The build passes **now**.\n\n- one\n- two" }] },
+        ],
+        toolOutput: async (_session, tool) => ({ text: `three matches, read for ${tool}`, failed: false, truncated: false }),
+      }));
+      const user = userEvent.setup();
+      const prompt = await screen.findByText("Fix the build.");
+      expect(prompt.tagName).toBe("P");
+      expect(prompt).toHaveClass("rounded-[20px]", "whitespace-pre-wrap");
+
+      const steps = screen.getByText("Completed in 1m 12s · 3 tool calls").closest("details")!;
+      expect(steps).not.toHaveAttribute("open");
+      const think = within(steps).getByText("The user wants the build fixed.").closest("details")!;
+      expect(within(think).getByText("Think")).toBeInTheDocument();
+      expect(think).not.toHaveAttribute("open");
+      expect(within(steps).getByText("I'll read the log first.")).toBeInTheDocument();
+      const tools = within(steps).getByText("Read 1 file, ran 1 command and ran 1 search").closest("details")!;
+      expect(within(tools).getByText("Build it")).toBeInTheDocument();
+      expect(within(tools).getByText("failed")).toBeInTheDocument();
+      await user.click(within(tools).getByText("/tmp/build.log"));
+      expect(within(tools).getByText("error: missing semicolon").tagName).toBe("PRE");
+      // An answer the transcript did not carry is read from the hub when the call is opened.
+      expect(within(tools).queryByText(/three matches/)).not.toBeInTheDocument();
+      await user.click(within(tools).getByText("Grep"));
+      expect(await within(tools).findByText("three matches, read for tool-9")).toBeInTheDocument();
+
+      const reply = screen.getByText("now");
+      expect(reply.tagName).toBe("STRONG");
+      expect(reply.closest("details")).toBeNull();
+      expect(screen.getAllByRole("listitem").filter((item) => item.textContent === "one" || item.textContent === "two")).toHaveLength(2);
+      expect(screen.getByRole("button", { name: "Copy reply" })).toBeInTheDocument();
+      expect(screen.getByText("claude-opus-5-5 · 1.2k out · 24k in · 80% cached")).toBeInTheDocument();
+      expect(screen.queryByText(/\[thinking\]/)).not.toBeInTheDocument();
+    });
   });
 }
+
+describe("the first-run screen on a live hub", () => {
+  const live = (c: AppClient, state: "receiving" | "not-connected"): Partial<AppClient> => ({
+    capabilities: async () => ({ ...(await c.capabilities()), account: "live" }),
+    harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capture: { ...h.capture, state } })),
+  });
+
+  it("opens on a hub no tool has sent a session to", async () => {
+    localStorage.removeItem("rivethub.welcomed");
+    renderWith("/", c => live(c, "not-connected"));
+    expect(await screen.findByRole("heading", { name: "Welcome to RivetHub" })).toBeInTheDocument();
+  });
+
+  it("does not open on a hub that is already capturing, even in a browser that has not seen it", async () => {
+    localStorage.removeItem("rivethub.welcomed");
+    renderWith("/", c => live(c, "receiving"));
+    expect(await screen.findByRole("region", { name: /What changed/ })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Welcome to RivetHub" })).not.toBeInTheDocument();
+  });
+});

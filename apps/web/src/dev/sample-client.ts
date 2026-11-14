@@ -372,6 +372,9 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
           }));
       return wait(range ? turns.filter((t) => t.index >= range[0] && t.index <= range[1]) : turns);
     },
+    toolOutput() {
+      return wait({ text: "", failed: false, truncated: false });
+    },
     summaryTree(id) {
       const s = sessions.get(id);
       if (!s) return Promise.reject(new Error(`No session ${id}`));
@@ -437,7 +440,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
         const turns = s.id === "s-retention" ? data.retentionTranscript() : [{ index: 1, role: "user" as const, at: s.startedAt, parts: [{ kind: "text" as const, text: s.title }] }];
         for (const turn of turns) {
           for (const part of turn.parts) {
-            const body = part.kind === "text" ? part.text : part.summary;
+            const body = part.kind === "tool" ? part.summary : part.text;
             if (body.toLowerCase().includes(t)) passages.push({ ...(s.owner ? { owner: s.owner } : {}), id: `${s.id}:${turn.index}`, session, source: "message", text: body, at: turn.at, role: part.kind === "tool" ? "tool" : turn.role });
           }
         }

@@ -7,6 +7,7 @@ import type {
   SessionSummaryRow,
   SummaryNode,
   TopicId,
+  ToolOutput,
   TranscriptPart,
   TranscriptTurn,
   Visibility,
@@ -28,15 +29,38 @@ function toolSummary(tool: z_Tool): string {
   }
   return tool.status === "error" ? "failed" : "";
 }
-type z_Tool = { name: string; status: string; args?: Record<string, unknown> | undefined; input?: Record<string, unknown> | undefined };
+type z_Tool = { name: string; status: string; id?: string | undefined; args?: Record<string, unknown> | undefined; input?: Record<string, unknown> | undefined; resultText?: string | undefined };
 
+const toolStatus = (status: string): "running" | "done" | "error" => (status === "running" || status === "error" ? status : "done");
+
+/**
+ * A turn's parts in the order they happened: the thinking, then what was said and the tool calls. rh says
+ * which block ended the turn; text that ends a turn with tool calls came after them, and is the reply.
+ */
 export function mapTranscript(response: ReturnType<typeof wire.transcriptResponse.parse>, fallback: IsoTime): TranscriptTurn[] {
   return response.turns.map((turn, index) => {
     const parts: TranscriptPart[] = [];
-    if (turn.text.trim() !== "") parts.push({ kind: "text", text: turn.text });
-    for (const tool of turn.tools ?? []) parts.push({ kind: "tool", name: tool.name, summary: toolSummary(tool) });
+    if (turn.thinking && turn.thinking.trim() !== "") parts.push({ kind: "thought", text: turn.thinking });
+    const said: TranscriptPart[] = turn.text.trim() !== "" ? [{ kind: "text", text: turn.text }] : [];
+    const tools = (turn.tools ?? []).map((tool): TranscriptPart => {
+      const input = tool.input ?? tool.args;
+      return strip<Extract<TranscriptPart, { kind: "tool" }>>({ kind: "tool", name: tool.name, summary: toolSummary(tool), status: toolStatus(tool.status), id: tool.id, input, result: tool.resultText });
+    });
+    if (turn.lastBlock === "text") parts.push(...tools, ...said);
+    else parts.push(...said, ...tools);
     const ms = turn.startedAtMs ?? turn.endedAtMs;
-    return { index, role: turn.role, at: ms === undefined ? fallback : (new Date(ms).toISOString() as IsoTime), parts };
+    const usage = turn.usage && (turn.usage.promptTokens > 0 || turn.usage.completionTokens > 0)
+      ? { input: turn.usage.promptTokens, output: turn.usage.completionTokens, cached: turn.usage.cachedTokens }
+      : undefined;
+    return strip<TranscriptTurn>({
+      index,
+      role: turn.role,
+      at: ms === undefined ? fallback : (new Date(ms).toISOString() as IsoTime),
+      endedAt: turn.endedAtMs === undefined ? undefined : (new Date(turn.endedAtMs).toISOString() as IsoTime),
+      model: turn.model,
+      usage,
+      parts,
+    });
   });
 }
 
@@ -200,6 +224,11 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       return range ? turns.filter((turn) => turn.index >= range[0] && turn.index <= range[1]) : turns;
     },
 
+    async toolOutput(id: SessionId, tool: string): Promise<ToolOutput> {
+      const output = await http.get(`/api/harness-sessions/${segment(id)}/tools/${encodeURIComponent(tool)}/output`, wire.toolOutput);
+      return { text: output.text, failed: output.isError, truncated: output.truncated };
+    },
+
     async summaryTree(id: SessionId): Promise<SummaryNode> {
       const dag = await http.get(`/api/memory/summaries/${encodeURIComponent(id)}`, wire.summaryDag);
       if (dag.summaries.length === 0) throw new NotFoundError(`summaries for ${id}`);
@@ -308,10 +337,17 @@ export async function storedTranscript(http: Http, id: SessionId): Promise<Store
       index: i + 1,
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: toolWhat(message.toolName, content) } : { kind: "text", text: content }],
+      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: toolWhat(message.toolName, content) } : said(message.role, content)],
     };
   });
   return cut ? { turns, cut } : { turns };
+}
+
+const THINKING = "[thinking] ";
+
+/** rh stores a model's reasoning as an assistant message that starts with `[thinking] `. */
+function said(role: string, content: string): TranscriptPart {
+  return role !== "user" && content.startsWith(THINKING) ? { kind: "thought", text: content.slice(THINKING.length) } : { kind: "text", text: content };
 }
 
 const oneLine = (text: string) => {
