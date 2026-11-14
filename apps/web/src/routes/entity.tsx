@@ -12,7 +12,7 @@ import { PinButton } from "../components/pin";
 import { SearchIcon } from "../components/icons";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
-import { changeKind, factLabel, plural } from "../lib/format";
+import { changeKind, factLabel, plural, reviewText } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { EmptyLibrary, visibilityLabel } from "./topic";
 
@@ -274,7 +274,8 @@ function Timeline({ rows }: { rows: TimelineRow[] }) {
             <span className="text-[12px] text-muted-foreground">{shortDate(t.at)}</span>
             <span aria-hidden="true" className="size-2 self-center rounded-full" style={{ background: changeKind[t.kind]!.color }} />
             <span className="leading-[1.5]">
-              {t.text}{" "}
+              {/* A fact line starts with its key, as the worker wrote it; show it the way facts are shown elsewhere. */}
+              {t.kind === "fact" ? reviewText({ group: "fact", text: t.text }) : t.kind === "conflict" ? reviewText({ group: "conflict", text: t.text }) : t.text}{" "}
               {t.source && <Link to="/sessions/$sessionId" params={{ sessionId: t.source.id }} className="text-[12px]">{t.source.title}</Link>}
             </span>
           </li>
