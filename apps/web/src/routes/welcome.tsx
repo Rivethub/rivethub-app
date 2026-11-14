@@ -2,7 +2,7 @@ import { DeviceApproval } from "../components/device-login";
 import type { Account } from "@rivethub/contracts";
 import { Link, Navigate, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
-import { useAccount, useCapabilities, useUpdateAccount } from "../client/queries";
+import { useAccount, useCapabilities, useHarnesses, useUpdateAccount } from "../client/queries";
 import { Logo } from "../components/shell";
 import { Button, cx, ErrorNote, SampleBadge } from "../components/ui";
 import { useDeviceSignIn } from "../lib/signin";
@@ -26,11 +26,17 @@ function markWelcomed() {
   }
 }
 
-/** Sends a live hub's first visit in this browser to the welcome screen. */
+/**
+ * Sends a live hub's first visit in this browser to the welcome screen, unless the hub is already in use:
+ * a hub that has captured sessions was set up before, from another browser or from the command line, and its
+ * update and privacy choices are not asked again.
+ */
 export function FirstRunGate() {
   const caps = useCapabilities().data;
+  const harnesses = useHarnesses().data;
   const path = useRouterState({ select: (s) => s.location.pathname });
-  if (caps?.account !== "live" || path === "/welcome" || welcomed()) return null;
+  if (caps?.account !== "live" || path === "/welcome" || welcomed() || !harnesses) return null;
+  if (harnesses.some((h) => h.capture.state === "receiving" || h.capture.state === "stale")) return null;
   return <Navigate to="/welcome" replace />;
 }
 

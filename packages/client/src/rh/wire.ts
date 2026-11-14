@@ -127,14 +127,32 @@ export const transcriptTool = z.object({
   name: z.string(),
   status: descriptive(["running", "done", "error"]).default("done"),
   args: nullish(z.record(z.unknown())),
+  id: nullish(z.string()),
   input: nullish(z.record(z.unknown())),
+  resultText: nullish(z.string()),
+});
+
+export const toolOutput = z.object({
+  text: z.string().default(""),
+  isError: z.boolean().default(false),
+  truncated: z.boolean().default(false),
+});
+
+export const messageUsage = z.object({
+  promptTokens: z.number().default(0),
+  completionTokens: z.number().default(0),
+  cachedTokens: z.number().default(0),
 });
 
 // Authorship controls prompt rendering; never guess that an unknown role is the viewer.
 export const transcriptTurn = z.object({
   role: z.enum(["user", "assistant"]),
   text: z.string().default(""),
+  thinking: nullish(z.string()),
   tools: nullish(rows(transcriptTool)),
+  usage: nullish(messageUsage),
+  model: nullish(z.string()),
+  lastBlock: nullish(z.string()),
   startedAtMs: nullish(z.number()),
   endedAtMs: nullish(z.number()),
 });

@@ -76,14 +76,34 @@ describe("Sessions on a busy hub", () => {
     await waitFor(() => expect(screen.queryByRole("link", { name: /Untitled session/ })).not.toBeInTheDocument());
   });
 
-  it("keeps the resume command and copy button together below long session metadata", async () => {
+  it("offers to open a session in its own tool and in the other tools that can recall it", async () => {
     const command = "claude --resume 76d71fb3-8325-48d6-a012-00d08a3b2fb1";
-    const detail: SessionDetail = { ...row("s-resume", "A long day", 0), cwd: "/home/phil/work/a-very-long-working-directory/another-long-path/component", resumeCommand: command, changed: [], entities: [], tags: [] };
-    renderWith("/sessions/s-resume", () => ({ session: async () => detail }));
-    const group = await screen.findByRole("group", { name: "Resume session" });
-    expect(within(group).getByText(command).tagName).toBe("CODE");
-    expect(within(group).getByRole("button", { name: "Copy resume command" })).toBeInTheDocument();
-    expect(group.previousElementSibling).toHaveTextContent(detail.cwd!);
+    const detail: SessionDetail = { ...row("s-resume", "A long day", 0), harness: "claude-code", cwd: "/home/phil/work/a-very-long-working-directory/another-long-path/component", resumeCommand: command, changed: [], entities: [], tags: [] };
+    renderWith("/sessions/s-resume", (c) => ({
+      session: async () => detail,
+      harnesses: async () => {
+        const base = (await c.harnesses())[0]!;
+        const tool = (id: string, name: string, found: boolean, recall: string) => ({ ...base, id: id as typeof base.id, name, found, recall: { state: recall, detail: "" } });
+        return [tool("claude-code", "Claude Code", true, "connected"), tool("codex", "Codex", true, "connected"), tool("kimi", "Kimi Code", true, "not-connected"), tool("cursor", "Cursor", false, "connected")];
+      },
+    }));
+    const user = userEvent.setup();
+    const menu = await screen.findByRole("menu", { name: "Open in" });
+    await waitFor(() => expect(within(menu).getAllByRole("menuitem")).toHaveLength(2));
+    const [own, other] = within(menu).getAllByRole("menuitem");
+    expect(own).toHaveTextContent("Claude Code");
+    expect(own).toHaveTextContent("Resume this session");
+    expect(within(own!).getByText(command).tagName).toBe("CODE");
+    expect(other).toHaveTextContent("Codex");
+    expect(other).toHaveTextContent("Continue from memory");
+    await user.click(own!);
+    expect(await navigator.clipboard.readText()).toBe(command);
+    expect(await screen.findByText("Copied for Claude Code. Paste it in a terminal.")).toBeInTheDocument();
+    await user.click(other!);
+    const prompt = await navigator.clipboard.readText();
+    expect(prompt).toContain('"A long day" (session s-resume, Claude Code');
+    expect(prompt).toContain("memory_search");
+    expect(await screen.findByText("Copied for Codex. Paste it as your first message in Codex.")).toBeInTheDocument();
   });
 
   it("says a session has no messages instead of failing to read them", async () => {
@@ -140,8 +160,8 @@ describe("Sessions on a busy hub", () => {
     }));
     expect(await screen.findByText(/phil shared this session with you.*not trusted yet/)).toBeInTheDocument();
     // The person who shared it wrote its prompts, not the person reading it.
-    expect(await screen.findByText(/#1 · phil ·/)).toBeInTheDocument();
-    expect(screen.queryByText(/#1 · You ·/)).not.toBeInTheDocument();
+    const prompt = (await screen.findByText("Where do the backups go now?")).closest("#m1")!;
+    expect(within(prompt as HTMLElement).getByText("phil")).toBeInTheDocument();
   });
 
   it("offers no filing, sharing-with or renaming on a shared session, since the hub refuses them", async () => {

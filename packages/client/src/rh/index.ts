@@ -119,6 +119,7 @@ export function createRhClient(options: RhOptions): RhClient {
       connectHarness: setup.connectHarness,
       modelJobs: setup.modelJobs,
       transcript: sessions.transcript,
+      toolOutput: sessions.toolOutput,
       summaryTree: sessions.summaryTree,
       renameSession: sessions.renameSession,
       setVisibility: sessions.setVisibility,

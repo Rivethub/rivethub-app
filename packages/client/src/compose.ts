@@ -28,7 +28,7 @@ const CAPABILITIES: Capability[] = [
 /** Calls that only read. Only these may be sent before their capability has been probed. */
 const READS: ReadonlySet<keyof LiveMethods> = new Set<keyof LiveMethods>([
   "today", "changes", "reviewQueue", "topicTree", "topic", "entities", "entity", "sessions", "session",
-  "transcript", "summaryTree", "search", "harnesses", "modelJobs", "hubs", "account",
+  "transcript", "toolOutput", "summaryTree", "search", "harnesses", "modelJobs", "hubs", "account",
 ]);
 
 type Outcome = { ok: true; value: unknown } | { ok: false; error: unknown };
@@ -136,6 +136,7 @@ export function createClient(options: ClientOptions): MemoryClient {
     },
     session: liveSession,
     transcript: choose("transcript", "transcript"),
+    toolOutput: choose("transcript", "toolOutput"),
     summaryTree: choose("summary-tree", "summaryTree"),
     renameSession: choose("sessions", "renameSession"),
     setVisibility: choose("sessions", "setVisibility"),

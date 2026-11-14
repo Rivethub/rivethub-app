@@ -8,6 +8,10 @@
       "types": "./src/format.ts",
       "default": "./src/format.ts"
     },
+    "./exchange": {
+      "types": "./src/exchange.ts",
+      "default": "./src/exchange.ts"
+    },
     "./markdown": {
       "types": "./src/markdown.ts",
       "default": "./src/markdown.ts"

@@ -212,6 +212,7 @@ function Bubble({ turn, sender }: { turn: TranscriptTurn; sender: string | undef
   const injected: { tag: string; text: string }[] = [];
   const said: Shown[] = [];
   turn.parts.forEach((part, index) => {
+    if (part.kind === "thought") return;
     if (part.kind !== "text") {
       said.push({ key: `${index}`, kind: "tool", text: toolLine(part) });
       return;

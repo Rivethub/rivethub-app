@@ -87,7 +87,7 @@ test("the web app loads under the hub's CSP without a violation", async () => {
 
   // Navigate only once the listener is attached, so the first page's violations are seen too.
   await page.goto(`${web.origin}/sessions/s-retention?sample`);
-  await expect(page.getByRole("button", { name: "Copy resume" })).toBeVisible();
+  await expect(page.locator("summary", { hasText: "Open in" })).toBeVisible();
   await page.goto(`${web.origin}/?sample`);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Today your agents learned \d+ things/);
   // The default theme reads in Inter; the serif belongs to the Everforest theme. Both are bundled faces the CSP must let load.
@@ -301,8 +301,9 @@ test("a copy button puts the command on the system clipboard", async () => {
   const page = await app.firstWindow();
   await app.evaluate(({ clipboard }) => clipboard.writeText("before"));
 
-  await page.getByRole("button", { name: "Copy resume" }).click();
-  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+  await page.locator("summary", { hasText: "Open in" }).click();
+  await page.getByRole("menuitem", { name: /Resume this session/ }).click();
+  await expect(page.getByText(/^Copied for .+\. Paste it in a terminal\.$/)).toBeVisible();
   expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe("claude --resume 4b81e0c2");
   await app.close();
 });
