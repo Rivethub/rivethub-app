@@ -1,11 +1,11 @@
-import { hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
 import { NextStep } from "../components/journey";
 import { Frame, MainSidebar, MobileHeader } from "../components/shell";
 import { Button, Dot, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
-import { changeKind, reviewKindLabel, subjectHref } from "../lib/format";
+import { changeKind, listSentence, reviewKindLabel, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/");
@@ -64,7 +64,7 @@ function Health({ phone }: { phone?: boolean }) {
     failing.length ? `the ${failing.map((j) => j.role).join(" and ")} ${failing.length === 1 ? "model is" : "models are"} failing` : "",
   ].filter(Boolean);
   if (!problems.length) return null;
-  const text = problems.join(", and ");
+  const text = listSentence(problems);
   return (
     <p role="status" className={phone ? "m-0 flex items-center gap-2.5 rounded-xl border border-warning/50 bg-card p-3 text-[14px]" : "m-0 flex items-center gap-2.5 rounded-xl border border-warning/50 bg-card px-3.5 py-2.5"}>
       <Dot color="var(--warning)" />
@@ -167,10 +167,10 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
           {entries.map(({ session, changes }) => (
             <div key={session.id} className="grid grid-cols-[52px_minmax(0,1fr)] gap-3">
               <span className="pt-0.5 text-[12px] text-muted-foreground">{whenLabel(session.startedAt)}</span>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex min-w-0 flex-col gap-1.5">
                 <span className="flex flex-wrap items-center gap-2">
-                  <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} className="font-semibold text-foreground">{session.title}</Link>
-                  <span className="rounded bg-code px-1.5 py-px font-mono text-[11px]">{session.harness}</span>
+                  <Link to="/sessions/$sessionId" params={{ sessionId: session.id }} title={session.title} className="min-w-0 line-clamp-2 font-semibold text-foreground">{session.title}</Link>
+                  <span className="rounded bg-code px-1.5 py-px font-mono text-[11px]">{harnessNames[session.harness] ?? session.harness}</span>
                   {session.topic && (
                     <span className="text-[12px] text-muted-foreground">
                       in <Link to="/topics/$topicId" params={{ topicId: session.topic.id }}>{session.topic.path.slice(-2).join(" › ")}</Link>
@@ -230,10 +230,10 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
         {entries.map(({ session, changes }) => (
           <Link key={session.id} to="/sessions/$sessionId" params={{ sessionId: session.id }} className="flex flex-col gap-1.5 border-b border-border pb-3 text-foreground hover:no-underline">
             <span className="flex flex-wrap gap-2 text-[12px] text-muted-foreground">
-              <span>{whenLabel(session.startedAt)}</span>·<span>{session.harness}</span>
+              <span>{whenLabel(session.startedAt)}</span>·<span>{harnessNames[session.harness] ?? session.harness}</span>
               {session.topic && <>·<span>{session.topic.path.at(-1)}</span></>}
             </span>
-            <span className="text-[15px] font-semibold">{session.title}</span>
+            <span title={session.title} className="line-clamp-2 text-[15px] font-semibold">{session.title}</span>
             {changes.slice(0, 2).map((c, i) => (
               <span key={i} className="flex gap-2 text-[14px] leading-[1.45]">
                 <span className="w-[58px] flex-none pt-0.5 text-[11px] font-semibold" style={{ color: changeKind[c.kind].color }}>{changeKind[c.kind].label}</span>

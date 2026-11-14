@@ -7,6 +7,7 @@ import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
+import { listSentence } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
 import { ShareKeys } from "../share/keys";
@@ -245,13 +246,13 @@ export function Connections({ phone }: { phone: boolean }) {
   const slow = js.filter((j) => j.health !== "healthy");
   const issues = [...stale.map((h) => `${h.name} stopped sending sessions`), ...slow.map((j) => `the ${roleInfo[j.role].name.toLowerCase()} is ${j.health}`)];
   const firstFix = stale.find((h) => h.canConnect);
-  const sentence = (list: string[]) => list.map((s, i) => (i === 0 ? s[0]!.toUpperCase() + s.slice(1) : s)).join(", and ");
+  const issueText = listSentence(issues);
 
   const banner = issues.length > 0 && (
     <div className={cx("flex items-center gap-3 rounded-[10px] border px-3.5 py-3", !phone && "flex-wrap")} style={{ borderColor: "color-mix(in srgb, var(--warning) 40%, transparent)", background: "color-mix(in srgb, var(--warning) 8%, transparent)" }}>
       {!phone && <Dot color={warn} />}
       <span className={cx("flex-1 leading-[1.4]", !phone && "min-w-60")}>
-        {phone ? "" : "Mostly healthy. "}<b>{issues.length} thing{issues.length === 1 ? "" : "s"} to fix{phone ? "." : ":"}</b> {sentence(issues)}.
+        {!phone && issues.length === 1 ? "Mostly healthy. " : ""}<b>{issues.length} thing{issues.length === 1 ? "" : "s"} to fix{phone ? "." : ":"}</b> {issueText[0]!.toUpperCase() + issueText.slice(1)}.
       </span>
       {firstFix && <Button variant="primary" size={phone ? "lg" : "md"} className={phone ? "font-semibold" : ""} onClick={() => setConnecting({ h: firstFix, part: "capture" })}>{phone ? "Fix" : `Fix ${firstFix.name}`}</Button>}
     </div>
@@ -275,13 +276,14 @@ export function Connections({ phone }: { phone: boolean }) {
               const action = harnessAction(h);
               return (
                 <button key={h.id} type="button" disabled={!action} onClick={() => action && setConnecting({ h, part: action.part })} className="flex min-h-14 w-full items-center gap-2.5 border-0 border-b border-border bg-transparent px-3.5 py-1.5 text-left text-foreground last:border-b-0 disabled:opacity-100">
-                  <span className="flex flex-1 flex-col">
+                  <span className="flex min-w-0 flex-1 flex-col">
                     <span className="font-medium">{h.name}</span>
                     <span className="text-[12px]" style={{ color: cap.color === warn ? warn : dim }}>
                       {h.capture.state === "receiving" ? "Capturing" : cap.text}
                       {h.recall.state === "connected" ? " · recall on" : ""}
                       {action ? ` · tap to ${action.label.toLowerCase()}` : ""}
                     </span>
+                    <span title={h.capture.detail} className="truncate font-mono text-[11px] text-muted-foreground">{h.capture.detail}</span>
                   </span>
                   <span role="img" aria-label={`Capture: ${cap.text}`} className="size-[9px] rounded-full" style={{ background: h.capture.state === "not-connected" ? "var(--input)" : cap.color }} />
                   <span role="img" aria-label={`Recall: ${rec.text}`} className="size-[9px] rounded-full" style={{ background: h.recall.state === "connected" ? ok : "var(--input)" }} />
@@ -291,13 +293,13 @@ export function Connections({ phone }: { phone: boolean }) {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-[10px] border border-border">
-            <table className="w-full min-w-[720px] border-collapse text-left">
+            <table className="w-full min-w-[720px] table-fixed border-collapse text-left">
               <thead>
                 <tr className="bg-sidebar text-[12px] text-muted-foreground">
-                  <th scope="col" className="w-[28%] px-3.5 py-2 font-normal">Harness</th>
-                  <th scope="col" className="w-[32%] px-3 py-2 font-normal">Capture</th>
-                  <th scope="col" className="px-3 py-2 font-normal">Recall</th>
-                  <th scope="col" className="w-[130px] px-3.5 py-2"><span className="sr-only">Action</span></th>
+                  <th scope="col" className="px-3.5 py-2 font-normal">Harness</th>
+                  <th scope="col" className="w-[240px] px-3 py-2 font-normal">Capture</th>
+                  <th scope="col" className="w-[150px] px-3 py-2 font-normal">Recall</th>
+                  <th scope="col" className="w-[150px] px-3.5 py-2"><span className="sr-only">Action</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -310,11 +312,11 @@ export function Connections({ phone }: { phone: boolean }) {
                       <th scope="row" className="px-3.5 py-2.5 text-left font-normal">
                         <span className="flex min-w-0 flex-col gap-px">
                           <span className="font-medium">{h.name}</span>
-                          <span className="truncate font-mono text-[11px] text-muted-foreground">{h.capture.detail}</span>
+                          <span title={h.capture.detail} className="truncate font-mono text-[11px] text-muted-foreground">{h.capture.detail}</span>
                         </span>
                       </th>
-                      <td className="px-3 py-2.5 text-[13px]" style={{ color: cap.color }}><span className="flex items-center gap-1.5"><Dot color={cap.color} size={7} />{cap.text}</span></td>
-                      <td className="px-3 py-2.5 text-[13px]" style={{ color: rec.color }}><span className="flex items-center gap-1.5"><Dot color={rec.color} size={7} />{rec.text}</span></td>
+                      <td className="px-3 py-2.5 text-[13px]" style={{ color: cap.color }}><span className="flex flex-wrap items-center gap-1.5"><Dot color={cap.color} size={7} /><span className="whitespace-nowrap">{cap.text}</span></span></td>
+                      <td className="px-3 py-2.5 text-[13px]" style={{ color: rec.color }}><span className="flex flex-wrap items-center gap-1.5"><Dot color={rec.color} size={7} /><span className={h.recall.state === "elsewhere" ? "min-w-0 break-words" : "whitespace-nowrap"}>{rec.text}</span></span></td>
                       <td className="px-3.5 py-2.5 text-right">
                         {action && <Button variant="primary" size="md" aria-label={`${action.label} ${h.name}`} onClick={() => setConnecting({ h, part: action.part })}>{action.label}</Button>}
                       </td>
