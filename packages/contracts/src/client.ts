@@ -21,6 +21,7 @@ import type {
   SessionId,
   SessionSummaryRow,
   SignInProgress,
+  SignInStarted,
   SummaryNode,
   TodayDigest,
   TopicArticle,
@@ -113,10 +114,10 @@ export interface MemoryClient {
   /** Membership and sharing defaults from this hub, independent of cloud account settings. */
   me(): Promise<Me>;
   updateAccount(patch: Partial<Pick<Account, "channel" | "autoDownload" | "crashReports" | "usageCounts" | "updateSource">>): Promise<void>;
-  /** Starts an email sign-in. `pollSignIn` reports when the link has been followed. */
-  signIn(email: string): Promise<{ requestId: string }>;
+  /** Starts device approval. The node polls the cloud; no email or secret leaves the node. */
+  signIn(): Promise<SignInStarted>;
   pollSignIn(): Promise<SignInProgress>;
   signOut(): Promise<Account>;
   /** Deletes the RivetHub account, not any memory. */
-  deleteAccount(): Promise<Account>;
+  deleteAccount(): Promise<Account & { accountUrl?: string }>;
 }

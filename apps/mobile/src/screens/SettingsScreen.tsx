@@ -1,7 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { Account, HarnessStatus, ModelJob, ModelRole } from "@rivethub/contracts";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useAccount, useDeleteAccount, useHarnesses, useModelJobs, usePollSignIn, useSignIn, useSignOut, useUpdateAccount } from "../data/queries";
 import type { RootParams } from "../nav/types";
 import { THEMES, type ThemeId } from "../theme/tokens";
@@ -156,45 +156,46 @@ function AccountCard({ account }: { account: Account }) {
   const signIn = useSignIn();
   const signOut = useSignOut();
   const deleteAccount = useDeleteAccount();
-  const [email, setEmail] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const poll = usePollSignIn(waiting);
   useEffect(() => {
-    if (poll.data?.status === "signed-in") setWaiting(false);
+    if (poll.data && poll.data.status !== "pending") setWaiting(false);
   }, [poll.data]);
-  const valid = /.+@.+\..+/.test(email.trim());
   const failure = signIn.error ?? signOut.error ?? deleteAccount.error ?? poll.error;
   return (
     <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 12 }}>
       <Text style={{ color: palette.foreground, fontWeight: "600", fontSize: 16 }}>{account.email ?? "Not signed in"}</Text>
       <Text style={{ color: palette.muted, fontSize: 13 }}>
-        {account.email ? "Signed in with an email link. This hub only." : "Updates come from GitHub releases until you sign in."}
+        {account.email ? "Signed in with your RivetHub account." : "Updates come from GitHub releases until you sign in."}
       </Text>
       {account.email ? (
         <GhostButton label={signOut.isPending ? "Signing out…" : "Sign out"} onPress={() => signOut.mutate()} />
       ) : (
         <>
-          <TextField label="Email" value={email} onChangeText={setEmail} placeholder="you@example.com" />
           <PrimaryButton
-            label={waiting ? "Waiting for the link…" : "Send sign-in link"}
-            disabled={!valid || signIn.isPending || waiting}
+            label={waiting ? "Waiting for approval…" : "Sign in with your RivetHub account"}
+            disabled={signIn.isPending || waiting}
             onPress={() => {
-              signIn.mutate(email.trim(), { onSuccess: () => setWaiting(true) });
+              signIn.mutate(undefined, { onSuccess: () => setWaiting(true) });
             }}
           />
-          {waiting ? <Text style={{ color: palette.muted, fontSize: 13 }}>Check {email.trim()} for the sign-in link. This screen updates when you follow it.</Text> : null}
+          {waiting ? <Text style={{ color: palette.muted, fontSize: 13 }}>Approve code {signIn.data?.userCode} at {signIn.data?.verificationUri}. This screen updates after approval.</Text> : null}
+          {waiting && signIn.data ? <GhostButton label="Open RivetHub sign-in" onPress={() => void Linking.openURL(signIn.data.verificationUri)} /> : null}
+          {poll.data?.status === "expired" ? <Text>The code expired. Try signing in again.</Text> : null}
+          {poll.data?.status === "denied" ? <Text>Sign-in was refused. You can try again.</Text> : null}
           {waiting ? <GhostButton label="Cancel" onPress={() => setWaiting(false)} /> : null}
         </>
       )}
       {account.email && confirmDelete ? (
         <View style={{ gap: 8 }}>
-          <Text style={{ color: palette.foreground, fontSize: 13 }}>Delete your RivetHub account? Updates switch back to GitHub. Your memory stays on this hub.</Text>
-          <GhostButton label="Delete account" danger onPress={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })} />
+          <Text style={{ color: palette.foreground, fontSize: 13 }}>Sign this node out, then delete your account on the cloud account page. Your memory stays here.</Text>
+          <GhostButton label="Sign this node out" danger onPress={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })} />
           <GhostButton label="Keep it" onPress={() => setConfirmDelete(false)} />
         </View>
       ) : null}
       {account.email && !confirmDelete ? <GhostButton label="Delete account…" onPress={() => setConfirmDelete(true)} /> : null}
+      <GhostButton label="Open cloud account settings" onPress={() => void Linking.openURL(deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account")} />
       {failure ? <Text style={{ color: palette.error }}>{errorText(failure)}</Text> : null}
     </View>
   );

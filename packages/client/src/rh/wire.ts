@@ -386,8 +386,10 @@ export const account = z.object({
   usageCounts: z.boolean(),
 });
 
-export const signInStarted = z.object({ requestId: z.string() });
+export const signInStarted = z.object({ userCode: z.string(), verificationUri: z.string().url(), expiresIn: z.number().positive(), pollIntervalMs: z.number().positive() });
 export const signInProgress = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("expired") }),
+  z.object({ status: z.literal("denied") }),
   z.object({ status: z.literal("pending") }),
   z.object({ status: z.literal("signed-in"), account }),
 ]);
@@ -406,3 +408,5 @@ export const memoryTag = z.object({ id: z.string().min(1), key: z.string(), valu
 export const tagLookup = z.object({ sessions: z.record(z.array(memoryTag)) });
 export const tagAdded = z.object({ tag: memoryTag });
 export const tagDecided = z.object({ changed: z.number().int().nonnegative() });
+
+export const accountUrl = z.string().url();

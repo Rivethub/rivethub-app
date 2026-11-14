@@ -164,7 +164,7 @@ export function useMe() {
   return useQuery({ queryKey: ["me", client.scope], queryFn: () => client.me() });
 }
 
-function useWrite<A>(fn: (client: ReturnType<typeof useHub>["client"], arg: A) => Promise<unknown>) {
+function useWrite<A, R>(fn: (client: ReturnType<typeof useHub>["client"], arg: A) => Promise<R>) {
   const { client } = useHub();
   const queryClient = useQueryClient();
   return useMutation({
@@ -224,7 +224,7 @@ export const useDeleteAccount = () => useWrite((client, _: void) => client.delet
 
 export function useSignIn() {
   const { client } = useHub();
-  return useMutation({ mutationFn: (email: string) => client.signIn(email) });
+  return useMutation({ mutationFn: (_: void) => client.signIn() });
 }
 
 /** Polls while an email sign-in is waiting. Stops refreshing once the link is followed. */

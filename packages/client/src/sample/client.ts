@@ -553,9 +553,9 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       }
     },
 
-    async signIn(email) {
-      pendingEmail = email;
-      return { requestId: nextId("signin") };
+    async signIn() {
+      pendingEmail = "you@example.com";
+      return { userCode: "RVTB-HUBS", verificationUri: "https://rivethub.cloud/device#user_code=RVTB-HUBS", expiresIn: 600, pollIntervalMs: 5000 };
     },
 
     async pollSignIn() {

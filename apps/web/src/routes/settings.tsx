@@ -1,3 +1,4 @@
+import { DeviceApproval } from "../components/device-login";
 import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/format";
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
@@ -11,7 +12,7 @@ import { listSentence } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
 import { ShareKeys } from "../share/keys";
-import { useEmailSignIn } from "../lib/signin";
+import { useDeviceSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
 import { setTheme, THEMES, useTheme } from "../theme";
 
@@ -384,48 +385,36 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const [email, setEmail] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const signIn = useEmailSignIn();
+  const signIn = useDeviceSignIn();
   const signOut = useSignOut();
   const deleteAccount = useDeleteAccount();
   const failure = signIn.state.phase === "failed" ? signIn.state.error : (signOut.error ?? deleteAccount.error);
-  const waiting = signIn.state.phase === "waiting";
+  const waiting = signIn.state.phase === "waiting" || signIn.state.phase === "starting";
   return (
     <section aria-label="Account" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center gap-3">
         <span aria-hidden="true" className="flex size-9 items-center justify-center rounded-full bg-selected font-semibold">{(account.email ?? "?")[0]!.toUpperCase()}</span>
         <span className="flex min-w-[220px] flex-1 flex-col gap-0.5">
           <span className="font-semibold">{account.email ?? "Not signed in"}</span>
-          <span className="text-[12px] text-muted-foreground">{account.email ? "Signed in with an email link · this hub only" : "Updates come from GitHub releases."}</span>
+          <span className="text-[12px] text-muted-foreground">{account.email ? "Signed in with your RivetHub account" : "Updates come from GitHub releases."}</span>
         </span>
         {account.email && (
           <Button disabled={signOut.isPending} onClick={() => signOut.mutate()}>Sign out</Button>
         )}
       </div>
       {!account.email && (
-        <form
-          className="flex flex-wrap items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void signIn.start(email.trim());
-          }}
-        >
-          <input type="email" required aria-label="Email" placeholder="you@example.com" value={email} disabled={waiting} onChange={(e) => setEmail(e.target.value)} className="min-w-[220px] flex-1 rounded-lg border border-input bg-background px-2.5 py-2 text-foreground outline-none focus:border-primary" />
-          {waiting ? (
-            <Button onClick={signIn.cancel}>Cancel</Button>
-          ) : (
-            <Button type="submit" variant="primary" size="md" disabled={!/.+@.+\..+/.test(email)}>Send sign-in link</Button>
-          )}
-          {signIn.state.phase === "waiting" && <span role="status" className="basis-full text-[13px] text-muted-foreground">Check {signIn.state.email} for the sign-in link. This page updates when you follow it.</span>}
-        </form>
+        <div className="flex flex-col items-start gap-3">
+          <DeviceApproval state={signIn.state} />
+          {waiting ? <Button onClick={signIn.cancel}>Cancel</Button> : <Button variant="primary" onClick={() => void signIn.start()}>Sign in with your RivetHub account</Button>}
+        </div>
       )}
       {account.email && (
         <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
           {confirmDelete ? (
             <>
-              <span className="flex-1 text-[13px]">Delete your RivetHub account? Updates switch back to GitHub. Your memory stays on this hub.</span>
-              <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Delete account</Button>
+              <span className="flex-1 text-[13px]">Sign this node out, then open your cloud account to delete it there. Your memory stays on this hub.</span>
+              <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Sign this node out</Button>
               <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
             </>
           ) : (
@@ -433,6 +422,7 @@ function AccountCard({ account }: { account: Account }) {
           )}
         </div>
       )}
+      <a href={deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer">Open cloud account settings to delete your account</a>
       {failure !== undefined && failure !== null && <ErrorNote error={failure} />}
     </section>
   );

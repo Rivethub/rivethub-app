@@ -1,31 +1,31 @@
-import type { Account, MemoryClient } from "@rivethub/contracts";
-
-const POLL_MS = 2000;
+import type { Account, MemoryClient, SignInStarted } from "@rivethub/contracts";
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(signal.reason);
-    }, { once: true });
+    const aborted = () => { clearTimeout(timer); reject(signal.reason); };
+    const timer = setTimeout(() => { signal.removeEventListener("abort", aborted); resolve(); }, ms);
+    signal.addEventListener("abort", aborted, { once: true });
   });
 }
 
-/** Starts an email sign-in and polls until the link has been followed. Rejects on an error from the hub or when `signal` aborts. */
-export async function signInWithEmail(
+export async function signInWithDevice(
   client: Pick<MemoryClient, "signIn" | "pollSignIn">,
-  email: string,
   signal: AbortSignal,
-  intervalMs = POLL_MS,
+  started: (details: SignInStarted) => void,
 ): Promise<Account> {
-  await client.signIn(email);
+  const details = await client.signIn();
+  signal.throwIfAborted();
+  started(details);
+  const deadline = Date.now() + details.expiresIn * 1000;
   for (;;) {
-    signal.throwIfAborted();
+    await pause(Math.max(1000, details.pollIntervalMs), signal);
+    if (Date.now() >= deadline) throw new Error("The code expired. Try signing in again.");
     const progress = await client.pollSignIn();
     if (progress.status === "signed-in") return progress.account;
-    await pause(intervalMs, signal);
+    if (progress.status === "expired") throw new Error("The code expired. Try signing in again.");
+    if (progress.status === "denied") throw new Error("Sign-in was refused in the browser. You can try again.");
   }
 }
 
-export type SignInState = { phase: "idle" } | { phase: "waiting"; email: string } | { phase: "failed"; error: unknown };
+export type SignInState = { phase: "idle" | "starting" } | { phase: "waiting"; details: SignInStarted } | { phase: "failed"; error: unknown };

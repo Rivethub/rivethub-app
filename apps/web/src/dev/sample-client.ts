@@ -114,6 +114,8 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
   const folders = new Map<string, string | null>();
   let queue: ReviewItem[] = data.reviewQueue();
   let account = clone(data.account);
+  const loginState = new URLSearchParams(window.location.search).get("accountLogin");
+  if (loginState) { delete account.email; account.updateSource = "github"; }
   let pendingEmail: string | undefined;
   let pins: SubjectRef[] = [
     { kind: "topic", id: "rh-08" as TopicId, title: "rh 0.8 memory cut" },
@@ -546,12 +548,14 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       const mine = [...(query.subject ? (history.get(query.subject) ?? []) : []), ...fromDecisions, ...fromEntity];
       return wait(mine.sort((a, b) => b.at.localeCompare(a.at)));
     },
-    async signIn(email) {
-      pendingEmail = email;
-      return wait({ requestId: "sample-request" });
+    async signIn() {
+      pendingEmail = "you@example.com";
+      return wait({ userCode: "RVTB-HUBS", verificationUri: "https://rivethub.cloud/device#user_code=RVTB-HUBS", expiresIn: 600, pollIntervalMs: 5000 });
     },
     async pollSignIn() {
       if (pendingEmail === undefined) throw new Error("No sign-in is waiting");
+      if (loginState === "pending") return wait({ status: "pending" as const });
+      if (loginState === "expired" || loginState === "denied") return wait({ status: loginState });
       account = { ...account, email: pendingEmail, updateSource: "rivethub-cloud" };
       pendingEmail = undefined;
       return wait({ status: "signed-in" as const, account });

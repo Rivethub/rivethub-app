@@ -333,4 +333,5 @@ export interface Me {
   settings: { defaultVisibility: string; chosen: boolean };
 }
 
-export type SignInProgress = { status: "pending" } | { status: "signed-in"; account: Account };
+export type SignInStarted = { userCode: string; verificationUri: string; expiresIn: number; pollIntervalMs: number };
+export type SignInProgress = { status: "pending" | "expired" | "denied" } | { status: "signed-in"; account: Account };

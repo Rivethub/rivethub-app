@@ -195,19 +195,19 @@ describe("account and hubs", () => {
   it("starts a sign-in and polls from pending to signed-in", async () => {
     let polls = 0;
     const { client, calls } = rh({
-      "POST /api/account/signin": { requestId: "req-1" },
+      "POST /api/account/signin": { userCode: "ABCD-EFGH", verificationUri: "https://rivethub.cloud/device", expiresIn: 600, pollIntervalMs: 5000 },
       "POST /api/account/signin/poll": () => (++polls < 3 ? { status: "pending" } : { status: "signed-in", account: signedIn }),
     });
-    expect(await client.methods.signIn!("phil@example.com")).toEqual({ requestId: "req-1" });
-    expect(calls.at(-1)!.body).toEqual({ email: "phil@example.com" });
+    expect(await client.methods.signIn!()).toEqual({ userCode: "ABCD-EFGH", verificationUri: "https://rivethub.cloud/device", expiresIn: 600, pollIntervalMs: 5000 });
+    expect(calls.at(-1)!.body).toEqual({});
     expect(await client.methods.pollSignIn!()).toEqual({ status: "pending" });
     expect(await client.methods.pollSignIn!()).toEqual({ status: "pending" });
     expect(await client.methods.pollSignIn!()).toEqual({ status: "signed-in", account: signedIn });
   });
 
-  it("reports an invalid email as an error", async () => {
-    const { client } = rh({ "POST /api/account/signin": { status: 400, body: { error: "that is not an email address" } } });
-    await expect(client.methods.signIn!("nope")).rejects.toMatchObject({ status: 400 });
+  it("explains an older node without exposing status codes", async () => {
+    const { client } = rh({ "POST /api/account/signin": { status: 502, body: { error: "rivethub.cloud answered HTTP 410" } } });
+    await expect(client.methods.signIn!()).rejects.toThrow(/node.*version.*GitHub/);
   });
 
   it("maps hubs", async () => {
@@ -232,7 +232,7 @@ describe("capabilities", () => {
     expect((await client.today()).freshness).toBe("sample");
     const queue = await client.reviewQueue();
     await client.decide(queue[0]!.id, { kind: "later" });
-    await client.signIn("a@b.co");
+    await client.signIn();
     expect((await client.pollSignIn()).status).toBe("signed-in");
     expect(fake.calls.filter((call) => call.method !== "GET")).toEqual([]);
   });
