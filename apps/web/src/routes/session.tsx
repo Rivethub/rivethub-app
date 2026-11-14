@@ -1,4 +1,4 @@
-import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, shortDate, time } from "@rivethub/client-runtime/format";
+import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -79,6 +79,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
       <span className="flex min-w-0 flex-col gap-0.5">
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="line-clamp-2 font-medium">{s.title}</span>
+          {s.origin && <KindTag label={originLabel(s.origin)} color="var(--info)" />}
           {s.kept && <KindTag label="Kept" color="var(--primary)" />}
           {state && <KindTag label={state.label} color={state.color} />}
         </span>
@@ -98,7 +99,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
 
 function SessionFilters({ view, onView, text, onText, harness, onHarness, phone }: { view: View; onView: (v: View) => void; text: string; onText: (t: string) => void; harness: string; onHarness: (h: string) => void; phone?: boolean }) {
   const unfiled = useSessions({ view: "unfiled" }).data?.items.length;
-  const harnesses = (useHarnesses().data ?? []).filter((h) => h.capture.state !== "not-connected");
+  const harnesses = (useHarnesses().data ?? []).filter((h) => h.capture.state === "receiving" || h.capture.state === "stale");
   const views: { id: View; label: string }[] = [
     { id: "all", label: "All" },
     { id: "unfiled", label: `Unfiled${unfiled ? ` ${unfiled}` : ""}` },
@@ -287,13 +288,14 @@ export function SessionPage() {
   if (phone) {
     return (
       <Frame sidebar={null}>
-        <MobileBack to="/sessions" label={d ? `${d.harness} · ${shortDate(d.startedAt)}` : "Sessions"}>
+        <MobileBack to="/sessions" label={d ? `${harnessNames[d.harness] ?? d.harness} · ${shortDate(d.startedAt)}` : "Sessions"}>
           {d?.resumeCommand && <CopyButton text={d.resumeCommand} label="Resume" className="min-h-9 rounded-full border border-border bg-card px-3 text-[13px]" />}
         </MobileBack>
         {fallback ?? (
           <>
             <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-4 pt-1 pb-3 text-[15px]">
-              <h1 className="m-0 font-serif text-[25px] font-semibold">{d!.title}</h1>
+              <h1 className="m-0 line-clamp-4 font-serif text-[25px] font-semibold">{d!.title}</h1>
+              {d!.origin && <p className="m-0 text-[13px] text-muted-foreground">{originNote(d!.origin)}</p>}
               <SampleBadge capability="sessions" />
               <details className="rounded-[14px] border border-border bg-card">
                 <summary className="flex min-h-12 cursor-pointer items-center gap-2 px-3.5">
@@ -304,7 +306,7 @@ export function SessionPage() {
               </details>
               <StateNote d={d!} />
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
-              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} phone />}
+              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} phone />}
             </div>
             <PhoneActions d={d!} onTrash={doTrash} onRestore={() => restore.mutate([d!.id])} />
           </>
@@ -334,7 +336,7 @@ export function SessionPage() {
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
             <StateNote d={d!} />
-            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} />}
+            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} />}
           </div>
         </>
       )}
@@ -350,7 +352,11 @@ function SessionHeader({ d }: { d: SessionDetail }) {
     <div className="flex flex-wrap items-end gap-3">
       <div className="flex min-w-[260px] flex-1 flex-col gap-1.5">
         <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">
-          <EditableText label="Session title" value={d.title} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
+          {d.origin ? (
+            <span className="line-clamp-3" title={d.title}>{d.title}</span>
+          ) : (
+            <EditableText label="Session title" value={d.title} display={<span className="line-clamp-3" title={d.title}>{d.title}</span>} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
+          )}
           <SampleBadge capability="sessions" />
         </h1>
         {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
@@ -359,6 +365,7 @@ function SessionHeader({ d }: { d: SessionDetail }) {
           {d.endedAt ? `–${time(d.endedAt)}` : ""}{d.messageCountUnknown ? "" : ` · ${plural(d.messageCount, "message")}`}{d.cwd ? ` · ` : ""}
           {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
         </span>
+        {d.origin && <span className="text-[13px] text-muted-foreground">{originNote(d.origin)}</span>}
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
       </div>
       {d.resumeCommand && (
@@ -472,7 +479,7 @@ function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boo
 }
 
 /** `empty` is true only when the hub counted the messages and found none; then there is nothing to ask for. */
-function TranscriptView({ id, range, phone, empty }: { id: SessionId; range: [number, number] | undefined; phone?: boolean; empty: boolean }) {
+function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; range: [number, number] | undefined; phone?: boolean; empty: boolean; sender?: string }) {
   const transcript = useTranscript(id, !empty);
   const first = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -503,6 +510,7 @@ function TranscriptView({ id, range, phone, empty }: { id: SessionId; range: [nu
           Showing messages {rangeLabel(range)} from the summary. <Link to="." search={{ tab: "transcript" } as never}>Clear</Link>
         </p>
       )}
+      {transcript.data[0]?.missing === "before" && <MissingNote side="before" />}
       {groupTurns(transcript.data).map((group) => {
         if (group.kind === "steps" && !group.turns.some(inRange)) {
           return (
@@ -514,8 +522,9 @@ function TranscriptView({ id, range, phone, empty }: { id: SessionId; range: [nu
             </details>
           );
         }
-        return group.turns.map((t) => <Turn key={t.index} t={t} hit={inRange(t)} first={hit0(t) ? first : undefined} phone={phone} />);
+        return group.turns.map((t) => <Turn key={t.index} t={t} hit={inRange(t)} first={hit0(t) ? first : undefined} phone={phone} sender={sender} />);
       })}
+      {transcript.data.at(-1)?.missing === "after" && <MissingNote side="after" />}
     </div>
   );
 }
@@ -534,7 +543,17 @@ function groupTurns(turns: TranscriptTurn[]): TurnGroup[] {
   return out.map((g) => (g.kind === "steps" && g.turns.length < 2 ? { ...g, kind: "turn" } : g));
 }
 
-function Turn({ t, hit, first, phone }: { t: TranscriptTurn; hit: boolean; first: React.Ref<HTMLDivElement> | undefined; phone: boolean | undefined }) {
+/** Shown where a transcript read from memory stops short, so a part is never taken for the whole. */
+function MissingNote({ side }: { side: "before" | "after" }) {
+  return (
+    <p role="note" className="m-0 rounded-lg border border-dashed border-input px-3 py-2 text-[13px] text-muted-foreground">
+      {side === "before" ? "Earlier messages are not shown." : "Later messages are not shown."} Memory holds too many messages from the same hours to read through all of them here. Search still finds every message.
+    </p>
+  );
+}
+
+/** `sender` names who wrote the user turns of a session someone else shared; without it they are yours. */
+function Turn({ t, hit, first, phone, sender }: { t: TranscriptTurn; hit: boolean; first: React.Ref<HTMLDivElement> | undefined; phone: boolean | undefined; sender: string | undefined }) {
   const text = t.parts.filter((p) => p.kind === "text");
   const tools = t.parts.filter((p) => p.kind === "tool");
   return (
@@ -544,7 +563,7 @@ function Turn({ t, hit, first, phone }: { t: TranscriptTurn; hit: boolean; first
       className={cx("flex scroll-mt-4 flex-col gap-1", t.role === "user" ? "items-end" : "items-stretch", hit && "rounded-lg border-l-2 border-primary py-1 pl-2.5")}
       style={hit ? { background: "color-mix(in srgb, var(--primary) 6%, transparent)" } : undefined}
     >
-      {!phone && <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? "You" : "Agent"} · {time(t.at)}</span>}
+      {!phone && <span className="text-[11px] text-muted-foreground">#{t.index} · {t.role === "user" ? (sender ?? "You") : "Agent"} · {time(t.at)}</span>}
       {text.map((p, i) => (
         <p key={i} className={cx("m-0 leading-[1.55]", t.role === "user" && "max-w-[85%] rounded-2xl bg-message-surface px-3.5 py-2.5")}>
           {p.kind === "text" && p.text}
@@ -585,6 +604,8 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
     if (!trimmed) return setName(null);
     create.mutate({ name: trimmed }, { onSuccess: (id) => { place.mutate({ session: d.id, topic: id }); setName(null); onPicked?.(); } });
   };
+  // rh files only sessions its own tools ran.
+  if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Not filed. A session someone shared with you cannot be filed under a topic yet.</span>;
   if (name !== null) {
     return (
       <span className="flex flex-col gap-1.5">
@@ -615,8 +636,7 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
         value={d.topic?.id ?? ""}
         onChange={(e) => {
           if (e.target.value === NEW_TOPIC) return setName("");
-          place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null });
-          onPicked?.();
+          place.mutate({ session: d.id, topic: (e.target.value || null) as TopicId | null }, { onSuccess: () => onPicked?.() });
         }}
         className={cx(selectCls, className)}
       >
@@ -632,22 +652,31 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
 function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; className?: string; onPicked?: () => void }) {
   const set = useSetVisibility();
   const spaces = [...new Set([...(d.visibility.kind === "space" ? [d.visibility.space] : []), "household"])];
+  // rh changes who can see only sessions its own tools ran.
+  if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Private. A session someone shared with you cannot be shared with a space yet.</span>;
   return (
-    <label className="flex flex-col">
+    <label className="flex flex-col gap-1">
       <span className="sr-only">Shared with</span>
       <select
         value={visibilityKey(d.visibility)}
         onChange={(e) => {
           const v = e.target.value;
-          set.mutate({ id: d.id, visibility: v === "private" ? { kind: "private" } : { kind: "space", space: v.slice(6) } });
-          if (v !== "private") markStep("share");
-          onPicked?.();
+          set.mutate(
+            { id: d.id, visibility: v === "private" ? { kind: "private" } : { kind: "space", space: v.slice(6) } },
+            {
+              onSuccess: () => {
+                if (v !== "private") markStep("share");
+                onPicked?.();
+              },
+            },
+          );
         }}
         className={cx(selectCls, className)}
       >
         <option value="private">Private</option>
         {spaces.map((s) => <option key={s} value={`space:${s}`}>{s}</option>)}
       </select>
+      {set.isError && <span role="alert" className="text-[12px] text-error">Who can see this session was not changed{set.error instanceof Error ? `: ${set.error.message}` : ""}.</span>}
     </label>
   );
 }
@@ -700,7 +729,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
         <Eyebrow>Shared with</Eyebrow>
         <VisibilityPicker d={d} />
         <span className="text-[12px] leading-[1.45] text-muted-foreground">
-          {d.visibility.kind === "private" ? "Only you can see this session." : `Everyone in ${d.visibility.space} can find it.`}{" "}
+          {d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : `Everyone in ${d.visibility.space} can find it. `}
           {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
         </span>
       </section>

@@ -140,6 +140,7 @@ function captureLine(h: HarnessStatus): { text: string; color: string } {
   const when = h.capture.lastCaptureAt ? ago(h.capture.lastCaptureAt) : "";
   if (h.capture.state === "receiving") return { text: `Yes${when ? ` · ${when}` : ""}`, color: ok };
   if (h.capture.state === "stale") return { text: `Stopped${when ? ` · ${when}` : ""}`, color: warn };
+  if (h.capture.state === "idle") return { text: "Ready · nothing captured yet", color: dim };
   return { text: "Not connected", color: dim };
 }
 

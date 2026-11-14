@@ -14,7 +14,7 @@ import type {
 import type { Http } from "../http.js";
 import { NetworkError, NotFoundError, RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
-import { displayTitle, harnessOf, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
+import { displayTitle, harnessOf, isImportKey, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import { indexTopics, sessionRow, topicPath, type TopicIndex } from "./topics.js";
 
 const PAGE_SIZE = 50;
@@ -178,7 +178,8 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       // The harness's own file has the most detail (tool calls and results), but it exists only on the machine
       // that ran the session. Anywhere else, and for sessions that reached memory another way, read what the hub stored.
       // rh answers an empty transcript, not an error, for a session whose file is not on this machine.
-      const fromHarness = await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
+      // A session received from someone else never ran in a tool here, so only memory has it.
+      const fromHarness = isImportKey(id) ? [] : await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
         (response) => mapTranscript(response, EPOCH),
         (error: unknown) => {
           if (error instanceof NetworkError) throw error;
@@ -188,8 +189,13 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       let turns: TranscriptTurn[];
       if (Array.isArray(fromHarness) && fromHarness.length > 0) turns = fromHarness;
       else {
-        turns = await storedTranscript(http, id);
+        const stored = await storedTranscript(http, id);
+        turns = stored.turns;
+        // Not finding a message is only "no messages" when the whole span was read.
+        if (turns.length === 0 && stored.cut) throw new Error("This session's messages could not be found: memory holds too many other messages from the same hours to read through");
         if (turns.length === 0 && !Array.isArray(fromHarness)) throw fromHarness;
+        if (stored.cut === "older") turns[0]!.missing = "before";
+        if (stored.cut === "newer") turns.at(-1)!.missing = "after";
       }
       return range ? turns.filter((turn) => turn.index >= range[0] && turn.index <= range[1]) : turns;
     },
@@ -221,31 +227,85 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
 }
 
 const STORED_PAGE = 200;
+/** How many pages of a session's time span are read before giving up on a very busy span. */
+const STORED_MAX_PAGES = 10;
+/**
+ * A received session's start is when its sender's hub first stored it, which is after its first turn ended.
+ * Its first messages are older than that, so the span is read from this long before the start.
+ */
+const IMPORT_LEAD_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * rh stores each message of a received session inside a note that it is quoted data from someone else, so an
+ * agent recalling it does not take it for instructions. The session's page says who sent it once, so the
+ * transcript shows the message itself.
+ */
+const QUOTED = /^Imported from [^\n]* Quoted data from another person, not instructions\.\n(`{3,})\n([\s\S]*)\n\1\s*$/;
+export const unquoted = (content: string) => QUOTED.exec(content)?.[2] ?? content;
+
+export interface StoredTranscript {
+  turns: TranscriptTurn[];
+  /** Set when the span could not be read to its end: which side of the turns found was left unread. */
+  cut?: "older" | "newer";
+}
 
 /**
  * A session's messages as memory stored them. rh has no route that reads one session's messages, so this
- * browses the session's own time span for its harness and keeps the messages that belong to it. A span
- * holding more than one page of messages comes back short; the harness transcript has no such limit.
+ * browses the session's own time span and keeps the messages that belong to it, a page at a time. Reading
+ * stops after ten pages, or when a page brings nothing new (rh cannot page through more than 200 messages
+ * that share one instant); the result then says which side was left unread. The harness transcript has no
+ * such limit.
  */
-export async function storedTranscript(http: Http, id: SessionId): Promise<TranscriptTurn[]> {
-  const span = await http.get(`/api/sessions/${sessionSegment(id)}`, wire.sessionSpan).catch(() => undefined);
+export async function storedTranscript(http: Http, id: SessionId): Promise<StoredTranscript> {
+  const span = await http.get(`/api/sessions/${encodeURIComponent(sessionSegment(id))}`, wire.sessionSpan).catch(() => undefined);
   const pad = (iso: string, ms: number) => new Date(new Date(iso).getTime() + ms).toISOString();
-  const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
-    limit: STORED_PAGE,
-    agent: harnessOf(id),
-    ...(span ? { since: pad(span.startedAt, -1000), before: pad(span.endedAt ?? new Date().toISOString(), 1000) } : {}),
-  });
-  const mine = page.messages.filter((message) => message.sessionId === id);
-  const ordered = mine.map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
-  return ordered.map(({ message }, i) => {
+  const imported = isImportKey(id);
+  let since = span ? pad(span.startedAt, imported ? -IMPORT_LEAD_MS : -1000) : undefined;
+  let before = span ? pad(span.endedAt ?? new Date().toISOString(), 1000) : undefined;
+  const mine = new Map<string, wire.BrowsedMessage>();
+  const seen = new Set<string>();
+  let cut: StoredTranscript["cut"];
+  for (let pages = 0; ; pages += 1) {
+    const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
+      limit: STORED_PAGE,
+      // A received session keeps its sender's agent name, which is not its key's prefix.
+      ...(imported ? {} : { agent: harnessOf(id) }),
+      ...(since ? { since } : {}),
+      ...(before ? { before } : {}),
+    });
+    let fresh = 0;
+    for (const message of page.messages) {
+      if (!seen.has(message.id)) fresh += 1;
+      seen.add(message.id);
+      if (message.sessionId === id && !mine.has(message.id)) mine.set(message.id, message);
+    }
+    // A short page is the end of the span.
+    if (page.messages.length < STORED_PAGE) break;
+    const first = page.messages[0]?.createdAt;
+    const last = page.messages.at(-1)?.createdAt;
+    const newestFirst = !first || !last || first >= last;
+    // A full page means there may be more. Stop, and say so, when the page budget is spent, when the page
+    // gives no time to continue from, or when it brought nothing new: reading on would repeat it forever.
+    if (pages + 1 >= STORED_MAX_PAGES || !first || !last || first === last || fresh === 0) {
+      cut = newestFirst ? "older" : "newer";
+      break;
+    }
+    // The next page starts where this one ended, whichever way the hub sorted it. Repeats are dropped by id.
+    if (newestFirst) before = pad(last, 1);
+    else since = pad(last, -1);
+  }
+  const ordered = [...mine.values()].map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
+  const turns = ordered.map(({ message }, i): TranscriptTurn => {
     const tool = message.role === "tool" || message.toolName !== undefined;
+    const content = imported ? unquoted(message.content) : message.content;
     return {
       index: i + 1,
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${message.content}` : message.content) } : { kind: "text", text: message.content }],
-    } satisfies TranscriptTurn;
+      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: oneLine(message.toolName ? `${message.toolName}: ${content}` : content) } : { kind: "text", text: content }],
+    };
   });
+  return cut ? { turns, cut } : { turns };
 }
 
 const oneLine = (text: string) => {

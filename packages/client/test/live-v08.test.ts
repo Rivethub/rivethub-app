@@ -104,14 +104,64 @@ describe("entities mapping", () => {
   });
 });
 
+describe("a session received from someone else", () => {
+  // The row rh 0.8.3 lists after `rh memory receive`: no harness, and an origin naming the sender.
+  const received = {
+    id: "import:081a50ae9fd1f5d566084b5fad68d3c191a3f65eb2b392c5cea4196b0ee42038",
+    title: "Move the backups",
+    origin: { author: "phil", createdAt: "2026-11-14T00:16:10.784407Z", updatedAt: "2026-11-14T00:16:11.081501Z", verification: "unknown_key", bundleId: "2ZdzlgbrmA_yHD4ZionG4w" },
+    startedAt: "2026-11-14T00:16:10.784Z",
+    endedAt: "2026-11-14T00:16:11.081Z",
+    messageCount: 3,
+    visibility: { kind: "private" },
+    kept: false,
+    trashed: false,
+    memoryState: "queued",
+  };
+  const receivedSeg = sessionSegment(received.id as SessionId);
+
+  it("lists it with its sender, under the shared harness", async () => {
+    const { client } = rh({ "GET /api/sessions": { items: [received, ...body.catalogPageBody.items] } });
+    const page = await client.methods.sessions!({});
+    expect(page.items).toHaveLength(body.catalogPageBody.items.length + 1);
+    expect(page.items[0]).toMatchObject({ id: received.id, harness: "shared", origin: { author: "phil", verification: "unknown_key" }, messageCount: 3 });
+    expect(page.items[1]).not.toHaveProperty("origin");
+  });
+
+  it("addresses it by its key as it is, which is the only form rh accepts for a received session", () => {
+    expect(receivedSeg).toBe(received.id);
+    expect(sessionSegment("claude-code:s-1" as SessionId)).not.toContain(":");
+    // Only a well-formed import key is passed through.
+    expect(sessionSegment("import:not-a-digest" as SessionId)).not.toContain(":");
+  });
+
+  it("opens it", async () => {
+    const { client, calls } = rh({ "GET /api/sessions": { items: [received] }, [`GET /api/sessions/${encodeURIComponent(received.id)}`]: { ...received, cwd: "/tmp/x", changed: [], entities: [], tags: [] } });
+    expect(await client.methods.session!(received.id as SessionId)).toMatchObject({ harness: "shared", origin: { author: "phil" }, cwd: "/tmp/x" });
+    expect(calls.at(-1)!.path).toBe(`/api/sessions/${encodeURIComponent(received.id)}`);
+  });
+
+  it("drops a verification value it does not know and keeps the sender", async () => {
+    const { client } = rh({ "GET /api/sessions": { items: [{ ...received, origin: { author: "phil", verification: "some-new-state" } }] } });
+    expect((await client.methods.sessions!({})).items[0]!.origin).toEqual({ author: "phil" });
+  });
+});
+
 describe("harnesses and models mapping", () => {
   it("maps capture status and drops absent optionals", async () => {
     const { client } = rh({ "GET /api/capture/status": body.captureStatusBody });
     const list = await client.methods.harnesses!();
     expect(list[0]).toMatchObject({ id: "claude-code", version: "2.1.0", capture: { method: "hook", state: "receiving", lastCaptureAt: "2026-11-06T10:30:00.000Z" }, recall: { state: "connected" }, canConnect: false });
-    expect(list[1]).toMatchObject({ capture: { method: "store-scan", state: "stale" }, canConnect: true });
+    // rh says "stale" for a tool that is set up and has captured nothing yet. With no last capture, that is idle, not stopped.
+    expect(list[1]).toMatchObject({ capture: { method: "store-scan", state: "idle" }, canConnect: true });
     expect(list[1]).not.toHaveProperty("path");
     expect(list[1]!.capture).not.toHaveProperty("lastCaptureAt");
+  });
+
+  it("keeps stale for a tool that captured before and has stopped", async () => {
+    const stopped = { ...body.captureStatusBody[1]!, capture: { method: "hook", state: "stale", lastCaptureAt: "2026-11-01T08:00:00Z", detail: "hook installed; last capture 2026-11-01T08:00:00Z" } };
+    const { client } = rh({ "GET /api/capture/status": [stopped] });
+    expect((await client.methods.harnesses!())[0]!.capture).toMatchObject({ state: "stale", lastCaptureAt: "2026-11-01T08:00:00.000Z" });
   });
 
   it("posts the part and dryRun and returns the diff", async () => {

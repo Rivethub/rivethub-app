@@ -1,10 +1,16 @@
-import type { Change, EntityId, Page, SessionDetail, SessionId, SessionQuery, SessionSummaryRow, TagAssignment, Visibility } from "@rivethub/contracts";
+import type { Change, EntityId, Page, SessionDetail, SessionId, SessionOrigin, SessionQuery, SessionSummaryRow, TagAssignment, Visibility } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import { RouteMissingError } from "../errors.js";
 import * as wire from "./wire.js";
 import { displayTitle, sessionId, sessionSegment, strip, topicId, visibilityFromWire } from "./util.js";
 
 const PAGE_SIZE = 50;
+
+/** The harness id given to a session that was received from someone else, which no tool on this hub ran. */
+export const SHARED_HARNESS = "shared";
+
+const VERIFICATIONS = ["verified", "unsigned", "unknown_key"] as const;
+const verification = (value: string | undefined) => VERIFICATIONS.find((known) => known === value);
 
 type RowFields = Omit<wire.CatalogRow, "visibility" | "parentId" | "childCount"> & Partial<Pick<wire.CatalogRow, "parentId" | "childCount">>;
 
@@ -13,7 +19,8 @@ export function mapRow(row: RowFields, visibility: Visibility): SessionSummaryRo
   return strip<SessionSummaryRow>({
     id: sessionId(row.id),
     title: displayTitle(row.title, row.id),
-    harness: row.harness,
+    harness: row.harness ?? SHARED_HARNESS,
+    origin: row.origin ? strip<SessionOrigin>({ author: row.origin.author, verification: verification(row.origin.verification) }) : undefined,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     messageCount: row.messageCount,

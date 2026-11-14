@@ -55,7 +55,8 @@ function Health({ phone }: { phone?: boolean }) {
   const jobs = useModelJobs().data;
   if (!harnesses) return null;
   const stale = harnesses.filter((h) => h.capture.state === "stale");
-  const none = !harnesses.some((h) => h.capture.state !== "not-connected");
+  // A tool that is set up and has sent nothing yet is not sending, and has not stopped either.
+  const none = !harnesses.some((h) => h.capture.state === "receiving" || h.capture.state === "stale");
   const failing = (jobs ?? []).filter((j) => j.health === "failing");
   const problems = [
     none ? "No tool is sending sessions yet" : "",

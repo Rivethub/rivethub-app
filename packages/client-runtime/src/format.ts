@@ -1,4 +1,4 @@
-import type { EntityType, ReviewItem, SessionSummaryRow, SubjectRef } from "@rivethub/contracts";
+import type { EntityType, ReviewItem, SessionOrigin, SessionSummaryRow, SubjectRef } from "@rivethub/contracts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -83,9 +83,24 @@ export const harnessNames: Record<string, string> = {
   "grok-build": "Grok Build",
   cursor: "Cursor",
   opencode: "opencode",
+  shared: "Shared",
 };
 
 /** True only when the hub counted the session's messages and found none. An unknown count is not an empty session. */
 export function hasNoMessages(session: Pick<SessionSummaryRow, "messageCount" | "messageCountUnknown">): boolean {
   return session.messageCount === 0 && !session.messageCountUnknown;
+}
+
+/** "From Ada", for the row of a session someone shared with this hub. */
+export function originLabel(origin: SessionOrigin): string {
+  return `From ${origin.author ?? "someone else"}`;
+}
+
+/** One sentence on whether the sender of a shared session is known. */
+export function originNote(origin: SessionOrigin): string {
+  const who = origin.author ?? "Someone else";
+  if (origin.verification === "verified") return `${who} shared this session with you. It was signed with a key you trust.`;
+  if (origin.verification === "unsigned") return `${who} shared this session with you. It was not signed, so the sender is not confirmed.`;
+  if (origin.verification === "unknown_key") return `${who} shared this session with you. It was signed with a key you have not trusted yet, so the sender is not confirmed.`;
+  return `${who} shared this session with you.`;
 }

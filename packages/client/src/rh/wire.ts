@@ -204,10 +204,14 @@ export const memoryBrowse = z.object({
     .default([]),
 });
 
+export type BrowsedMessage = z.infer<typeof memoryBrowse>["messages"][number];
+
 export const catalogRow = z.object({
   id: z.string(),
   title: z.string(),
-  harness: z.string(),
+  // A session received from someone else has no harness; it carries `origin` instead.
+  harness: nullish(z.string()),
+  origin: nullish(z.object({ author: nullish(z.string()), verification: nullish(z.string()) })),
   startedAt: timeSchema,
   endedAt: nullish(timeSchema),
   messageCount: z.number(),
