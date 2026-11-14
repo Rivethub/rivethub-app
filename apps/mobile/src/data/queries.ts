@@ -2,15 +2,18 @@ import type {
   EntityId,
   FactId,
   IsoTime,
+  Page,
   ReviewDecision,
   ReviewItem,
   ReviewItemId,
+  SearchOptions,
   SessionId,
   SessionQuery,
+  SessionSummaryRow,
   TopicId,
   Visibility,
 } from "@rivethub/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
 import { useHub } from "../hub/HubContext";
 
@@ -84,7 +87,24 @@ export function useSessions(query: SessionQuery) {
   return useQuery({
     queryKey: ["sessions", client.scope, query],
     queryFn: () => client.sessions(query),
-    placeholderData: () => client.peek("sessions", [query]) ?? { items: seed.sessions },
+    placeholderData: () => client.peek("sessions", [query]) ?? (query.view === "all" || query.view === undefined ? { items: seed.sessions } : undefined),
+  });
+}
+
+/** Older pages load on request and stay loaded. */
+export function useSessionPages(query: SessionQuery) {
+  const { client, seed } = useHub();
+  return useInfiniteQuery({
+    queryKey: ["sessions", "pages", client.scope, query],
+    queryFn: ({ pageParam }) => client.sessions(pageParam ? { ...query, cursor: pageParam } : query),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last: Page<SessionSummaryRow>) => last.next,
+    placeholderData: () => {
+      if (query.text || query.harness || (query.view && query.view !== "all")) return undefined;
+      const peeked = client.peek<Page<SessionSummaryRow>>("sessions", [query]);
+      const page = peeked ?? { items: seed.sessions };
+      return { pages: [page], pageParams: [undefined] };
+    },
   });
 }
 
@@ -96,28 +116,30 @@ export function useSession(id: string) {
   });
 }
 
-export function useTranscript(id: string) {
+export function useTranscript(id: string, enabled = true) {
   const { client } = useHub();
   return useQuery({
     queryKey: ["transcript", client.scope, id],
     queryFn: () => client.transcript(id as SessionId),
+    enabled,
   });
 }
 
-export function useSummaryTree(id: string) {
+export function useSummaryTree(id: string, enabled = true) {
   const { client } = useHub();
   return useQuery({
     queryKey: ["summary", client.scope, id],
     queryFn: () => client.summaryTree(id as SessionId),
+    enabled,
   });
 }
 
-export function useSearch(text: string) {
+export function useSearch(text: string, options: SearchOptions = {}) {
   const { client } = useHub();
   const query = text.trim();
   return useQuery({
-    queryKey: ["search", client.scope, query],
-    queryFn: () => client.search(query),
+    queryKey: ["search", client.scope, query, options],
+    queryFn: () => client.search(query, options),
     enabled: query.length > 0,
   });
 }
@@ -173,6 +195,11 @@ export const useSetFact = () =>
 
 export const usePlaceSession = () =>
   useWrite((client, arg: { session: SessionId; topic: TopicId | null }) => client.placeSession(arg.session, arg.topic));
+
+export const useCreateTopic = () =>
+  useWrite((client, arg: { name: string; parentId?: TopicId }) =>
+    client.createTopic ? client.createTopic(arg.name, arg.parentId) : Promise.reject(new Error("This hub cannot create topics.")),
+  );
 
 export const useKeep = () => useWrite((client, arg: { id: SessionId; keep: boolean }) => client.keep(arg.id, arg.keep));
 

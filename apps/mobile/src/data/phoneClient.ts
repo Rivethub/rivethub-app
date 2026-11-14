@@ -11,6 +11,7 @@ const WRITES = new Set<keyof MemoryClient>([
   "decide",
   "updateTopic",
   "addDecision",
+  "createTopic",
   "placeSession",
   "setFact",
   "renameSession",

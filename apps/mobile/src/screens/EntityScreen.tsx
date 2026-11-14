@@ -1,3 +1,5 @@
+import { factLabel } from "@rivethub/client-runtime/format";
+import { articleBody } from "@rivethub/client-runtime/markdown";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { EntityId, Fact, IsoTime } from "@rivethub/contracts";
 import { useState } from "react";
@@ -9,6 +11,7 @@ import { openSubject } from "../nav/go";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
 import { BackButton, DataBanner, GhostButton, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
+import { MarkdownView } from "../ui/markdown";
 import { changeLabel, entityTypeLabel, errorText, shortDate, when } from "../ui/format";
 
 type Props = NativeStackScreenProps<RootParams, "Entity">;
@@ -53,6 +56,11 @@ export function EntityScreen({ route, navigation }: Props) {
         <View style={{ flex: 1 }}>
           <View style={{ paddingHorizontal: 16, gap: 12 }}>
             <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 28, fontWeight: "600" }}>{article.title}</Text>
+            <Text style={{ color: palette.muted, fontSize: 13 }}>
+              {entityTypeLabel(article.type)}
+              {article.lastVerified ? ` · last checked ${shortDate(article.lastVerified)}` : ""}
+              {article.topic ? ` · ${article.topic.path.join(" › ")}` : ""}
+            </Text>
             <Segment
               value={tab}
               onChange={(id) => setTab(id as Tab)}
@@ -75,12 +83,15 @@ export function EntityScreen({ route, navigation }: Props) {
                   </View>
                 ) : null}
                 {article.lead ? <RichText text={article.lead} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+                {article.article ? (
+                  <MarkdownView source={articleBody(article.article, article.title, { dropFacts: article.facts.length > 0, dropLead: article.lead })} />
+                ) : null}
                 <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 10 }}>
                   <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>STATE</Text>
                   {article.facts.length === 0 ? <Text style={{ color: palette.muted }}>No facts yet.</Text> : null}
                   {article.facts.map((fact) => (
                     <Pressable key={fact.id} accessibilityRole="button" disabled={asOf !== null} onPress={() => setEditing(fact)} style={{ minHeight: 48, justifyContent: "center", borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 8 }}>
-                      <Text style={{ color: palette.muted, fontSize: 12 }}>{fact.key}{fact.pinned ? " · pinned" : ""}{fact.conflict ? " · conflict" : ""}</Text>
+                      <Text style={{ color: palette.muted, fontSize: 12 }}>{factLabel(fact.key)}{fact.pinned ? " · pinned" : ""}{fact.conflict ? " · conflict" : ""}</Text>
                       <Text style={{ color: palette.foreground, fontSize: 16 }}>{fact.value || "Empty"}</Text>
                     </Pressable>
                   ))}
@@ -143,7 +154,7 @@ function FactSheet({ entity, fact, onClose }: { entity: EntityId; fact: Fact; on
   };
 
   return (
-    <Sheet title={fact.key} onClose={onClose}>
+    <Sheet title={factLabel(fact.key)} onClose={onClose}>
       <TextField label="Value" value={value} onChangeText={setValue} />
       <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: pinned }} onPress={() => setPinned((current) => !current)} style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10 }}>
         <View style={{ width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: palette.border, backgroundColor: pinned ? palette.primary : "transparent", alignItems: "center", justifyContent: "center" }}>

@@ -1,3 +1,4 @@
+import { articleBody } from "@rivethub/client-runtime/markdown";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -8,6 +9,7 @@ import { openSubject } from "../nav/go";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
 import { BackButton, DataBanner, Loading, RichText, Screen } from "../ui/chrome";
+import { MarkdownView } from "../ui/markdown";
 import { shortDate, when } from "../ui/format";
 
 type Props = NativeStackScreenProps<RootParams, "Topic">;
@@ -52,8 +54,7 @@ export function TopicScreen({ route, navigation }: Props) {
           {article.path.length > 1 ? (
             <Text style={{ color: palette.muted, fontSize: 13 }}>{article.path.map((part) => part.name).join(" › ")}</Text>
           ) : null}
-          {article.lead ? <RichText text={article.lead} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} /> : null}
-          {article.current ? <RichText text={article.current} style={{ color: palette.foreground, fontSize: 15, lineHeight: 22 }} /> : null}
+          <ArticleBody name={article.name} article={article.article} lead={article.lead} current={article.current} reading={palette.reading} foreground={palette.foreground} muted={palette.muted} />
           <Section title="Decisions">
             {article.decisions.length === 0 ? <Muted>No decisions yet.</Muted> : article.decisions.map((decision) => (
               <View key={decision.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}>
@@ -92,6 +93,16 @@ export function TopicScreen({ route, navigation }: Props) {
         </ScrollView>
       )}
     </Screen>
+  );
+}
+
+function ArticleBody({ name, article, lead, current, reading, foreground, muted }: { name: string; article: string | undefined; lead: string; current: string | undefined; reading: string | undefined; foreground: string; muted: string }) {
+  const body = article ? articleBody(article, name) : "";
+  return (
+    <>
+      {body ? <MarkdownView source={body} /> : lead ? <RichText text={lead} style={{ fontFamily: reading, color: foreground, fontSize: 16, lineHeight: 24 }} /> : null}
+      {current && !body.includes(current) ? <Text style={{ color: muted, fontSize: 15, lineHeight: 22 }}>{current}</Text> : null}
+    </>
   );
 }
 

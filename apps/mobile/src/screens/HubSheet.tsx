@@ -57,6 +57,39 @@ export function HubSheet() {
         <Text style={{ color: palette.info, fontSize: 16 }}>+ Connect to a hub…</Text>
       </Pressable>
       <View style={{ height: 1, backgroundColor: palette.border }} />
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          setOpen(false);
+          if (navigationRef.isReady()) navigationRef.navigate("Stats");
+        }}
+        style={{ minHeight: 48, justifyContent: "center" }}
+      >
+        <Text style={{ color: palette.foreground, fontSize: 16 }}>Stats</Text>
+        <Text style={{ color: palette.muted, fontSize: 12 }}>What is in memory, and whether it is keeping up</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          setOpen(false);
+          if (navigationRef.isReady()) navigationRef.navigate("Shared");
+        }}
+        style={{ minHeight: 48, justifyContent: "center" }}
+      >
+        <Text style={{ color: palette.foreground, fontSize: 16 }}>Shared</Text>
+        <Text style={{ color: palette.muted, fontSize: 12 }}>What is shared with each space</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          setOpen(false);
+          if (navigationRef.isReady()) navigationRef.navigate("Guide");
+        }}
+        style={{ minHeight: 48, justifyContent: "center" }}
+      >
+        <Text style={{ color: palette.foreground, fontSize: 16 }}>Guide</Text>
+        <Text style={{ color: palette.muted, fontSize: 12 }}>The path from a first session to sharing</Text>
+      </Pressable>
       {ROWS.map((row) => (
         <Pressable key={row.section} accessibilityRole="button" onPress={() => openSettings(row.section)} style={{ minHeight: 48, justifyContent: "center" }}>
           <Text style={{ color: palette.foreground, fontSize: 16 }}>{row.label}</Text>

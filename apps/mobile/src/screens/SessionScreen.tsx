@@ -2,13 +2,16 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
 import { splitInjected } from "@rivethub/client";
 import * as Clipboard from "expo-clipboard";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeep, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
+import { markStep } from "../lib/journeyStore";
+import { countedNoMessages } from "../lib/sessions";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
 import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
+import { NewTopic } from "./NewTopic";
 import { changeLabel, clock, errorText, shortDate } from "../ui/format";
 import { IconFile, IconKeep, IconShare, IconTrash } from "../ui/icons";
 
@@ -21,7 +24,9 @@ export function SessionScreen({ route, navigation }: Props) {
   const id = route.params.id as SessionId;
   const session = useSession(route.params.id);
   const detail = session.data;
-  const [pane, setPane] = useState<Pane>("transcript");
+  const [pane, setPane] = useState<Pane | null>(null);
+  const empty = detail ? countedNoMessages(detail) : false;
+  const active: Pane = pane ?? (empty ? "transcript" : detail?.memoryState === "summarized" ? "summary" : "transcript");
   const [range, setRange] = useState<[number, number] | null>(null);
   const [filing, setFiling] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -78,19 +83,21 @@ export function SessionScreen({ route, navigation }: Props) {
                 ))}
               </View>
             ) : null}
+            {detail.memoryState !== "summarized" && !empty ? <StateNote state={detail.memoryState} /> : null}
             <Segment
-              value={pane}
+              value={active}
               onChange={(next) => setPane(next as Pane)}
               options={[
-                { id: "transcript", label: "Transcript" },
                 { id: "summary", label: "Summary" },
+                { id: "transcript", label: "Transcript" },
               ]}
             />
-            {pane === "transcript" ? <Transcript id={detail.id} range={range} onClear={() => setRange(null)} /> : null}
-            {pane === "summary" ? (
+            {active === "transcript" ? <Transcript id={detail.id} empty={empty} range={range} onClear={() => setRange(null)} /> : null}
+            {active === "summary" ? (
               <Summary
                 id={detail.id}
                 state={detail.memoryState}
+                onOpenTranscript={() => setPane("transcript")}
                 onLeaf={(next) => {
                   setRange(next);
                   setPane("transcript");
@@ -136,9 +143,23 @@ function Action({ label, onPress, icon }: { label: string; onPress: () => void; 
   );
 }
 
-function Transcript({ id, range, onClear }: { id: SessionId; range: [number, number] | null; onClear: () => void }) {
+const STATE_NOTE: Partial<Record<SessionDetail["memoryState"], string>> = {
+  capturing: "This session is still being captured. The messages so far are on the transcript.",
+  queued: "This session is waiting to be summarized. Summaries need a model.",
+  flagged: "Summarizing this session failed. Summaries need a model.",
+};
+
+function StateNote({ state }: { state: SessionDetail["memoryState"] }) {
   const { palette } = useTheme();
-  const transcript = useTranscript(id);
+  const text = STATE_NOTE[state];
+  if (!text) return null;
+  return <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{text}</Text>;
+}
+
+function Transcript({ id, empty, range, onClear }: { id: SessionId; empty: boolean; range: [number, number] | null; onClear: () => void }) {
+  const { palette } = useTheme();
+  const transcript = useTranscript(id, !empty);
+  if (empty) return <Text style={{ color: palette.muted, fontSize: 15 }}>Nothing was said in this session</Text>;
   const turns = transcript.data?.filter((turn) => !range || (turn.index >= range[0] && turn.index <= range[1])) ?? [];
   if (!transcript.data) return <Loading label={transcript.isError ? "The transcript did not load." : "Loading transcript…"} />;
   return (
@@ -220,18 +241,31 @@ function Bubble({ turn }: { turn: TranscriptTurn }) {
   );
 }
 
-const NO_SUMMARY: Record<SessionDetail["memoryState"], string> = {
-  capturing: "Still capturing. The summary is written after the session goes quiet.",
-  queued: "Queued for summarizing. Check back after the memory worker catches up.",
-  flagged: "Summarizing this session was flagged, so there is no summary yet.",
-  summarized: "The summary did not load.",
-};
-
-function Summary({ id, state, onLeaf }: { id: SessionId; state: SessionDetail["memoryState"]; onLeaf: (range: [number, number]) => void }) {
+function NoSummary({ onOpenTranscript }: { onOpenTranscript: () => void }) {
   const { palette } = useTheme();
-  const tree = useSummaryTree(id);
+  return (
+    <View style={{ gap: 6, borderWidth: 1, borderStyle: "dashed", borderColor: palette.input, borderRadius: 12, padding: 16 }}>
+      <Text style={{ color: palette.foreground, fontWeight: "600" }}>No summary yet</Text>
+      <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
+        A summary is written after a session ends, by the model set for summaries. Every message is still here.
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onOpenTranscript} style={{ minHeight: 44, justifyContent: "center" }}>
+        <Text style={{ color: palette.info }}>Read the transcript</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Summary({ id, state, onLeaf, onOpenTranscript }: { id: SessionId; state: SessionDetail["memoryState"]; onLeaf: (range: [number, number]) => void; onOpenTranscript: () => void }) {
+  const { palette } = useTheme();
+  const tree = useSummaryTree(id, state === "summarized");
   const root = tree.data;
-  if (!root) return <Loading label={tree.isError ? NO_SUMMARY[state] : "Loading summary…"} />;
+  useEffect(() => {
+    if (root) markStep("summary");
+  }, [root]);
+  if (state !== "summarized") return <NoSummary onOpenTranscript={onOpenTranscript} />;
+  if (tree.isError) return <NoSummary onOpenTranscript={onOpenTranscript} />;
+  if (!root) return <Loading label="Loading summary…" />;
   return (
     <View style={{ gap: 12 }}>
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
@@ -296,6 +330,10 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
             <Text style={{ color: choice.id === current ? palette.primary : palette.foreground }}>{choice.label}</Text>
           </Pressable>
         ))}
+        <NewTopic
+          label="New topic"
+          onCreated={(id) => file(id)}
+        />
       </ScrollView>
     </Sheet>
   );
@@ -311,7 +349,13 @@ function ShareSheet({ session, space, onClose }: { session: SessionId; space: st
     const visibility = trimmed ? { kind: "space" as const, space: trimmed } : { kind: "private" as const };
     setVisibility.mutate(
       { id: session, visibility },
-      { onSuccess: onClose, onError: (caught) => setError(errorText(caught)) },
+      {
+        onSuccess: () => {
+          if (trimmed) markStep("share");
+          onClose();
+        },
+        onError: (caught) => setError(errorText(caught)),
+      },
     );
   };
   return (

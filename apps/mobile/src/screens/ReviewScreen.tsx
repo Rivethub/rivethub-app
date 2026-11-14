@@ -2,6 +2,7 @@ import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, PanResponder, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useDecide, useReviewQueue } from "../data/queries";
+import { markStep } from "../lib/journeyStore";
 import { openSubject } from "../nav/go";
 import { acceptDecision, decisionForSwipe, reviewDecisionFor } from "../review/decision";
 import { alpha } from "../theme/tokens";
@@ -56,6 +57,7 @@ export function ReviewScreen() {
     const current = itemRef.current;
     if (!current) return;
     setSkipped((prev) => new Set(prev).add(current.id));
+    if (decision.kind !== "later") markStep("review");
     decide.mutate(
       { id: current.id, decision },
       {

@@ -5,12 +5,15 @@ import { BackHandler, View } from "react-native";
 import { useHub } from "../hub/HubContext";
 import { AddHubScreen } from "../screens/AddHubScreen";
 import { EntityScreen } from "../screens/EntityScreen";
+import { GuideScreen } from "../screens/GuideScreen";
 import { HubSheet } from "../screens/HubSheet";
 import { LibraryScreen } from "../screens/LibraryScreen";
 import { ReviewScreen } from "../screens/ReviewScreen";
 import { SearchScreen } from "../screens/SearchScreen";
 import { SessionScreen } from "../screens/SessionScreen";
 import { SettingsScreen } from "../screens/SettingsScreen";
+import { SharedScreen } from "../screens/SharedScreen";
+import { StatsScreen } from "../screens/StatsScreen";
 import { TodayScreen } from "../screens/TodayScreen";
 import { TopicScreen } from "../screens/TopicScreen";
 import { useTheme } from "../theme/Theme";
@@ -57,6 +60,9 @@ export function Root() {
         <Stack.Screen name="Session" component={SessionScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="AddHub" component={AddHubScreen} />
+        <Stack.Screen name="Guide" component={GuideScreen} />
+        <Stack.Screen name="Stats" component={StatsScreen} />
+        <Stack.Screen name="Shared" component={SharedScreen} />
       </Stack.Navigator>
       {open ? <HubSheet /> : null}
     </View>
