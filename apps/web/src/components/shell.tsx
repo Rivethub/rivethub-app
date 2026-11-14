@@ -66,11 +66,10 @@ export function SidebarSection({ title, action, children }: { title: string; act
   );
 }
 
+/** Geometry from the owner-approved rivethub-icon.svg (2026-11-14). */
 export function Logo({ size = 22 }: { size?: number }) {
   return (
-    <span aria-hidden="true" className="flex shrink-0 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground" style={{ width: size, height: size, fontSize: size <= 22 ? size / 2 : 14 }}>
-      rh
-    </span>
+    <svg role="img" aria-label="RivetHub" className="shrink-0" viewBox="0 0 512 512" width={size} height={size}><rect width="512" height="512" rx="112" fill="#181e1b"/><rect x="4" y="4" width="504" height="504" rx="108" fill="none" stroke="#2b332e" strokeWidth="8"/><g transform="translate(256 256) scale(1) translate(-256 -256)"><g transform="translate(9.50 0)"><g className="ink" fill="none" stroke="#dee4df" strokeWidth="60"><path d="M100 390V180.0"/><path d="M261.0 390V122"/><path d="M261.0 276A66 66 0 0 1 393.0 276V390"/></g><circle className="rivet" cx="174.0" cy="210" r="33" fill="#6cdbac"/></g></g></svg>
   );
 }
 
@@ -119,7 +118,7 @@ export function MainSidebar({ children }: { children?: ReactNode }) {
     <SidebarShell>
       <Link to="/" className="flex items-center gap-2 px-2 pt-1 pb-2.5 text-foreground hover:no-underline">
         <Logo />
-        <span className="font-semibold">Rivet<span className="font-normal text-muted-foreground">Hub</span></span>
+        <span aria-hidden="true" className="font-bold" style={{ fontFamily: "Inter, sans-serif" }}>rivet<span className="text-primary">hub</span></span>
       </Link>
       <button type="button" onClick={palette.open} className="mb-2 flex items-center gap-2 rounded-full border border-border bg-card px-3 py-[7px] text-left text-muted-foreground hover:text-foreground">
         <SearchIcon size={14} />

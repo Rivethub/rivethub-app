@@ -1,4 +1,5 @@
-import { BrowserWindow, screen, shell } from "electron";
+import path from "node:path";
+import { app, BrowserWindow, screen, shell } from "electron";
 
 import { DEFAULT_SIZE, MIN_SIZE, readWindowState, restorableBounds, writeWindowState } from "../settings/windowState";
 import { createUserActivation, isNodeUrl, parseExternalUrl } from "./navigation";
@@ -22,6 +23,7 @@ export function createMainWindow({ preloadPath, origin, windowStateFile, onLeftN
     show: false,
     autoHideMenuBar: true,
     title: "RivetHub",
+    icon: app.isPackaged ? path.join(process.resourcesPath, "web/icons/icon-512.png") : path.resolve(__dirname, "../../web/public/icons/icon-512.png"),
     backgroundColor: "#0f1512",
     webPreferences: {
       preload: preloadPath,

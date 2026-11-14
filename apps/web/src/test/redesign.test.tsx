@@ -16,6 +16,12 @@ function renderAt(path: string) {
 beforeEach(() => resetJourney());
 
 describe("Sidebar", () => {
+  it("renders the approved logo with its accessible name", async () => {
+    renderAt("/");
+    const nav = await screen.findByRole("navigation", { name: "Sidebar" });
+    expect(within(nav).getByRole("img", { name: "RivetHub" }).tagName.toLowerCase()).toBe("svg");
+  });
+
   it("keeps the same navigation on every screen, with the open section's list nested under it", async () => {
     for (const path of ["/", "/sessions", "/sessions/s-retention", "/topics/rh-08", "/entities/nas-01", "/search", "/shared", "/stats", "/guide"]) {
       const { unmount } = renderAt(path);
