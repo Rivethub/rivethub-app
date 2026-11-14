@@ -42,10 +42,10 @@ describe("session catalog mapping", () => {
     expect(detail).toMatchObject({ cwd: "/home/phil/rivethub", resumeCommand: "claude --resume s-1", changed: [], entities: [], tags: [], childCount: 2 });
   });
 
-  it("rejects a row whose memory state is not one rh sends", async () => {
+  it("preserves an unfamiliar memory state for display", async () => {
     const bad = { items: [{ ...body.catalogPageBody.items[0], memoryState: "done" }] };
     const { client } = rh({ "GET /api/sessions?limit=1": body.catalogPageBody, "GET /api/sessions": bad });
-    await expect(client.methods.sessions!({})).rejects.toBeInstanceOf(MalformedResponseError);
+    expect((await client.methods.sessions!({})).items[0]).toMatchObject({ memoryState: "queued", memoryStateRaw: "done" });
   });
 
   it("calls trash, restore and un-keep on the reversible routes and never the permanent delete", async () => {
@@ -141,9 +141,9 @@ describe("a session received from someone else", () => {
     expect(calls.at(-1)!.path).toBe(`/api/sessions/${encodeURIComponent(received.id)}`);
   });
 
-  it("drops a verification value it does not know and keeps the sender", async () => {
+  it("retains an unfamiliar verification value and the sender", async () => {
     const { client } = rh({ "GET /api/sessions": { items: [{ ...received, origin: { author: "phil", verification: "some-new-state" } }] } });
-    expect((await client.methods.sessions!({})).items[0]!.origin).toEqual({ author: "phil" });
+    expect((await client.methods.sessions!({})).items[0]!.origin).toEqual({ author: "phil", verification: "some-new-state" });
   });
 });
 

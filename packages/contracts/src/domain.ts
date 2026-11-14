@@ -12,9 +12,9 @@ export type HarnessId = string;
 
 export type Visibility = { kind: "private" } | { kind: "space"; space: string };
 
-export type Freshness = "live" | "sample";
+export type Freshness = "live" | "sample" | (string & {});
 
-export type ChangeKind = "fact" | "decision" | "new" | "filed" | "conflict" | "tag" | "merge";
+export type ChangeKind = "fact" | "decision" | "new" | "filed" | "conflict" | "tag" | "merge" | "history" | (string & {});
 
 export type Actor =
   | { kind: "you" }
@@ -25,7 +25,7 @@ export type Actor =
 
 export type SubjectRef =
   | { kind: "topic"; id: TopicId; title: string }
-  | { kind: "entity"; id: EntityId; title: string }
+  | { kind: "entity"; id: EntityId; title: string; type?: string; typeName?: string }
   | { kind: "session"; id: SessionId; title: string };
 
 export interface Change {
@@ -41,10 +41,12 @@ export interface Change {
 export interface SessionOrigin {
   author?: string;
   /** Whether the bundle was signed by a key this hub trusts. */
-  verification?: "verified" | "unsigned" | "unknown_key";
+  verification?: "verified" | "unsigned" | "unknown_key" | (string & {});
 }
 
 export interface SessionSummaryRow {
+  /** Present only when the session belongs to a teammate. */
+  owner?: string;
   id: SessionId;
   title: string;
   /** The tool the session ran in. `shared` for a session received from someone else, which no tool on this hub ran. */
@@ -61,6 +63,8 @@ export interface SessionSummaryRow {
   kept: boolean;
   trashed: boolean;
   memoryState: "capturing" | "queued" | "summarized" | "flagged";
+  /** Raw label when the hub sends a state this app does not interpret. */
+  memoryStateRaw?: string;
   gist?: string;
   /** Set on a subagent session: the session that spawned it. */
   parentId?: SessionId;
@@ -105,7 +109,7 @@ export interface SessionDetail extends SessionSummaryRow {
 export interface TagAssignment {
   key: string;
   value: string;
-  state: "applied" | "suggested";
+  state: "applied" | "suggested" | (string & {});
 }
 
 export interface TopicNode {
@@ -147,17 +151,7 @@ export interface TopicArticle {
   freshness: Freshness;
 }
 
-export type EntityType =
-  | "person"
-  | "agent"
-  | "machine"
-  | "hardware"
-  | "model"
-  | "service"
-  | "software"
-  | "repository"
-  | "domain"
-  | "database";
+export type EntityType = string;
 
 export interface FactSource {
   session: { id: SessionId; title: string };
@@ -180,6 +174,8 @@ export interface EntitySummary {
   id: EntityId;
   title: string;
   type: EntityType;
+  /** Display name supplied by the hub, used as given without pluralization. */
+  typeName?: string;
   sessionCount: number;
 }
 
@@ -204,6 +200,8 @@ export interface EntityArticle extends EntitySummary {
 export interface ReviewItem {
   id: ReviewItemId;
   group: "conflict" | "fact" | "new-entity" | "filing" | "tag" | "tidy";
+  /** Unknown review groups are display-only; never infer an accept action. */
+  rawGroup?: string;
   subject: SubjectRef;
   text: string;
   before?: string;
@@ -240,6 +238,7 @@ export interface SearchHit {
 
 /** One place the words were found: a message or a summary inside a session. */
 export interface SearchPassage {
+  owner?: string;
   id: string;
   session: { id: SessionId; title: string };
   source: "message" | "summary";
@@ -268,7 +267,7 @@ export interface SearchOptions {
   mode?: SearchMode;
 }
 
-export type CaptureMethod = "hook" | "plugin" | "store-scan" | "client-push";
+export type CaptureMethod = "hook" | "plugin" | "store-scan" | "client-push" | (string & {});
 
 export interface HarnessStatus {
   id: HarnessId;
@@ -279,22 +278,22 @@ export interface HarnessStatus {
   capture: {
     method: CaptureMethod;
     /** `idle`: set up, and nothing has been captured from it yet. `stale`: it sent sessions before and has stopped. */
-    state: "receiving" | "stale" | "idle" | "not-connected";
+    state: "receiving" | "stale" | "idle" | "not-connected" | (string & {});
     lastCaptureAt?: IsoTime;
     detail: string;
   };
-  recall: { state: "connected" | "not-connected" | "elsewhere"; detail: string };
+  recall: { state: "connected" | "not-connected" | "elsewhere" | (string & {}); detail: string };
   canConnect: boolean;
 }
 
-export type ModelRole = "default" | "summarizer" | "categorizer" | "wiki-writer" | "embedder";
+export type ModelRole = string;
 
 export interface ModelJob {
   role: ModelRole;
   provider?: string;
   model?: string;
   inheritsDefault: boolean;
-  health: "healthy" | "slow" | "failing";
+  health: "healthy" | "slow" | "failing" | (string & {});
   detail: string;
   queued: number;
 }
@@ -302,7 +301,7 @@ export interface ModelJob {
 export interface Hub {
   id: HubId;
   name: string;
-  kind: "local" | "team";
+  kind: "local" | "team" | (string & {});
   url: string;
   online: boolean;
   detail: string;

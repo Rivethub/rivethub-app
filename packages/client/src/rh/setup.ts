@@ -7,7 +7,7 @@ import { strip } from "./util.js";
  * rh calls a tool `stale` both when it stopped sending sessions and when it is set up and has sent none yet.
  * Only the first is a problem, and only the first has a last capture time.
  */
-function captureState(state: "receiving" | "stale" | "not-connected", lastCaptureAt: string | undefined): HarnessStatus["capture"]["state"] {
+function captureState(state: string, lastCaptureAt: string | undefined): HarnessStatus["capture"]["state"] {
   return state === "stale" && lastCaptureAt === undefined ? "idle" : state;
 }
 

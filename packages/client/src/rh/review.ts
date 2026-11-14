@@ -5,7 +5,7 @@ import { displayTitle } from "./util.js";
 import { strip } from "./util.js";
 
 export const mapSubject = (subject: wire.SubjectWire) =>
-  ({ kind: subject.kind, id: subject.id, title: subject.kind === "session" ? displayTitle(subject.title, subject.id) : subject.title }) as SubjectRef;
+  strip({ ...subject, kind: subject.kind, id: subject.id, title: subject.kind === "session" ? displayTitle(subject.title, subject.id) : subject.title }) as SubjectRef;
 
 const mapSource = (source: NonNullable<wire.ReviewWire["options"]>[number]["source"]) =>
   source && { session: { id: source.session.id, title: displayTitle(source.session.title, source.session.id) }, at: source.at, value: source.value };
@@ -13,7 +13,8 @@ const mapSource = (source: NonNullable<wire.ReviewWire["options"]>[number]["sour
 export function mapReviewItem(item: wire.ReviewWire): ReviewItem {
   return strip({
     id: item.id,
-    group: item.group,
+    group: ["conflict", "fact", "filing", "tag", "tidy", "new-entity"].includes(item.group) ? item.group : "tidy",
+    rawGroup: ["conflict", "fact", "filing", "tag", "tidy", "new-entity"].includes(item.group) ? undefined : item.group,
     subject: mapSubject(item.subject),
     text: item.text,
     before: item.before,

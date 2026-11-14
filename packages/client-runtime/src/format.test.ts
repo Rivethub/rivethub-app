@@ -1,3 +1,4 @@
+import type { EntityId } from "@rivethub/contracts";
 import type { ReviewItem } from "@rivethub/contracts";
 import { describe, expect, it } from "vitest";
 import { ago, dayLabel, localDay, parseDay, primaryAction, whenLabel } from "./format";
@@ -28,4 +29,22 @@ describe("format", () => {
     expect(primaryAction(item("conflict"))).toBe("Take newer");
     expect(primaryAction(item("filing"))).toBe("File");
   });
+});
+
+it("derives entity labels and grouping without a taxonomy or pluralization", async () => {
+  const { entityTypeLabel, groupEntities, subjectLabel } = await import("./format.js");
+  const entities = [
+    { id: "a" as EntityId, title: "A", type: "spacecraft", sessionCount: 1 },
+    { id: "b" as EntityId, title: "B", type: "field-notes", sessionCount: 1 },
+    { id: "c" as EntityId, title: "C", type: "spacecraft", sessionCount: 1 },
+    { id: "d" as EntityId, title: "D", type: "trial_plot", typeName: "Research plots", sessionCount: 1 },
+  ];
+  expect(groupEntities(entities).map((g) => [g.type, g.label, g.items.length])).toEqual([
+    ["spacecraft", "Spacecraft", 2], ["field-notes", "Field notes", 1], ["trial_plot", "Research plots", 1],
+  ]);
+  expect(groupEntities([])).toEqual([]);
+  expect(entityTypeLabel({ type: "FIELD_notes" })).toBe("Field notes");
+  expect(entityTypeLabel({ type: "trial_plot", typeName: "NASA research plots" })).toBe("NASA research plots");
+  expect(subjectLabel({ kind: "entity", id: "d" as EntityId, title: "D" }, entities)).toBe("Research plots");
+  expect(subjectLabel({ kind: "entity", id: "missing" as EntityId, title: "E", type: "field-notes" }, [])).toBe("Field notes");
 });

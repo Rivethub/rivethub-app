@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { descriptive, rows } from "../tolerant.js";
 import type {
   DraftFlag,
   DraftReport,
@@ -31,7 +32,7 @@ const foundSession = z.object({
 });
 
 export const findReply = z
-  .object({ sessions: z.array(foundSession) })
+  .object({ sessions: rows(foundSession) })
   .transform(({ sessions }): ShareableSession[] =>
     sessions.map(({ imported_from, title, ...rest }) => ({
       ...rest,
@@ -40,6 +41,7 @@ export const findReply = z
     })),
   );
 
+// Sanitizer actions, login transitions and import verdicts remain strict: guessing could disclose text.
 const flagState = z
   .discriminatedUnion("kind", [
     z.object({ kind: z.literal("open") }),
@@ -90,8 +92,8 @@ export const sentReply = z
 
 export const serversReply = z
   .object({
-    servers: z.array(z.object({ origin: z.string(), kind: z.enum(["cloud", "team"]), user: opt(z.string()), signed_in: z.boolean(), default: z.boolean() })),
-    token_store: z.enum(["keyring", "file"]),
+    servers: z.array(z.object({ origin: z.string(), kind: descriptive(["cloud", "team"]), user: opt(z.string()), signed_in: z.boolean(), default: z.boolean() })),
+    token_store: descriptive(["keyring", "file"]),
   })
   .transform(
     ({ servers, token_store }): ShareServers => ({
@@ -126,12 +128,12 @@ export const loginStep = z
 
 export const keyReply = z.object({ key: z.string(), fingerprint: z.string() });
 
-const verification = z.enum(["verified", "unsigned", "unknown_key"]);
+const verification = descriptive(["verified", "unsigned", "unknown_key"]);
 const decision = z.enum(["import", "skip", "hold_spans"]);
 const signer = opt(z.object({ key: z.string(), fingerprint: z.string() }));
 
 const findingRow = z
-  .object({ event: opt(z.string()), field: z.string(), rule: z.string(), family: z.enum(["secret", "injection"]), kind: z.string(), count: z.number(), excerpt: z.string() })
+  .object({ event: opt(z.string()), field: z.string(), rule: z.string(), family: descriptive(["secret", "injection"]), kind: z.string(), count: z.number(), excerpt: z.string() })
   .transform(({ event, ...rest }): FindingRow => ({ ...rest, ...(event === undefined ? {} : { event }) }));
 
 const inboundSession = z

@@ -98,9 +98,9 @@ describe("review", () => {
     expect(filing).not.toHaveProperty("options");
   });
 
-  it("rejects a group the runtime does not define", async () => {
+  it("retains an unfamiliar group with a safe fallback", async () => {
     const { client } = rh({ "GET /api/review": [{ ...filingItem, group: "mystery" }] });
-    await expect(client.methods.reviewQueue!()).rejects.toBeInstanceOf(MalformedResponseError);
+    expect((await client.methods.reviewQueue!())[0]).toMatchObject({ group: "tidy", rawGroup: "mystery" });
   });
 
   it("decides through the client, percent-encoding the id and sending the decision as the wire enum", async () => {
@@ -145,9 +145,9 @@ describe("today and changes", () => {
     expect(today.entries[0]!.changes[1]).not.toHaveProperty("source");
   });
 
-  it("asks for today when no date is given and rejects an activity level above 4", async () => {
+  it("asks for today and drops an unusable activity bucket", async () => {
     const { client, calls } = rh({ "GET /api/today": { ...digest, activityByDay: [{ date: "2026-11-06", level: 5 }] } });
-    await expect(client.methods.today!()).rejects.toBeInstanceOf(MalformedResponseError);
+    expect((await client.methods.today!()).activityByDay).toEqual([]);
     expect(calls.at(-1)!.path).toBe("/api/today");
   });
 

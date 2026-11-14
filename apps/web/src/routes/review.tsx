@@ -1,4 +1,5 @@
-import { dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
+import { SubjectType } from "../components/subject-type";
+import { reviewText, dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
 import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -9,7 +10,7 @@ import { reviewGroups, reviewKindLabel, subjectHref } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/review");
-const FILTERS = ["All", ...new Set(reviewGroups.map((g) => g.filter))] as const;
+const FILTERS = ["All", "Other", ...new Set(reviewGroups.map((g) => g.filter))] as const;
 
 /** The decision the main button and the A key make. */
 function primaryDecision(item: ReviewItem): ReviewDecision {
@@ -27,14 +28,14 @@ function useReviewModel() {
   const items = queue.data ?? [];
   const groups = useMemo(
     () =>
-      reviewGroups
+      [...reviewGroups, { group: "tidy" as const, title: "Other", filter: "Other", color: "var(--muted-foreground)", hint: "This hub uses a newer review group." }]
         .filter((g) => filter === "All" || g.filter === filter)
-        .map((g) => ({ ...g, items: items.filter((i) => i.group === g.group) }))
+        .map((g) => ({ ...g, items: items.filter((i) => g.filter === "Other" ? !!i.rawGroup : !i.rawGroup && i.group === g.group) }))
         .filter((g) => g.items.length > 0),
     [items, filter],
   );
   const visible = groups.flatMap((g) => g.items);
-  const counts = Object.fromEntries(FILTERS.map((f) => [f, f === "All" ? items.length : items.filter((i) => reviewGroups.find((g) => g.group === i.group)?.filter === f).length]));
+  const counts = Object.fromEntries(FILTERS.map((f) => [f, f === "All" ? items.length : items.filter((i) => i.rawGroup ? f === "Other" : reviewGroups.find((g) => g.group === i.group)?.filter === f).length]));
   return { queue, filter, setFilter, groups, visible, counts, total: items.length };
 }
 
@@ -80,6 +81,8 @@ function ReviewDesktop() {
   const [editing, setEditing] = useState<string | null>(null);
   const { visible } = model;
   const selected = visible.find((i) => i.id === selectedId) ?? visible[0];
+  const page = Math.floor(Math.max(0, visible.findIndex((i) => i.id === selected?.id)) / 50);
+  const pageItems = new Set(visible.slice(page * 50, (page + 1) * 50));
   const cardRefs = useRef(new Map<string, HTMLElement>());
 
   useEffect(() => {
@@ -95,7 +98,7 @@ function ReviewDesktop() {
   }
 
   function acceptGroup(group: ReviewItem["group"]) {
-    const items = visible.filter((i) => i.group === group);
+    const items = visible.filter((i) => i.group === group && !i.rawGroup);
     const next = visible.find((i) => i.group !== group && visible.indexOf(i) > visible.indexOf(items.at(-1)!)) ?? visible.find((i) => i.group !== group);
     setSelectedId(next?.id);
     for (const i of items) decide.mutate({ id: i.id, decision: primaryDecision(i) });
@@ -109,6 +112,8 @@ function ReviewDesktop() {
       const target = e.target as HTMLElement;
       if (ed || e.metaKey || e.ctrlKey || e.altKey || target.closest("input, textarea, select, [role=dialog]")) return;
       if (!sel) return;
+      if (sel.rawGroup && !["j", "k"].includes(e.key.toLowerCase())) return;
+      if (!reviewGroups.some((g) => g.group === sel.group) && !["j", "k"].includes(e.key.toLowerCase())) return;
       const at = list.indexOf(sel);
       const key = e.key.toLowerCase();
       if (key === "j") setSelectedId(list[Math.min(at + 1, list.length - 1)]?.id);
@@ -144,18 +149,23 @@ function ReviewDesktop() {
         <p className="px-6 py-10 text-muted-foreground">Nothing to review. New proposals show up here as your agents work.</p>
       ) : (
         <div role="list" aria-label="Proposed changes" className="flex flex-1 flex-col gap-[18px] px-6 py-4">
-          {model.groups.map((g) => (
-            <section key={g.group} aria-label={g.title} className="flex flex-col gap-2">
+          <nav aria-label="Review pages" className="flex items-center gap-3">
+            <Button disabled={page === 0} onClick={() => setSelectedId(visible[(page - 1) * 50]?.id)}>Previous</Button>
+            <span>{page + 1} of {Math.max(1, Math.ceil(visible.length / 50))}</span>
+            <Button disabled={(page + 1) * 50 >= visible.length} onClick={() => setSelectedId(visible[(page + 1) * 50]?.id)}>Next</Button>
+          </nav>
+          {model.groups.filter((g) => g.items.some((i) => pageItems.has(i))).map((g) => (
+            <section key={g.title} aria-label={g.title} className="flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-[12px] font-semibold tracking-[0.04em] uppercase" style={{ color: g.color }}>{g.title}</span>
+                <span className="text-[12px] font-semibold tracking-[0.04em] uppercase" style={{ color: g.color }}>{g.title} ({g.items.length})</span>
                 <span className="flex-1 text-[12px] text-muted-foreground">{g.hint}</span>
-                {g.group !== "conflict" && g.items.length > 1 && (
+                {g.filter !== "Other" && g.group !== "conflict" && g.items.length > 1 && (
                   <Button size="xs" onClick={() => acceptGroup(g.group)}>
                     {g.group === "filing" ? "File" : "Accept"} all {g.items.length}
                   </Button>
                 )}
               </div>
-              {g.items.map((item) => {
+              {g.items.filter((i) => pageItems.has(i)).map((item) => {
                 const open = item.id === selected?.id;
                 return (
                   <article
@@ -163,18 +173,19 @@ function ReviewDesktop() {
                     role="listitem"
                     ref={(el) => void (el ? cardRefs.current.set(item.id, el) : cardRefs.current.delete(item.id))}
                     aria-current={open || undefined}
-                    aria-label={`${item.subject.title}: ${item.text}`}
+                    aria-label={`${item.subject.title}: ${reviewText(item)}`}
                     onClick={() => setSelectedId(item.id)}
                     className={cx("flex cursor-default flex-col gap-2 rounded-[10px] border px-3.5 py-3", open ? "border-primary bg-card" : "border-border bg-transparent")}
                   >
                     <span className="flex flex-wrap items-baseline gap-2">
-                      <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>
-                      <span className="min-w-[180px] flex-1 leading-[1.45]">{item.text}</span>
+                      <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
+                      <span className="min-w-[180px] flex-1 leading-[1.45]">{reviewText(item)}</span>
                       <span className="text-[12px] text-muted-foreground">
                         {item.group === "conflict" ? `${item.options?.length ?? 0} sessions` : item.group === "filing" || item.group === "tag" || item.group === "tidy" ? "categorizer" : `${dayLabel(item.createdAt).replace("Today", "today")} · ${item.evidence[0]?.session.title ?? ""}`}
                       </span>
                     </span>
-                    {open && (
+                    {item.rawGroup && <span>{item.rawGroup}. Review this item in a client that supports it.</span>}
+                    {open && !item.rawGroup && reviewGroups.some((g) => g.group === item.group) && (
                       <>
                         {item.group === "conflict" && item.options && item.options.length >= 2 && (
                           <span className="flex flex-wrap items-center gap-2 font-mono text-[12px]">
@@ -277,8 +288,8 @@ function Evidence({ item }: { item: ReviewItem }) {
       <div className="flex flex-col gap-1.5">
         <span className="text-[12px] font-semibold text-muted-foreground">AFFECTS</span>
         <span className="text-[13px] leading-[1.5]">
-          <Link to={subjectHref(item.subject)}>{item.subject.title}</Link>
-          {item.group === "conflict" || item.group === "fact" ? ` › ${item.group === "conflict" ? item.text : "a new fact"}` : ""}
+          <Link to={subjectHref(item.subject)}>{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
+          {item.group === "conflict" || item.group === "fact" ? ` › ${reviewText(item)}` : ""}
         </span>
       </div>
       <span className="text-[12px] leading-[1.5] text-muted-foreground">Everything you accept here shows up in Today and in each article's History, with you as the author.</span>
@@ -307,7 +318,7 @@ function ReviewPhone() {
     return it.group === "conflict" && choice ? { kind: "choose", value: choice } : primaryDecision(it);
   }
   function go(decision: ReviewDecision) {
-    if (!item) return;
+    if (!item || item.rawGroup) return;
     if (decision.kind !== "later") setDone((d) => d + 1);
     decide.mutate({ id: item.id, decision });
   }
@@ -365,9 +376,9 @@ function ReviewPhone() {
             >
               <span className="flex items-center gap-2">
                 <KindTag {...reviewKindLabel[item.group]} />
-                <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>
+                <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
               </span>
-              <span className="text-[18px] leading-[1.35] font-semibold">{item.group === "conflict" ? `Which ${item.text.toLowerCase()} is right?` : item.text}</span>
+              <span className="text-[18px] leading-[1.35] font-semibold">{item.group === "conflict" ? `Which ${reviewText(item).toLowerCase()} is right?` : reviewText(item)}</span>
               {item.group === "conflict" && item.options && (
                 <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
                   <legend className="sr-only">Pick a value</legend>
@@ -403,11 +414,11 @@ function ReviewPhone() {
               <span className="text-success">Swipe to accept →</span>
             </div>
           </div>
-          <div className="grid grid-cols-[1fr_1fr_1.4fr] gap-2 px-4 py-2.5">
+          {item.rawGroup ? <p className="px-4 text-muted-foreground">{item.rawGroup}. Review this item in a client that supports it.</p> : <div className="grid grid-cols-[1fr_1fr_1.4fr] gap-2 px-4 py-2.5">
             <Button size="lg" onClick={() => go({ kind: "later" })}>Later</Button>
             <Button size="lg" onClick={() => setEditing(true)}>Edit</Button>
             <Button size="lg" variant="primary" className="font-semibold" onClick={() => go(primary(item))}>{label}</Button>
-          </div>
+          </div>}
         </>
       )}
     </Frame>

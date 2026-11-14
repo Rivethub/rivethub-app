@@ -1,5 +1,5 @@
-import { ago, shortDate, time } from "@rivethub/client-runtime/format";
-import type { Account, HarnessStatus, ModelJob, ModelRole } from "@rivethub/contracts";
+import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/format";
+import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
@@ -142,13 +142,13 @@ function captureLine(h: HarnessStatus): { text: string; color: string } {
   if (h.capture.state === "receiving") return { text: `Yes${when ? ` · ${when}` : ""}`, color: ok };
   if (h.capture.state === "stale") return { text: `Stopped${when ? ` · ${when}` : ""}`, color: warn };
   if (h.capture.state === "idle") return { text: "Ready · nothing captured yet", color: dim };
-  return { text: "Not connected", color: dim };
+  return { text: h.capture.state === "not-connected" ? "Not connected" : h.capture.state, color: dim };
 }
 
 function recallLine(h: HarnessStatus): { text: string; color: string } {
   if (h.recall.state === "connected") return { text: "Yes", color: ok };
   if (h.recall.state === "elsewhere") return { text: h.recall.detail, color: dim };
-  return { text: "Not connected", color: dim };
+  return { text: h.recall.state === "not-connected" ? "Not connected" : h.recall.state, color: dim };
 }
 
 function harnessAction(h: HarnessStatus): { label: string; part: "capture" | "recall" } | null {
@@ -159,13 +159,6 @@ function harnessAction(h: HarnessStatus): { label: string; part: "capture" | "re
   return null;
 }
 
-const roleInfo: Record<ModelRole, { name: string; does: string }> = {
-  default: { name: "Default", does: "Used by any job below left on Default." },
-  summarizer: { name: "Summarizer", does: "Writes each session summary." },
-  categorizer: { name: "Categorizer", does: "Files sessions, suggests tags and tidy." },
-  "wiki-writer": { name: "Wiki writer", does: "Writes and updates articles and facts." },
-  embedder: { name: "Embedder", does: "Makes search work. Changing it re-indexes." },
-};
 
 const healthColor = (j: ModelJob) => (j.health === "healthy" ? ok : j.health === "slow" ? warn : "var(--error)");
 const modelLabel = (j: ModelJob, all: ModelJob[]) => {
@@ -244,7 +237,7 @@ export function Connections({ phone }: { phone: boolean }) {
   const js = jobs.data;
   const stale = hs.filter((h) => h.capture.state === "stale");
   const slow = js.filter((j) => j.health !== "healthy");
-  const issues = [...stale.map((h) => `${h.name} stopped sending sessions`), ...slow.map((j) => `the ${roleInfo[j.role].name.toLowerCase()} is ${j.health}`)];
+  const issues = [...stale.map((h) => `${h.name} stopped sending sessions`), ...slow.map((j) => `the ${readableName(j.role).toLowerCase()} is ${j.health}`)];
   const firstFix = stale.find((h) => h.canConnect);
   const issueText = listSentence(issues);
 
@@ -348,7 +341,7 @@ export function Connections({ phone }: { phone: boolean }) {
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
             {js.filter((j) => j.role !== "default").map((j) => (
               <div key={j.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
-                <span className="flex flex-1 flex-col"><span>{roleInfo[j.role].name}</span><span className="text-[12px] text-muted-foreground">{modelLabel(j, js)}</span></span>
+                <span className="flex flex-1 flex-col"><span>{readableName(j.role)}</span><span className="text-[12px] text-muted-foreground">{modelLabel(j, js)}</span></span>
                 <span className="text-[12px]" style={{ color: healthColor(j) }}>{j.health === "healthy" ? "OK" : j.health === "slow" ? "Slow" : "Failing"}</span>
               </div>
             ))}
@@ -357,8 +350,7 @@ export function Connections({ phone }: { phone: boolean }) {
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
             {js.map((j) => (
               <div key={j.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: j.health === "healthy" ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
-                <span className="flex items-center justify-between"><span className="font-semibold">{roleInfo[j.role].name}</span><Dot color={healthColor(j)} size={7} /></span>
-                <span className="min-h-[34px] text-[12px] leading-[1.4] text-muted-foreground">{roleInfo[j.role].does}</span>
+                <span className="flex items-center justify-between"><span className="font-semibold">{readableName(j.role)}</span><Dot color={healthColor(j)} size={7} /></span>
                 <span className="rounded-md border border-input bg-background px-2 py-[5px] text-[12px]" style={{ color: j.inheritsDefault ? dim : undefined }}>{modelLabel(j, js)}</span>
                 <span className="text-[12px]" style={{ color: healthColor(j) }}>{jobStatus(j)}</span>
               </div>

@@ -27,6 +27,8 @@ The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entit
 
 ## Decisions
 
+- **2026-11-13 — Phil: types are data.** "Entity types should be dynamic based on what's there, never static list or hardcoded". Group only returned types, order by count then name, and use the hub’s `typeName` or a general readable form of `type`; no type tables or Other bucket.
+
 - **One sidebar everywhere.** The session list is the main column, not a second sidebar; the topic tree and entity kinds nest under their library row.
 - **Summary first.** A session opens on its summary when it has one, the messages otherwise.
 - **The look is the Rust desktop app's.** Palette from `rivethub-desktop/crates/model/src/palette.rs`, content on one rounded surface, sans type. Phil's call: of every earlier UI, that one was the closest.
@@ -36,12 +38,15 @@ The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entit
 ## Not done
 
 - `apps/mobile` has the new themes and gets the client fixes (stored transcripts, untitled sessions, search passages) for free, but not the new screens: Guide, Stats, Shared, the richer session list, search filters.
-- The runtime folds apps, CLIs, libraries, plug-ins and platforms into the one `software` type on the wire, so the entity list cannot split them. Finer types need the wire enum to grow.
+- The runtime folds apps, CLIs, libraries, plug-ins and platforms into the one `software` type on the wire, so the entity list cannot split them. Any finer types the hub returns appear automatically.
 - `[[wiki links]]` in articles render as plain text (one occurrence in the real corpus).
 - Tag taxonomy, tidy batches as batches, wiki gaps and archive, trash candidates, per-session model calls and export have routes in `rh` and no screen yet.
 - Asks for the runtime: a route that reads one session's stored messages by session id; a memory-level session title; a session filter by visibility (Shared lists from the first page of sessions only).
 
 ## Gotchas
+
+- Descriptive wire values are open; preserve raw labels with a plain UI fallback, and drop unusable list rows with a warning. Keep action/security discriminants strict.
+- `owner` is present only for a teammate’s session; retain it through mapping, attribute prompts to them, and hide owner-only controls.
 
 - Memory stores messages under the capturing agent's name (for example `rivet-claude`), not the harness id (`claude-code`).
 - `storedTranscript` starts without an agent filter, discovers it from this session's messages, and filters later pages; received sessions stay unfiltered.

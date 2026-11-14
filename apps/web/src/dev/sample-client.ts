@@ -1,3 +1,4 @@
+import { entityTypeLabel } from "@rivethub/client-runtime/format";
 import type {
   Capability,
   Change,
@@ -74,6 +75,8 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     if (s.topic) row.topic = { id: s.topic as TopicId, path: pathOf(s.topic).map((n) => n.name) };
     sessions.set(s.id, row);
   }
+  const teammate = sessions.get("s-retention");
+  if (teammate) sessions.set("s-alex", { ...teammate, id: "s-alex" as SessionId, title: "Alex checks entity history", owner: "Alex" });
   const summaryRow = (s: SessionDetail): SessionSummaryRow => {
     const { cwd: _c, resumeCommand: _r, changed: _ch, entities: _e, tags: _t, ...row } = s;
     return row;
@@ -90,6 +93,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       id: e.id as EntityId,
       title: e.title,
       type: e.type,
+      ...(e.typeName ? { typeName: e.typeName } : {}),
       sessionCount: e.n,
       aliases: [],
       visibility: { kind: "private" },
@@ -97,7 +101,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       facts: (data.entityFacts[e.id] ?? []).map(([key, value], i) => ({
         id: `${e.id}-f${i}` as FactId, key, value, since: at(5, "10:00"), pinned: false, sources: [],
       })),
-      timeline: [],
+      timeline: e.id === "entity-worker" ? [{ at: at(0, "12:00"), text: "Added session history to entity pages.", kind: "history", source: { id: "s-retention" as SessionId, title: "Retention to 14 days" } }] : [],
       connected: [],
       sessions: [],
       tags: [],
@@ -190,7 +194,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     }
     if (item.group === "new-entity" && !entities.has(item.subject.id)) {
       entities.set(item.subject.id, {
-        id: item.subject.id as EntityId, title: item.subject.title, type: item.after?.startsWith("Machine") ? "machine" : "software", sessionCount: item.evidence.length,
+        id: item.subject.id as EntityId, title: item.subject.title, type: data.entitySeeds.find((e) => e.id === item.subject.id)?.type ?? "unclassified", sessionCount: item.evidence.length,
         aliases: [], visibility: { kind: "private" }, lead: value ?? item.text, facts: [], timeline: [], connected: [], sessions: [], tags: [], freshness: "sample",
       });
       return;
@@ -305,7 +309,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       wait(
         [...entities.values()]
           .filter((e) => !type || e.type === type)
-          .map(({ id, title, type: t, sessionCount }): EntitySummary => ({ id, title, type: t, sessionCount })),
+          .map(({ id, title, type: t, typeName, sessionCount }): EntitySummary => ({ id, title, type: t, ...(typeName ? { typeName } : {}), sessionCount })),
       ),
     entity(id, asOf) {
       const e = entities.get(id);
@@ -426,13 +430,13 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       for (const s of sessionRows()) {
         if (s.trashed || new Date(s.startedAt).getTime() < cutoff) continue;
         const session = { id: s.id, title: s.title };
-        if (options.scope !== "messages" && s.gist?.toLowerCase().includes(t)) passages.push({ id: `${s.id}:sum`, session, source: "summary", text: s.gist, at: s.endedAt ?? s.startedAt });
+        if (options.scope !== "messages" && s.gist?.toLowerCase().includes(t)) passages.push({ ...(s.owner ? { owner: s.owner } : {}), id: `${s.id}:sum`, session, source: "summary", text: s.gist, at: s.endedAt ?? s.startedAt });
         if (options.scope === "summaries") continue;
         const turns = s.id === "s-retention" ? data.retentionTranscript() : [{ index: 1, role: "user" as const, at: s.startedAt, parts: [{ kind: "text" as const, text: s.title }] }];
         for (const turn of turns) {
           for (const part of turn.parts) {
             const body = part.kind === "text" ? part.text : part.summary;
-            if (body.toLowerCase().includes(t)) passages.push({ id: `${s.id}:${turn.index}`, session, source: "message", text: body, at: turn.at, role: part.kind === "tool" ? "tool" : turn.role });
+            if (body.toLowerCase().includes(t)) passages.push({ ...(s.owner ? { owner: s.owner } : {}), id: `${s.id}:${turn.index}`, session, source: "message", text: body, at: turn.at, role: part.kind === "tool" ? "tool" : turn.role });
           }
         }
       }
@@ -440,7 +444,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
         ...[...entities.values()].filter((e) => e.title.toLowerCase().includes(t) || e.aliases.some((a) => a.toLowerCase().includes(t))).map((e) => ({
           subject: { kind: "entity", id: e.id, title: e.title } as SubjectRef,
           snippet: e.lead,
-          context: [e.type[0]!.toUpperCase() + e.type.slice(1), e.topic?.path.join(" › ")].filter(Boolean).join(" · "),
+          context: [entityTypeLabel(e), e.topic?.path.join(" › ")].filter(Boolean).join(" · "),
         })),
         ...sessionRows().filter((s) => s.title.toLowerCase().includes(t) || s.gist?.toLowerCase().includes(t)).map((s) => ({
           subject: { kind: "session", id: s.id, title: s.title } as SubjectRef,
