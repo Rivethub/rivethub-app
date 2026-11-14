@@ -1,6 +1,7 @@
 import type { Capability, MemoryClient } from "@rivethub/contracts";
 import { RouteMissingError } from "../errors.js";
 import { createHttp, type AuthSeam, type FetchLike } from "../http.js";
+import { tagsApi } from "./tags.js";
 import { accountApi } from "./account.js";
 import { catalogApi } from "./catalog.js";
 import { entitiesApi } from "./entities.js";
@@ -58,6 +59,7 @@ export function createRhClient(options: RhOptions): RhClient {
   const review = reviewApi(http);
   const today = todayApi(http);
   const account = accountApi(http);
+  const tags = tagsApi(http);
 
   /** One probe per capability, started when first asked for and remembered. No capability waits on another's routes. */
   const probes = new Map<Capability, Promise<boolean>>();
@@ -99,7 +101,15 @@ export function createRhClient(options: RhOptions): RhClient {
           return sessions.sessions(query);
         }
       },
-      session: viaCatalog(catalog.session, sessions.session),
+      session: async (id) => {
+        const detail = await viaCatalog(catalog.session, sessions.session)(id);
+        try { return (await tags.tagOperations()).length ? { ...detail, tags: await tags.tags(id) } : detail; } catch (error) {
+          if (!(error instanceof RouteMissingError)) throw error;
+          return detail;
+        }
+      },
+      tag: tags.tag,
+      tagOperations: tags.tagOperations,
       trash: catalog.trash,
       restore: catalog.restore,
       entities: entities.entities,

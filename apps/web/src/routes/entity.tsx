@@ -14,7 +14,8 @@ import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind, factLabel, plural, reviewText } from "../lib/format";
 import { useIsPhone } from "../lib/media";
-import { EmptyLibrary, visibilityLabel } from "./topic";
+import { EmptyLibrary } from "./topic";
+import { VisibilityName } from "../components/visibility";
 
 const route = getRouteApi("/entities/$entityId");
 type TabId = "overview" | "sessions" | "history";
@@ -211,7 +212,7 @@ export function EntityPage() {
         <>
           <ArticleBar crumbs={<Crumbs items={[{ label: entityTypeLabel(e!), to: `/entities#${e!.type}` }, { label: e!.title }]} />}>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ tab: id })} />
-            <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this entity">{visibilityLabel(e!.visibility)}</span>
+            <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this entity"><VisibilityName value={e!.visibility} /></span>
             <PinButton subject={{ kind: "entity", id: e!.id, title: e!.title }} />
           </ArticleBar>
           <ArticleBody side={state}>

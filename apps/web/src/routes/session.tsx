@@ -1,3 +1,4 @@
+import { VisibilityName } from "../components/visibility";
 import { splitInjected } from "@rivethub/client";
 import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time, toolLine } from "@rivethub/client-runtime/format";
 import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
@@ -5,7 +6,7 @@ import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useClient, useShareClient } from "../client/context";
-import { useCreateTopic, useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
+import { useMe, useTagOperations, useCreateTopic, useHarnesses, useKeep, useLibraryCounts, usePlaceSession, useRenameSession, useRestore, useSession, useSessions, useSetVisibility, useSummaryTree, useTag, useTopicTree, useTranscript, useTrash } from "../client/queries";
 import { ArticleBar, ArticleTabs, Crumbs, MobileBack } from "../components/article";
 import { EditableText } from "../components/editable";
 import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../components/icons";
@@ -92,7 +93,7 @@ function SessionRow({ s, view, active, phone }: { s: SessionSummaryRow; view: Vi
           <span style={s.topic ? undefined : { color: "var(--warning)" }}>{s.topic ? s.topic.path.slice(-2).join(" › ") : "Unfiled"}</span>
           {!s.messageCountUnknown && <span>· {plural(s.messageCount, "message")}</span>}
           {s.childCount ? <span>· {subagents(s.childCount)}</span> : null}
-          {s.visibility.kind === "space" && <span>· shared with {s.visibility.space}</span>}
+          {s.visibility.kind === "space" && <span>· shared with <VisibilityName value={s.visibility} /></span>}
         </span>
       </span>
       {!phone && <span className="font-mono text-[11px] text-muted-foreground">{harnessNames[s.harness] ?? s.harness}</span>}
@@ -297,7 +298,7 @@ export function SessionPage() {
         {fallback ?? (
           <>
             <div className="flex flex-1 flex-col gap-3.5 overflow-y-auto px-4 pt-1 pb-3 text-[15px]">
-              <h1 className="m-0 line-clamp-4 font-serif text-[25px] font-semibold">{d!.title}</h1>
+              <h1 className="m-0 line-clamp-4 shrink-0 font-serif text-[25px] font-semibold">{d!.title}</h1>
               {d!.owner && <KindTag label={`${d!.owner}’s session`} color="var(--info)" />}
               {d!.origin && <p className="m-0 text-[13px] text-muted-foreground">{originNote(d!.origin)}</p>}
               <SampleBadge capability="sessions" />
@@ -354,18 +355,20 @@ const subagents = (n: number) => `${n} subagent${n === 1 ? "" : "s"}`;
 
 function SessionHeader({ d }: { d: SessionDetail }) {
   const rename = useRenameSession();
+  const harnesses = useHarnesses();
+  const canRename = harnesses.data?.find((h) => h.id === d.harness)?.capabilities?.renameSession === true;
   return (
     <div className="flex min-w-0 flex-col items-start gap-3">
       <div className="flex min-w-0 max-w-full flex-col gap-1.5">
         <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">
-          {d.owner || d.origin ? (
+          {d.owner || d.origin || !canRename ? (
             <span className="line-clamp-3" title={d.title}>{d.title}</span>
           ) : (
             <EditableText label="Session title" value={d.title} display={<span className="line-clamp-3" title={d.title}>{d.title}</span>} onSave={(title) => title && rename.mutate({ id: d.id, title })} />
           )}
           <SampleBadge capability="sessions" />
         </h1>
-        {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed: this tool keeps its own session titles.</span>}
+        {rename.isError && <span role="alert" className="text-[13px] text-error">The title was not changed{rename.error instanceof Error ? `: ${rename.error.message}` : ""}.</span>}
         <span className="text-[13px] text-muted-foreground">
           {harnessNames[d.harness] ?? d.harness} · {shortDate(d.startedAt)}, {time(d.startedAt)}
           {d.endedAt ? `–${time(d.endedAt)}` : ""}{d.messageCountUnknown ? "" : ` · ${plural(d.messageCount, "message")}`}{d.cwd ? ` · ` : ""}
@@ -466,17 +469,20 @@ const rangeLabel = (r: [number, number]) => `${r[0]}–${r[1]}`;
 function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boolean; onToggle: () => void }) {
   return (
     <div className="flex flex-col gap-1.5 border-l-2 border-border pl-[18px]">
-      <button type="button" aria-expanded={expanded} onClick={onToggle} className={cx("flex flex-wrap items-center gap-2 rounded-[10px] border border-border px-2.5 py-2 text-left text-foreground", expanded ? "bg-card" : "bg-transparent hover:bg-accent")}>
-        <span aria-hidden="true" className="w-2.5 text-muted-foreground">{expanded ? "▾" : "▸"}</span>
-        <KindTag label="Branch" color="var(--info)" />
-        <span className="font-medium">{node.title}</span>
-        <span className="min-w-40 flex-1 text-[13px] text-muted-foreground">{node.text}</span>
-        <span className="text-[12px] text-muted-foreground">msgs {rangeLabel(node.messageRange)}</span>
+      <button type="button" aria-expanded={expanded} onClick={onToggle} className={cx("flex flex-col items-stretch gap-2 rounded-[10px] border border-border px-2.5 py-2 text-left text-foreground", expanded ? "bg-card" : "bg-transparent hover:bg-accent")}>
+        <span className="flex items-center gap-2">
+          <span aria-hidden="true" className="w-2.5 text-muted-foreground">{expanded ? "▾" : "▸"}</span>
+          <KindTag label="Branch" color="var(--info)" />
+          <span className="text-[12px] text-muted-foreground">msgs {rangeLabel(node.messageRange)}</span>
+        </span>
+        {node.title && <span className="font-medium">{node.title}</span>}
+        <span className="text-[13px] text-muted-foreground">{node.text}</span>
       </button>
       {expanded &&
         node.children.map((l, i) => (
-          <div key={i} className="ml-[18px] flex flex-col gap-1 border-l-2 border-border px-2.5 py-1.5 md:grid md:grid-cols-[70px_minmax(0,1fr)_auto] md:items-baseline md:gap-2.5">
+          <div key={i} className="ml-[18px] flex flex-col gap-1 border-l-2 border-border px-2.5 py-1.5">
             <span className="text-[11px] font-semibold text-muted-foreground">Leaf · {rangeLabel(l.messageRange)}</span>
+            {l.title && <span className="font-medium">{l.title}</span>}
             <span className="leading-[1.5]">{l.text}</span>
             <Link to="." search={{ tab: "transcript", from: l.messageRange[0], to: l.messageRange[1] } as never} className="text-[12px]">View in transcript</Link>
           </div>
@@ -667,10 +673,14 @@ function TopicPicker({ d, className, onPicked }: { d: SessionDetail; className?:
 
 function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; className?: string; onPicked?: () => void }) {
   const set = useSetVisibility();
-  const spaces = [...new Set([...(d.visibility.kind === "space" ? [d.visibility.space] : []), "household"])];
+  const me = useMe();
+  const spaces = me.data?.spaces ?? [];
   // rh changes who can see only sessions its own tools ran.
   if (d.owner) return <span className="text-muted-foreground">This is {d.owner}’s session. Only they can change it.</span>;
   if (d.origin) return <span className="leading-[1.45] text-muted-foreground">Private. A session someone shared with you cannot be shared with a space yet.</span>;
+  if (me.isPending) return <span>Loading spaces…</span>;
+  if (me.isError) return <span role="alert">Spaces could not be read from the hub.</span>;
+  if (!spaces.length) return <span>Private. Spaces are set up on the hub.</span>;
   return (
     <label className="flex flex-col gap-1">
       <span className="sr-only">Shared with</span>
@@ -691,7 +701,7 @@ function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; classN
         className={cx(selectCls, className)}
       >
         <option value="private">Private</option>
-        {spaces.map((s) => <option key={s} value={`space:${s}`}>{s}</option>)}
+        {spaces.map((s) => <option key={s.id} value={`space:${s.id}`}>{s.name}</option>)}
       </select>
       {set.isError && <span role="alert" className="text-[12px] text-error">Who can see this session was not changed{set.error instanceof Error ? `: ${set.error.message}` : ""}.</span>}
     </label>
@@ -700,12 +710,14 @@ function VisibilityPicker({ d, className, onPicked }: { d: SessionDetail; classN
 
 function TagEditor({ d }: { d: SessionDetail }) {
   const tag = useTag();
+  const operations = useTagOperations().data ?? [];
   const [draft, setDraft] = useState<string | null>(null);
   const op = (t: { key: string; value: string }, o: "accept" | "reject" | "add") => tag.mutate({ id: d.id, key: t.key, value: t.value, op: o });
   return (
     <span className="flex flex-wrap items-center gap-1.5">
-      <Tags tags={d.tags} onAccept={(t) => op(t, "accept")} onReject={(t) => op(t, "reject")} />
-      {draft === null ? (
+      <Tags tags={d.tags} {...(operations.includes("accept") ? { onAccept: (t: { key: string; value: string }) => op(t, "accept") } : {})} {...(operations.includes("reject") ? { onReject: (t: { key: string; value: string }) => op(t, "reject") } : {})} />
+      {tag.isError && <span role="alert">The tag was not changed{tag.error instanceof Error ? `: ${tag.error.message}` : ""}.</span>}
+      {!operations.includes("add") ? null : draft === null ? (
         <button type="button" onClick={() => setDraft("")} className="rounded-md border border-dashed border-input px-2 py-0.5 text-[12px] text-muted-foreground">+ tag</button>
       ) : (
         <input
@@ -746,7 +758,7 @@ function SessionSide({ d }: { d: SessionDetail }) {
         <Eyebrow>Shared with</Eyebrow>
         <VisibilityPicker d={d} />
         <span className="text-[12px] leading-[1.45] text-muted-foreground">
-          {d.owner || d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : `Everyone in ${d.visibility.space} can find it. `}
+          {d.owner || d.origin ? "" : d.visibility.kind === "private" ? "Only you can see this session. " : <>Everyone in <VisibilityName value={d.visibility} /> can find it. </>}
           {canSend ? <Link to="/share" search={{ session: d.id }}>Send to another RivetHub</Link> : <Link to="/shared">How sharing works</Link>}
         </span>
       </section>

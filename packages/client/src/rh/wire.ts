@@ -103,7 +103,7 @@ export const harnessList = z.object({
   harnesses: rows(
     z.object({
       harnessId: z.string().min(1),
-      capabilities: z.object({ listSessions: z.boolean().default(false) }).default({}),
+      capabilities: z.object({ listSessions: z.boolean().default(false), renameSession: z.boolean().default(false) }).default({}),
     }),
   ),
 });
@@ -386,11 +386,6 @@ export const account = z.object({
   usageCounts: z.boolean(),
 });
 
-export const me = z.object({
-  user: z.string(),
-  spaces: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string() })),
-});
-
 export const signInStarted = z.object({ requestId: z.string() });
 export const signInProgress = z.discriminatedUnion("status", [
   z.object({ status: z.literal("pending") }),
@@ -401,3 +396,13 @@ export const hubList = rows(
   z.object({ id: z.string().min(1), name: z.string(), kind: descriptive(["local", "team"]), url: z.string(), online: z.boolean(), detail: z.string(), current: z.boolean() }),
 );
 export type AccountWire = z.infer<typeof account>;
+
+export const me = z.object({
+  user: z.string(),
+  spaces: z.array(z.object({ id: z.string().min(1), kind: z.string(), name: z.string() })),
+  settings: z.object({ defaultVisibility: z.string(), chosen: z.boolean() }),
+});
+export const memoryTag = z.object({ id: z.string().min(1), key: z.string(), value: z.string(), state: z.enum(["accepted", "suggested", "rejected"]) });
+export const tagLookup = z.object({ sessions: z.record(z.array(memoryTag)) });
+export const tagAdded = z.object({ tag: memoryTag });
+export const tagDecided = z.object({ changed: z.number().int().nonnegative() });

@@ -2,7 +2,7 @@ import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/for
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
+import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
@@ -89,7 +89,7 @@ export function SettingsPage() {
       case "server":
         return <Server />;
       case "sharing":
-        return <NotYet what="People and spaces on a team hub, and who can see which sessions." />;
+        return <SharingSpaces />;
       case "keys":
         return <ShareKeys />;
       case "trust":
@@ -551,4 +551,11 @@ function Server() {
 function targetFile(diff: string | undefined): string | undefined {
   const line = diff?.split("\n").find((l) => l.startsWith("+++ "));
   return line?.replace(/^\+\+\+ (b\/)?/, "").trim() || undefined;
+}
+
+function SharingSpaces() {
+  const me = useMe();
+  if (me.isPending) return <Loading label="Loading spaces" />;
+  if (me.isError) return <p role="alert">Spaces could not be read from the hub.</p>;
+  return <section><h2>Your spaces</h2>{me.data?.spaces.length ? <ul>{me.data.spaces.map((s) => <li key={s.id}>{s.name}</li>)}</ul> : <p>Sessions are private. Spaces are set up on the hub.</p>}</section>;
 }

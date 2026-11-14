@@ -44,7 +44,6 @@ const CAPABILITY: Partial<Record<keyof MemoryClient, Capability>> = {
   modelJobs: "models",
   hubs: "hubs",
   account: "account",
-  me: "account",
   pollSignIn: "account",
 };
 

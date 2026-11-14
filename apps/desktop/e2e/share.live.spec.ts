@@ -158,7 +158,7 @@ test("sender: pick, decide, sanitize, review flags, sign in to a team server, sh
   await shot(page, "share-choose-picked");
   await page.getByRole("button", { name: "Continue" }).click();
 
-  const decide = (title: string, option: string) => page.getByRole("group", { name: `Decision for ${title}` }).getByLabel(option).check({ force: true });
+  const decide = (title: string, option: string) => page.getByRole("group", { name: `Decision for ${title}` }).getByText(option, { exact: true }).click();
   const bluefin = titleOf("name_and_project");
   await decide(bluefin, "Redact");
   for (const term of ["Bluefin", "Dana Okafor"]) {
@@ -182,7 +182,7 @@ test("sender: pick, decide, sanitize, review flags, sign in to a team server, sh
   const flagCount = await flags.count();
   for (let i = 0; i < flagCount; i += 1) {
     const flag = flags.nth(i);
-    await flag.getByLabel(i === 0 ? "Map" : i === 1 ? "Redact" : "Keep").check({ force: true });
+    await flag.getByText(i === 0 ? "Map" : i === 1 ? "Redact" : "Keep", { exact: true }).click();
     if (i === 0) {
       await flag.getByLabel("Term to replace").fill("collect.example.net");
       await flag.getByLabel("Placeholder").fill("HOST_1");
@@ -264,7 +264,7 @@ test("receiver: refuses a typo, trusts the sender, steps up on a flagged import,
   await expect(held.getByLabel("Findings")).toBeVisible();
   await shot(page, "receive-held-session");
   await expect(page.getByRole("button", { name: "Import", exact: true })).toBeDisabled();
-  await held.getByLabel("Import", { exact: true }).check({ force: true });
+  await held.getByText("Import", { exact: true }).click();
   await shot(page, "receive-decided");
   await page.waitForTimeout(Math.max(0, loginAt.get(page)! + (freshLoginSecs + 2) * 1000 - Date.now()));
   await page.getByRole("button", { name: "Import", exact: true }).click();

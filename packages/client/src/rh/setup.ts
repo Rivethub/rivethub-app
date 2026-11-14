@@ -1,4 +1,5 @@
 import type { HarnessId, HarnessStatus, ModelJob } from "@rivethub/contracts";
+import { RouteMissingError } from "../errors.js";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { strip } from "./util.js";
@@ -14,10 +15,11 @@ function captureState(state: string, lastCaptureAt: string | undefined): Harness
 export function setupApi(http: Http) {
   return {
     async harnesses(): Promise<HarnessStatus[]> {
-      const list = await http.get("/api/capture/status", wire.harnessStatusList);
+      const [list, tools] = await Promise.all([http.get("/api/capture/status", wire.harnessStatusList), http.get("/api/harnesses", wire.harnessList).catch((error: unknown) => { if (error instanceof RouteMissingError) return { harnesses: [] }; throw error; })]);
       return list.map((h) =>
         strip<HarnessStatus>({
           id: h.id,
+          capabilities: { renameSession: tools.harnesses.find((tool) => tool.harnessId === h.id)?.capabilities.renameSession ?? false },
           name: h.name,
           found: h.found,
           path: h.path,
