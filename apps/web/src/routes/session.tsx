@@ -349,8 +349,8 @@ const subagents = (n: number) => `${n} subagent${n === 1 ? "" : "s"}`;
 function SessionHeader({ d }: { d: SessionDetail }) {
   const rename = useRenameSession();
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <div className="flex min-w-[260px] flex-1 flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col items-start gap-3">
+      <div className="flex min-w-0 max-w-full flex-col gap-1.5">
         <h1 className="m-0 flex items-center gap-2 font-serif text-[28px] font-semibold">
           {d.origin ? (
             <span className="line-clamp-3" title={d.title}>{d.title}</span>
@@ -363,18 +363,18 @@ function SessionHeader({ d }: { d: SessionDetail }) {
         <span className="text-[13px] text-muted-foreground">
           {harnessNames[d.harness] ?? d.harness} · {shortDate(d.startedAt)}, {time(d.startedAt)}
           {d.endedAt ? `–${time(d.endedAt)}` : ""}{d.messageCountUnknown ? "" : ` · ${plural(d.messageCount, "message")}`}{d.cwd ? ` · ` : ""}
-          {d.cwd && <span className="font-mono text-[12px]">{d.cwd}</span>}
+          {d.cwd && <span className="break-all font-mono text-[12px]">{d.cwd}</span>}
         </span>
         {d.origin && <span className="text-[13px] text-muted-foreground">{originNote(d.origin)}</span>}
         {d.childCount ? <span className="text-[13px] text-muted-foreground">{subagents(d.childCount)}</span> : null}
       </div>
       {d.resumeCommand && (
-        <>
-          <code className="rounded-md bg-code px-2 py-1 font-mono text-[12px]">{d.resumeCommand}</code>
-          <span title={`Paste in a terminal to pick this session back up in ${harnessNames[d.harness] ?? d.harness}`}>
+        <div className="flex max-w-full items-center gap-2" role="group" aria-label="Resume session">
+          <code className="min-w-0 break-all rounded-md bg-code px-2 py-1 font-mono text-[12px]">{d.resumeCommand}</code>
+          <span className="shrink-0" title={`Paste in a terminal to pick this session back up in ${harnessNames[d.harness] ?? d.harness}`}>
             <CopyButton text={d.resumeCommand} label="Copy resume command" className="rounded-md bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground" />
           </span>
-        </>
+        </div>
       )}
     </div>
   );

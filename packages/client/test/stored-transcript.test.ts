@@ -31,7 +31,7 @@ describe("a session's messages", () => {
       [3, "assistant", { kind: "text", text: "14 days fits." }],
     ]);
     const browse = new URL(BASE + rh.calls.find((c) => c.path.startsWith("/api/memory/browse"))!.path).searchParams;
-    expect(browse.get("agent")).toBe("claude-code");
+    expect(browse.get("agent")).toBeNull();
     expect(browse.get("since")).toBe("2026-11-13T20:36:20.596Z");
     expect(browse.get("before")).not.toBeNull();
   });
@@ -73,6 +73,45 @@ describe("a session's messages", () => {
     expect(rh.calls.filter((c) => c.path.startsWith("/api/memory/browse"))).toHaveLength(2);
   });
 
+  it.each([
+    { agent: "rivet-claude", noiseFirst: 0, count: 1048 },
+    { agent: "legacy-capture-name", noiseFirst: 450, count: 3200 },
+  ])("discovers $agent after $noiseFirst unrelated messages and reads all $count turns", async ({ agent, noiseFirst, count }) => {
+    const id = "claude-code:76d71fb3-8325-48d6-a012-00d08a3b2fb1" as SessionId;
+    const at = (i: number) => new Date(Date.parse("2026-11-13T08:00:00Z") + i * 1000).toISOString();
+    const mine = Array.from({ length: count }, (_, i) => ({
+      id: `mine-${i}`, agent, sessionId: id, role: i % 2 ? "assistant" : "user", content: `Turn ${i}`, createdAt: at(i * 4),
+    }));
+    const all = [
+      ...mine,
+      ...mine.flatMap((_, i) => [agent, "rivet-gpt", "rivet-grok"].map((otherAgent, j) => ({
+        id: `other-${i}-${j}`, agent: otherAgent, sessionId: `other-session-${j}`, role: "assistant", content: "Other session", createdAt: at(i * 4 + j + 1),
+      }))),
+      ...Array.from({ length: noiseFirst }, (_, i) => ({
+        id: `noise-${i}`, agent: "rivet-gpt", sessionId: "another-session", role: "user", content: "Unrelated", createdAt: at(count * 4 + i),
+      })),
+    ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${sessionSegment(id)}/transcript`]: { sessionId: id, turns: [] },
+      [`GET /api/sessions/${sessionSegment(id)}`]: { startedAt: at(0), endedAt: at(count * 4 + noiseFirst) },
+      "GET /api/memory/browse": (call: { path: string }) => {
+        const q = new URL(BASE + call.path).searchParams;
+        return { messages: all.filter((m) => (!q.has("agent") || m.agent === q.get("agent")) && m.createdAt >= q.get("since")! && m.createdAt < q.get("before")!).slice(0, Number(q.get("limit"))) };
+      },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(id);
+    expect(turns.map((t) => t.parts[0])).toEqual(mine.map((m) => ({ kind: "text", text: m.content })));
+    expect(turns.map((t) => t.index)).toEqual(mine.map((_, i) => i + 1));
+    expect(turns.every((t) => t.missing === undefined)).toBe(true);
+    const queries = rh.calls.filter((c) => c.path.startsWith("/api/memory/browse")).map((c) => new URL(BASE + c.path).searchParams);
+    expect(queries[0]!.has("agent")).toBe(false);
+    expect(queries.every((q) => q.get("agent") !== "claude-code")).toBe(true);
+    expect(queries.some((q) => q.get("agent") === agent)).toBe(true);
+    expect(queries.slice(0, Math.floor(noiseFirst / 199) + 1).every((q) => !q.has("agent"))).toBe(true);
+    // Even the smaller case exhausts the old ten-page budget with a valid filter.
+    expect(queries.length).toBeGreaterThan(10);
+  });
+
   describe("when the span cannot be read to its end", () => {
     const at = (ms: number) => new Date(Date.parse("2026-11-13T20:00:00.000Z") + ms).toISOString();
     const other = (n: number, ms: (i: number) => number) => Array.from({ length: n }, (_, i) => ({ id: `o${i}`, role: "assistant", content: "other", createdAt: at(ms(i)), sessionId: "claude-code:other" }));
@@ -88,20 +127,20 @@ describe("a session's messages", () => {
     const browses = (rh: ReturnType<typeof fakeRh>) => rh.calls.filter((c) => c.path.startsWith("/api/memory/browse")).length;
 
     it("marks the oldest turn it found when the page budget runs out before the session's first message", async () => {
-      // The session's last message, then 2,000 messages of another session, then its first message.
+      // The session's last message, then 20,000 messages of another session, then its first message.
       const all = [
         { id: "last", role: "assistant", content: "Done.", createdAt: at(3_000_000), sessionId: SID },
-        ...other(2000, (i) => 2_999_000 - i * 1000),
+        ...other(20000, (i) => 2_999_000 - i * 100),
         { id: "first", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID },
       ];
       const rh = hub(all);
       const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
       expect(turns.map((t) => [t.parts[0], t.missing])).toEqual([[{ kind: "text", text: "Done." }, "before"]]);
-      expect(browses(rh)).toBe(10);
+      expect(browses(rh)).toBe(100);
     });
 
     it("fails, and does not say the session is empty, when the budget runs out before any of its messages", async () => {
-      const all = [...other(2000, (i) => 3_000_000 - i * 1000), { id: "only", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID }];
+      const all = [...other(20000, (i) => 3_000_000 - i * 100), { id: "only", role: "user", content: "Start.", createdAt: at(1_000), sessionId: SID }];
       const rh = hub(all);
       await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).rejects.toThrow(/could not be found/);
     });
@@ -117,6 +156,22 @@ describe("a session's messages", () => {
       const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
       expect(turns.map((t) => [t.parts[0], t.missing])).toEqual([[{ kind: "text", text: "Done." }, "before"]]);
       expect(browses(rh)).toBeLessThan(10);
+    });
+
+    it.each(["repeated", "undated", "ascending"])("stops safely on a %s full page", async (kind) => {
+      const messages = Array.from({ length: 200 }, (_, i) => ({
+        id: `m${i}`, sessionId: SID, role: "user", content: `Turn ${i}`,
+        ...(kind === "undated" ? {} : { createdAt: at(kind === "ascending" ? i : 200 - i) }),
+      }));
+      const rh = fakeRh({
+        [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+        "GET /api/memory/browse": { messages }, // Deliberately ignores the cursor.
+      });
+      const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+      expect(turns).toHaveLength(200); // Repeated ids never become extra turns.
+      expect(browses(rh)).toBe(kind === "undated" ? 1 : 2);
+      if (kind === "ascending") expect(turns.at(-1)!.missing).toBe("after");
+      else expect(turns[0]!.missing).toBe("before");
     });
 
     it("leaves a transcript that was read to its end unmarked", async () => {

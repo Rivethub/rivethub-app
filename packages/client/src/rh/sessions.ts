@@ -228,7 +228,7 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
 
 const STORED_PAGE = 200;
 /** How many pages of a session's time span are read before giving up on a very busy span. */
-const STORED_MAX_PAGES = 10;
+const STORED_MAX_PAGES = 100;
 /**
  * A received session's start is when its sender's hub first stored it, which is after its first turn ended.
  * Its first messages are older than that, so the span is read from this long before the start.
@@ -252,7 +252,7 @@ export interface StoredTranscript {
 /**
  * A session's messages as memory stored them. rh has no route that reads one session's messages, so this
  * browses the session's own time span and keeps the messages that belong to it, a page at a time. Reading
- * stops after ten pages, or when a page brings nothing new (rh cannot page through more than 200 messages
+ * stops after 100 pages, or when a page brings nothing new (rh cannot page through more than 200 messages
  * that share one instant); the result then says which side was left unread. The harness transcript has no
  * such limit.
  */
@@ -265,11 +265,11 @@ export async function storedTranscript(http: Http, id: SessionId): Promise<Store
   const mine = new Map<string, wire.BrowsedMessage>();
   const seen = new Set<string>();
   let cut: StoredTranscript["cut"];
+  let agent: string | undefined;
   for (let pages = 0; ; pages += 1) {
     const page = await http.get("/api/memory/browse", wire.memoryBrowse, {
       limit: STORED_PAGE,
-      // A received session keeps its sender's agent name, which is not its key's prefix.
-      ...(imported ? {} : { agent: harnessOf(id) }),
+      ...(agent ? { agent } : {}),
       ...(since ? { since } : {}),
       ...(before ? { before } : {}),
     });
@@ -278,6 +278,12 @@ export async function storedTranscript(http: Http, id: SessionId): Promise<Store
       if (!seen.has(message.id)) fresh += 1;
       seen.add(message.id);
       if (message.sessionId === id && !mine.has(message.id)) mine.set(message.id, message);
+    }
+    // Memory uses the capturing agent's name, not the harness id. Discover it from this session,
+    // continuing without a filter until a matching message appears. Imports keep their unfiltered read.
+    if (!imported && !agent) {
+      const agents = new Set([...mine.values()].map((message) => message.agent).filter(Boolean));
+      if (agents.size === 1) agent = [...agents][0];
     }
     // A short page is the end of the span.
     if (page.messages.length < STORED_PAGE) break;
