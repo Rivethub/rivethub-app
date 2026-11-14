@@ -485,6 +485,7 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     modelJobs: () => wait(data.modelJobs),
     hubs: () => wait(data.hubs),
     account: () => wait(account),
+    me: () => wait({ user: "you", spaces: [{ id: "household", kind: "household", name: "Household" }] }),
     async updateAccount(patch) {
       account = { ...account, ...patch };
       return wait(undefined);

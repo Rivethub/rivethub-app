@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { Modal, Pressable, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNotice } from "../data/queries";
 import { useHub } from "../hub/HubContext";
 import { alpha } from "../theme/tokens";
 import { useTheme } from "../theme/Theme";
-import { inlineSpans } from "./inline";
+import { InlineText } from "./markdown";
 
 export function Screen({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const { palette } = useTheme();
@@ -106,14 +106,14 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   const insets = useSafeAreaInsets();
   return (
     <Modal transparent visible animationType="fade" statusBarTranslucent navigationBarTranslucent onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end" }}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, justifyContent: "flex-end" }}>
         <Pressable accessibilityLabel="Dismiss" onPress={onClose} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(0,0,0,0.5)" }} />
         <View style={{ borderTopLeftRadius: 22, borderTopRightRadius: 22, backgroundColor: palette.sidebar, borderTopWidth: 1, borderColor: palette.border, paddingHorizontal: 16, paddingTop: 10, paddingBottom: insets.bottom + 16, gap: 12 }}>
           <View style={{ alignSelf: "center", width: 40, height: 5, borderRadius: 3, backgroundColor: palette.input }} />
           <Text style={{ color: palette.foreground, fontSize: 17, fontWeight: "600" }}>{title}</Text>
           {children}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -155,14 +155,17 @@ export function TextField({
   onChangeText,
   placeholder,
   secure,
+  autoFocus,
 }: {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
   secure?: boolean;
+  autoFocus?: boolean;
 }) {
   const { palette } = useTheme();
+  const focus = autoFocus ? { autoFocus: true as const } : {};
   return (
     <View style={{ gap: 6 }}>
       <Text style={{ color: palette.muted, fontSize: 12 }}>{label}</Text>
@@ -175,6 +178,7 @@ export function TextField({
         secureTextEntry={secure}
         autoCapitalize="none"
         autoCorrect={false}
+        {...focus}
         style={{
           minHeight: 48,
           borderRadius: 12,
@@ -203,23 +207,7 @@ export function GhostButton({ label, onPress, danger }: { label: string; onPress
   );
 }
 
-export function RichText({ text, style }: { text: string; style?: StyleProp<TextStyle> }) {
-  const { palette } = useTheme();
-  return (
-    <Text style={style}>
-      {inlineSpans(text).map((span, index) =>
-        span.kind === "code" ? (
-          <Text key={index} style={{ fontFamily: "monospace", fontSize: 14, color: palette.foreground, backgroundColor: alpha(palette.muted, 0.12) }}>
-            {span.text}
-          </Text>
-        ) : span.kind === "strong" ? (
-          <Text key={index} style={{ fontWeight: "700" }}>
-            {span.text}
-          </Text>
-        ) : (
-          span.text
-        ),
-      )}
-    </Text>
-  );
+export function RichText({ text, style, numberOfLines }: { text: string; style?: StyleProp<TextStyle>; numberOfLines?: number }) {
+  const lines = numberOfLines === undefined ? {} : { numberOfLines };
+  return <InlineText text={text} style={style} {...lines} />;
 }

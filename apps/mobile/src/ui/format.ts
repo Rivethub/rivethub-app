@@ -1,4 +1,4 @@
-import type { ChangeKind, EntityType, ReviewItem } from "@rivethub/contracts";
+import type { ChangeKind, ReviewItem } from "@rivethub/contracts";
 import type { Palette } from "../theme/tokens";
 
 export function clock(iso: string): string {
@@ -66,10 +66,6 @@ export function groupColor(group: ReviewItem["group"], palette: Palette): string
   if (group === "new-entity") return palette.primary;
   if (group === "fact" || group === "filing") return palette.info;
   return palette.muted;
-}
-
-export function entityTypeLabel(type: EntityType): string {
-  return type.slice(0, 1).toUpperCase() + type.slice(1);
 }
 
 export function errorText(error: unknown): string {

@@ -319,4 +319,16 @@ export interface Account {
   usageCounts: boolean;
 }
 
+/** A space the signed-in person belongs to, as `/api/me` names it. */
+export interface SpaceMembership {
+  id: string;
+  kind: string;
+  name: string;
+}
+
+export interface Me {
+  user: string;
+  spaces: SpaceMembership[];
+}
+
 export type SignInProgress = { status: "pending" } | { status: "signed-in"; account: Account };

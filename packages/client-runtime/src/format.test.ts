@@ -1,7 +1,7 @@
 import type { EntityId } from "@rivethub/contracts";
 import type { ReviewItem } from "@rivethub/contracts";
 import { describe, expect, it } from "vitest";
-import { ago, dayLabel, localDay, parseDay, primaryAction, whenLabel } from "./format";
+import { ago, dayLabel, localDay, parseDay, primaryAction, toolLine, whenLabel } from "./format";
 
 describe("format", () => {
   const now = new Date(2026, 10, 11, 15, 30);
@@ -21,6 +21,15 @@ describe("format", () => {
     expect(ago(new Date(t - 30_000).toISOString(), t)).toBe("just now");
     expect(ago(new Date(t - 5 * 60_000).toISOString(), t)).toBe("5 min ago");
     expect(ago(new Date(t - 86_400_000).toISOString(), t)).toBe("1 day ago");
+  });
+
+  it("prints a tool's name once", () => {
+    expect(toolLine({ name: "Read", summary: "/tmp/synthetic/tool-marathon-2.txt" })).toBe("Read: /tmp/synthetic/tool-marathon-2.txt");
+    expect(toolLine({ name: "Read", summary: "Read /tmp/synthetic/tool-marathon-2.txt" })).toBe("Read /tmp/synthetic/tool-marathon-2.txt");
+    expect(toolLine({ name: "Read", summary: "Read: Read /tmp/synthetic/tool-marathon-2.txt" })).toBe("Read: Read /tmp/synthetic/tool-marathon-2.txt");
+    expect(toolLine({ name: "Bash", summary: "zpool list NAME SIZE" })).toBe("Bash: zpool list NAME SIZE");
+    expect(toolLine({ name: "Bash", summary: "failed" })).toBe("Bash: failed");
+    expect(toolLine({ name: "tool", summary: "noted" })).toBe("noted");
   });
 
   it("names a review item's main button", () => {

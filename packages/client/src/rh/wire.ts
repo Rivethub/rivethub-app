@@ -386,6 +386,11 @@ export const account = z.object({
   usageCounts: z.boolean(),
 });
 
+export const me = z.object({
+  user: z.string(),
+  spaces: z.array(z.object({ id: z.string(), kind: z.string(), name: z.string() })),
+});
+
 export const signInStarted = z.object({ requestId: z.string() });
 export const signInProgress = z.discriminatedUnion("status", [
   z.object({ status: z.literal("pending") }),

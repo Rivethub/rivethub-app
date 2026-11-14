@@ -1,17 +1,14 @@
-import { inlineSpans } from "../src/ui/inline";
+import { inAppTarget } from "../src/ui/links";
 
-describe("inline markdown", () => {
-  it("splits code and bold out of plain text", () => {
-    expect(inlineSpans("set `MAX_LEN=8` and **restart** now")).toEqual([
-      { kind: "text", text: "set " },
-      { kind: "code", text: "MAX_LEN=8" },
-      { kind: "text", text: " and " },
-      { kind: "strong", text: "restart" },
-      { kind: "text", text: " now" },
-    ]);
+describe("hub markdown links", () => {
+  it("opens a topic, entity or session inside the app", () => {
+    expect(inAppTarget("/topics/2968c3bd-9d30-465f-ae0b-11b3159d5b28")).toEqual({ kind: "topic", id: "2968c3bd-9d30-465f-ae0b-11b3159d5b28" });
+    expect(inAppTarget("/entities/nas-01")).toEqual({ kind: "entity", id: "nas-01" });
+    expect(inAppTarget("/sessions/claude-code%3Afield-gulls")).toEqual({ kind: "session", id: "claude-code:field-gulls" });
   });
 
-  it("leaves unmatched markers as text", () => {
-    expect(inlineSpans("a ` lone tick and **open")).toEqual([{ kind: "text", text: "a ` lone tick and **open" }]);
+  it("leaves an http link to the browser and ignores other paths", () => {
+    expect(inAppTarget("https://example.com/runbook")).toEqual({ kind: "external", href: "https://example.com/runbook" });
+    expect(inAppTarget("/guide")).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ const WRITES = new Set<keyof MemoryClient>([
   "decide",
   "updateTopic",
   "addDecision",
+  "createTopic",
   "placeSession",
   "setFact",
   "renameSession",
@@ -43,6 +44,7 @@ const CAPABILITY: Partial<Record<keyof MemoryClient, Capability>> = {
   modelJobs: "models",
   hubs: "hubs",
   account: "account",
+  me: "account",
   pollSignIn: "account",
 };
 

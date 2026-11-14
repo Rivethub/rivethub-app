@@ -13,6 +13,7 @@ import type {
   HarnessStatus,
   Hub,
   IsoTime,
+  Me,
   MemoryClient,
   ModelJob,
   Page,
@@ -540,6 +541,10 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
 
     async account(): Promise<Account> {
       return clone(world.account);
+    },
+
+    async me(): Promise<Me> {
+      return { user: "you", spaces: [{ id: "household", kind: "household", name: "Household" }] };
     },
 
     async updateAccount(patch) {

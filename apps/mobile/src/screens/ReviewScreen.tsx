@@ -2,6 +2,7 @@ import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Animated, PanResponder, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useDecide, useReviewQueue } from "../data/queries";
+import { markStep } from "../lib/journeyStore";
 import { openSubject } from "../nav/go";
 import { acceptDecision, decisionForSwipe, reviewDecisionFor } from "../review/decision";
 import { alpha } from "../theme/tokens";
@@ -56,6 +57,7 @@ export function ReviewScreen() {
     const current = itemRef.current;
     if (!current) return;
     setSkipped((prev) => new Set(prev).add(current.id));
+    if (decision.kind !== "later") markStep("review");
     decide.mutate(
       { id: current.id, decision },
       {
@@ -224,7 +226,7 @@ function ReviewCard({
       {evidenceOpen
         ? item.evidence.map((quote, index) => (
             <View key={`${quote.session.id}-${index}`} style={{ gap: 6 }}>
-              <Text style={{ color: palette.foreground, fontSize: 14, lineHeight: 21, borderLeftWidth: 3, borderLeftColor: palette.success, backgroundColor: palette.background, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12 }}>{quote.quote}</Text>
+              <RichText text={quote.quote} style={{ color: palette.foreground, fontSize: 14, lineHeight: 21, borderLeftWidth: 3, borderLeftColor: palette.success, backgroundColor: palette.background, borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12 }} />
               <Pressable accessibilityRole="link" onPress={() => openSubject({ kind: "session", id: quote.session.id, title: quote.session.title })} style={{ minHeight: 44, justifyContent: "center" }}>
                 <Text style={{ color: palette.info, fontSize: 13 }}>{quote.session.title} · {shortDate(quote.at)}</Text>
               </Pressable>

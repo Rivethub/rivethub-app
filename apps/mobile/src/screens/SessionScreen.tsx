@@ -1,14 +1,18 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
 import { splitInjected } from "@rivethub/client";
+import { harnessNames, originNote, toolLine } from "@rivethub/client-runtime/format";
 import * as Clipboard from "expo-clipboard";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useKeep, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
+import { useKeep, useMe, usePlaceSession, useRestore, useSession, useSetVisibility, useSummaryTree, useTopicTree, useTranscript, useTrash } from "../data/queries";
+import { markStep } from "../lib/journeyStore";
+import { countedNoMessages } from "../lib/sessions";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
-import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet, TextField } from "../ui/chrome";
+import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet } from "../ui/chrome";
+import { NewTopic } from "./NewTopic";
 import { changeLabel, clock, errorText, shortDate } from "../ui/format";
 import { IconFile, IconKeep, IconShare, IconTrash } from "../ui/icons";
 
@@ -21,7 +25,9 @@ export function SessionScreen({ route, navigation }: Props) {
   const id = route.params.id as SessionId;
   const session = useSession(route.params.id);
   const detail = session.data;
-  const [pane, setPane] = useState<Pane>("transcript");
+  const [pane, setPane] = useState<Pane | null>(null);
+  const empty = detail ? countedNoMessages(detail) : false;
+  const active: Pane = pane ?? (empty ? "transcript" : detail?.memoryState === "summarized" ? "summary" : "transcript");
   const [range, setRange] = useState<[number, number] | null>(null);
   const [filing, setFiling] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -53,7 +59,7 @@ export function SessionScreen({ route, navigation }: Props) {
       <View style={{ flexDirection: "row", alignItems: "center", paddingRight: 12 }}>
         <BackButton onPress={() => navigation.goBack()} />
         <Text style={{ flex: 1, color: palette.muted, fontSize: 13 }} numberOfLines={1}>
-          {detail ? `${detail.harness} · ${shortDate(detail.startedAt)}` : "Session"}
+          {detail ? `${harnessNames[detail.harness] ?? detail.harness} · ${shortDate(detail.startedAt)}` : "Session"}
         </Text>
         {detail?.resumeCommand ? (
           <Pressable accessibilityRole="button" onPress={() => void resume()} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
@@ -67,44 +73,56 @@ export function SessionScreen({ route, navigation }: Props) {
       ) : (
         <View style={{ flex: 1 }}>
           <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 24 }}>
-            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }}>{detail.title}</Text>
+            <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 26, fontWeight: "600" }} numberOfLines={4}>{detail.title}</Text>
+            {detail.origin ? <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{originNote(detail.origin)} It stays private here, and cannot be filed under a topic yet.</Text> : null}
             {detail.changed.length > 0 ? (
               <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
                 <Text style={{ color: palette.muted, fontSize: 12, fontWeight: "600" }}>CHANGED {detail.changed.length}</Text>
                 {detail.changed.map((change, index) => (
                   <Text key={`${change.at}:${index}`} style={{ color: palette.foreground }}>
-                    {changeLabel(change.kind)} · {change.text}
+                    {changeLabel(change.kind)} · <RichText text={change.text} style={{ color: palette.foreground }} />
                   </Text>
                 ))}
               </View>
             ) : null}
-            <Segment
-              value={pane}
-              onChange={(next) => setPane(next as Pane)}
-              options={[
-                { id: "transcript", label: "Transcript" },
-                { id: "summary", label: "Summary" },
-              ]}
-            />
-            {pane === "transcript" ? <Transcript id={detail.id} range={range} onClear={() => setRange(null)} /> : null}
-            {pane === "summary" ? (
-              <Summary
-                id={detail.id}
-                state={detail.memoryState}
-                onLeaf={(next) => {
-                  setRange(next);
-                  setPane("transcript");
-                }}
-              />
-            ) : null}
+            {empty ? (
+              <Text style={{ color: palette.muted, fontSize: 15 }}>Nothing was said in this session</Text>
+            ) : (
+              <>
+                {detail.memoryState !== "summarized" ? <StateNote state={detail.memoryState} /> : null}
+                <Segment
+                  value={active}
+                  onChange={(next) => setPane(next as Pane)}
+                  options={[
+                    { id: "summary", label: "Summary" },
+                    { id: "transcript", label: "Transcript" },
+                  ]}
+                />
+                {active === "transcript" ? <Transcript id={detail.id} empty={false} range={range} onClear={() => setRange(null)} sender={detail.origin ? (detail.origin.author ?? "Sender") : undefined} /> : null}
+                {active === "summary" ? (
+                  <Summary
+                    id={detail.id}
+                    state={detail.memoryState}
+                    onOpenTranscript={() => setPane("transcript")}
+                    onLeaf={(next) => {
+                      setRange(next);
+                      setPane("transcript");
+                    }}
+                  />
+                ) : null}
+              </>
+            )}
           </ScrollView>
           <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.sidebar, paddingBottom: insets.bottom }}>
-            <Action label="File" onPress={() => setFiling(true)} icon={<IconFile color={palette.foreground} />} />
-            <Action
-              label={detail.visibility.kind === "space" ? detail.visibility.space : "Share"}
-              onPress={() => setSharing(true)}
-              icon={<IconShare color={palette.foreground} />}
-            />
+            {/* The hub files and re-shares only sessions its own tools ran. */}
+            {detail.origin ? null : <Action label="File" onPress={() => setFiling(true)} icon={<IconFile color={palette.foreground} />} />}
+            {detail.origin ? null : (
+              <Action
+                label={detail.visibility.kind === "space" ? detail.visibility.space : "Share"}
+                onPress={() => setSharing(true)}
+                icon={<IconShare color={palette.foreground} />}
+              />
+            )}
             <Action
               label={detail.kept ? "Kept" : "Keep"}
               onPress={() => keep.mutate({ id: detail.id, keep: !detail.kept }, { onError: (error) => Alert.alert("Could not update", errorText(error)) })}
@@ -136,9 +154,24 @@ function Action({ label, onPress, icon }: { label: string; onPress: () => void; 
   );
 }
 
-function Transcript({ id, range, onClear }: { id: SessionId; range: [number, number] | null; onClear: () => void }) {
+const STATE_NOTE: Partial<Record<SessionDetail["memoryState"], string>> = {
+  capturing: "This session is still being captured. The messages so far are on the transcript.",
+  queued: "This session is waiting to be summarized. Summaries need a model.",
+  flagged: "Summarizing this session failed. Summaries need a model.",
+};
+
+function StateNote({ state }: { state: SessionDetail["memoryState"] }) {
   const { palette } = useTheme();
-  const transcript = useTranscript(id);
+  const text = STATE_NOTE[state];
+  if (!text) return null;
+  return <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>{text}</Text>;
+}
+
+/** `sender` names who wrote the prompts of a session someone else shared; without it they are yours. */
+function Transcript({ id, empty, range, onClear, sender }: { id: SessionId; empty: boolean; range: [number, number] | null; onClear: () => void; sender: string | undefined }) {
+  const { palette } = useTheme();
+  const transcript = useTranscript(id, !empty);
+  if (empty) return <Text style={{ color: palette.muted, fontSize: 15 }}>Nothing was said in this session</Text>;
   const turns = transcript.data?.filter((turn) => !range || (turn.index >= range[0] && turn.index <= range[1])) ?? [];
   if (!transcript.data) return <Loading label={transcript.isError ? "The transcript did not load." : "Loading transcript…"} />;
   return (
@@ -148,9 +181,11 @@ function Transcript({ id, range, onClear }: { id: SessionId; range: [number, num
           <Text style={{ color: palette.info }}>Showing messages {range[0]}–{range[1]}. Clear</Text>
         </Pressable>
       ) : null}
+      {turns[0]?.missing === "before" ? <MissingNote side="before" /> : null}
       {turns.map((turn) => (
-        <Bubble key={turn.index} turn={turn} />
+        <Bubble key={turn.index} turn={turn} sender={sender} />
       ))}
+      {turns.at(-1)?.missing === "after" ? <MissingNote side="after" /> : null}
     </View>
   );
 }
@@ -159,7 +194,17 @@ const LONG_TURN = 1200;
 
 type Shown = { key: string; kind: "said" | "tool"; text: string };
 
-function Bubble({ turn }: { turn: TranscriptTurn }) {
+/** Shown where a transcript read from memory stops short, so a part is never taken for the whole. */
+function MissingNote({ side }: { side: "before" | "after" }) {
+  const { palette } = useTheme();
+  return (
+    <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18, borderWidth: 1, borderStyle: "dashed", borderColor: palette.input, borderRadius: 10, padding: 10 }}>
+      {side === "before" ? "Earlier messages are not shown." : "Later messages are not shown."} Memory holds too many messages from the same hours to read through all of them here. Search still finds every message.
+    </Text>
+  );
+}
+
+function Bubble({ turn, sender }: { turn: TranscriptTurn; sender: string | undefined }) {
   const { palette } = useTheme();
   const [contextOpen, setContextOpen] = useState(false);
   const [full, setFull] = useState(false);
@@ -168,7 +213,7 @@ function Bubble({ turn }: { turn: TranscriptTurn }) {
   const said: Shown[] = [];
   turn.parts.forEach((part, index) => {
     if (part.kind !== "text") {
-      said.push({ key: `${index}`, kind: "tool", text: `${part.name}: ${part.summary}` });
+      said.push({ key: `${index}`, kind: "tool", text: toolLine(part) });
       return;
     }
     splitInjected(part.text).forEach((piece, at) => {
@@ -200,7 +245,7 @@ function Bubble({ turn }: { turn: TranscriptTurn }) {
   if (said.length === 0) return context ? <View style={{ alignSelf: "stretch", paddingHorizontal: 4 }}>{context}</View> : null;
   return (
     <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "92%", borderRadius: 14, backgroundColor: mine ? palette.message : palette.card, padding: 12, gap: 6 }}>
-      <Text style={{ color: palette.muted, fontSize: 11 }}>{mine ? "You" : "Assistant"} · {clock(turn.at)}</Text>
+      <Text style={{ color: palette.muted, fontSize: 11 }}>{mine ? (sender ?? "You") : "Assistant"} · {clock(turn.at)}</Text>
       {context}
       <View style={{ gap: 6, maxHeight: clipped ? 320 : undefined, overflow: "hidden" }}>
         {said.map((piece) =>
@@ -220,24 +265,37 @@ function Bubble({ turn }: { turn: TranscriptTurn }) {
   );
 }
 
-const NO_SUMMARY: Record<SessionDetail["memoryState"], string> = {
-  capturing: "Still capturing. The summary is written after the session goes quiet.",
-  queued: "Queued for summarizing. Check back after the memory worker catches up.",
-  flagged: "Summarizing this session was flagged, so there is no summary yet.",
-  summarized: "The summary did not load.",
-};
-
-function Summary({ id, state, onLeaf }: { id: SessionId; state: SessionDetail["memoryState"]; onLeaf: (range: [number, number]) => void }) {
+function NoSummary({ onOpenTranscript }: { onOpenTranscript: () => void }) {
   const { palette } = useTheme();
-  const tree = useSummaryTree(id);
+  return (
+    <View style={{ gap: 6, borderWidth: 1, borderStyle: "dashed", borderColor: palette.input, borderRadius: 12, padding: 16 }}>
+      <Text style={{ color: palette.foreground, fontWeight: "600" }}>No summary yet</Text>
+      <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
+        A summary is written after a session ends, by the model set for summaries. Every message is still here.
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onOpenTranscript} style={{ minHeight: 44, justifyContent: "center" }}>
+        <Text style={{ color: palette.info }}>Read the transcript</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function Summary({ id, state, onLeaf, onOpenTranscript }: { id: SessionId; state: SessionDetail["memoryState"]; onLeaf: (range: [number, number]) => void; onOpenTranscript: () => void }) {
+  const { palette } = useTheme();
+  const tree = useSummaryTree(id, state === "summarized");
   const root = tree.data;
-  if (!root) return <Loading label={tree.isError ? NO_SUMMARY[state] : "Loading summary…"} />;
+  useEffect(() => {
+    if (root) markStep("summary");
+  }, [root]);
+  if (state !== "summarized") return <NoSummary onOpenTranscript={onOpenTranscript} />;
+  if (tree.isError) return <NoSummary onOpenTranscript={onOpenTranscript} />;
+  if (!root) return <Loading label="Loading summary…" />;
   return (
     <View style={{ gap: 12 }}>
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
         <KindTag label="Root" color={palette.primary} />
         <Text style={{ color: palette.foreground, fontWeight: "600" }}>{root.title ?? "Whole session"}</Text>
-        <Text style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }}>{root.text}</Text>
+        <RichText text={root.text} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} />
       </View>
       {root.children.map((branch, index) => (
         <Branch key={`${branch.messageRange[0]}:${index}`} node={branch} onLeaf={onLeaf} />
@@ -257,13 +315,13 @@ function Branch({ node, onLeaf }: { node: SummaryNode; onLeaf: (range: [number, 
           <Text style={{ flex: 1, color: palette.foreground, fontWeight: "600" }}>{node.title ?? node.text}</Text>
           <Text style={{ color: palette.muted }}>{open ? "▾" : "▸"}</Text>
         </View>
-        <Text style={{ color: palette.muted, fontSize: 13 }}>{node.text}</Text>
+        <RichText text={node.text} style={{ color: palette.muted, fontSize: 13 }} />
       </Pressable>
       {open
         ? node.children.map((leaf, index) => (
             <View key={`${leaf.messageRange[0]}:${index}`} style={{ gap: 4, paddingBottom: 8 }}>
               <Text style={{ color: palette.muted, fontSize: 11, fontWeight: "600" }}>LEAF · {leaf.messageRange[0]}–{leaf.messageRange[1]}</Text>
-              <Text style={{ color: palette.foreground, lineHeight: 20 }}>{leaf.text}</Text>
+              <RichText text={leaf.text} style={{ color: palette.foreground, lineHeight: 20 }} />
               <Pressable accessibilityRole="button" onPress={() => onLeaf(leaf.messageRange)} style={{ minHeight: 44, justifyContent: "center" }}>
                 <Text style={{ color: palette.info }}>View in transcript</Text>
               </Pressable>
@@ -287,6 +345,7 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
   };
   return (
     <Sheet title="File in a topic" onClose={onClose}>
+      <NewTopic label="New topic" onCreated={(id) => file(id)} />
       <ScrollView style={{ maxHeight: 320 }}>
         <Pressable accessibilityRole="button" onPress={() => file(null)} style={{ minHeight: 48, justifyContent: "center" }}>
           <Text style={{ color: current === null ? palette.primary : palette.foreground }}>Unfiled</Text>
@@ -303,20 +362,47 @@ function FileSheet({ session, current, onClose }: { session: SessionId; current:
 
 function ShareSheet({ session, space, onClose }: { session: SessionId; space: string; onClose: () => void }) {
   const setVisibility = useSetVisibility();
-  const [name, setName] = useState(space);
+  const me = useMe();
   const { palette } = useTheme();
+  const [choice, setChoice] = useState(space || "private");
   const [error, setError] = useState<string | null>(null);
+  const memberships = me.data?.spaces ?? [];
+  const choices = [
+    { id: "private", name: "Private" },
+    ...memberships.map((membership) => ({ id: membership.id, name: membership.name })),
+  ];
+  if (space && !choices.some((option) => option.id === space)) choices.push({ id: space, name: space });
   const save = () => {
-    const trimmed = name.trim();
-    const visibility = trimmed ? { kind: "space" as const, space: trimmed } : { kind: "private" as const };
+    setError(null);
+    const visibility = choice === "private" ? { kind: "private" as const } : { kind: "space" as const, space: choice };
     setVisibility.mutate(
       { id: session, visibility },
-      { onSuccess: onClose, onError: (caught) => setError(errorText(caught)) },
+      {
+        onSuccess: () => {
+          if (choice !== "private") markStep("share");
+          onClose();
+        },
+        onError: (caught) => setError(errorText(caught)),
+      },
     );
   };
   return (
     <Sheet title="Share" onClose={onClose}>
-      <TextField label="Space name" value={name} onChangeText={setName} placeholder="Leave empty to keep it private" />
+      {choices.map((option) => {
+        const selected = option.id === choice;
+        return (
+          <Pressable
+            key={option.id}
+            accessibilityRole="radio"
+            accessibilityState={{ selected, checked: selected }}
+            onPress={() => setChoice(option.id)}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}
+          >
+            <Text style={{ color: palette.foreground, fontSize: 16 }}>{option.name}</Text>
+            {selected ? <Text style={{ color: palette.primary, fontSize: 16 }}>✓</Text> : null}
+          </Pressable>
+        );
+      })}
       {error ? <Text style={{ color: palette.error }}>{error}</Text> : null}
       <PrimaryButton label={setVisibility.isPending ? "Saving…" : "Save"} onPress={save} disabled={setVisibility.isPending} />
       <GhostButton label="Cancel" onPress={onClose} />
