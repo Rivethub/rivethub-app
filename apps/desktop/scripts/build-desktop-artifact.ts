@@ -24,6 +24,7 @@ export const DESKTOP_APP_ID = "io.rivethub.desktop";
 export const PRODUCT_NAME = "RivetHub";
 export const LINUX_TARGETS = ["AppImage", "deb"] as const;
 export const LINUX_ARCHES = ["x64", "arm64"] as const;
+export const APP_SPDX_LICENSE = "Apache-2.0";
 /** Replaces electron-builder's AppRun in the AppImage; see the script's header for why. */
 const APP_RUN_SOURCE = path.join(desktopDir, "linux/AppRun");
 export type LinuxArch = (typeof LINUX_ARCHES)[number];
@@ -32,6 +33,8 @@ export type LinuxArch = (typeof LINUX_ARCHES)[number];
 export const DESKTOP_EXTRA_RESOURCES = [
   { from: "apps/desktop/prod-resources/rh", to: RESOURCE_DIRS.rh },
   { from: "apps/web/dist", to: RESOURCE_DIRS.web },
+  // Apache-2.0 has to travel with the binary. resources/rh/LICENSE is rh's copy.
+  { from: "LICENSE", to: "LICENSE" },
 ] as const;
 
 /**
@@ -189,6 +192,7 @@ export async function packageLinux(options: {
       productName: PRODUCT_NAME,
       version: options.version,
       private: true,
+      license: APP_SPDX_LICENSE,
       description: "RivetHub desktop app",
       homepage: "https://rivethub.io",
       author: { name: "RivetHub", email: "rivetphilbot@gmail.com" },
