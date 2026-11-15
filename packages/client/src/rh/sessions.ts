@@ -41,12 +41,16 @@ export function mapTranscript(response: ReturnType<typeof wire.transcriptRespons
   return response.turns.map((turn, index) => {
     const parts: TranscriptPart[] = [];
     if (turn.thinking && turn.thinking.trim() !== "") parts.push({ kind: "thought", text: turn.thinking });
-    const said: TranscriptPart[] = turn.text.trim() !== "" ? [{ kind: "text", text: turn.text }] : [];
+    // rh gives the text after a turn's last tool call apart. What came before it was said on the way.
+    const reply = turn.replyText?.trim() ?? "";
+    const before = reply !== "" && turn.text.trimEnd().endsWith(reply) ? turn.text.trimEnd().slice(0, -reply.length).trim() : "";
+    const said: TranscriptPart[] = before !== "" ? [{ kind: "text", text: before }] : turn.text.trim() !== "" ? [{ kind: "text", text: turn.text }] : [];
     const tools = (turn.tools ?? []).map((tool): TranscriptPart => {
       const input = tool.input ?? tool.args;
       return strip<Extract<TranscriptPart, { kind: "tool" }>>({ kind: "tool", name: tool.name, summary: toolSummary(tool), status: toolStatus(tool.status), id: tool.id, input, result: tool.resultText });
     });
-    if (turn.lastBlock === "text") parts.push(...tools, ...said);
+    if (before !== "") parts.push(...said, ...tools, { kind: "text", text: reply });
+    else if (turn.lastBlock === "text") parts.push(...tools, ...said);
     else parts.push(...said, ...tools);
     const ms = turn.startedAtMs ?? turn.endedAtMs;
     const usage = turn.usage && (turn.usage.promptTokens > 0 || turn.usage.completionTokens > 0)
