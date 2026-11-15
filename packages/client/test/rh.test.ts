@@ -135,6 +135,17 @@ describe("sessions", () => {
     expect(await client.transcript!(SID, [2, 2])).toHaveLength(1);
   });
 
+  it("puts what was said on the way before the tool calls and the reply after them", async () => {
+    const turn = (more: object) => ({ sessionId: SID, turns: [{ role: "assistant", text: "I'll read it.\n\nIt is wired.", tools: [{ name: "Read", status: "done", id: "t1" }], lastBlock: "text", ...more }] });
+    const kinds = async (more: object) => {
+        const { client } = rh({ [`GET /api/harness-sessions/${seg}/transcript`]: turn(more) });
+        return (await client.transcript!(SID))[0]!.parts.map((part) => (part.kind === "tool" ? "tool" : part.text));
+    };
+    expect(await kinds({ replyText: "It is wired." })).toEqual(["I'll read it.", "tool", "It is wired."]);
+    // A hub that does not give the reply apart: the whole text follows the tool calls, as before.
+    expect(await kinds({})).toEqual(["tool", "I'll read it.\n\nIt is wired."]);
+  });
+
   it("reads one tool call's output from the session's own route", async () => {
     const { client, calls } = rh({ [`GET /api/harness-sessions/${seg}/tools/tool-1/output`]: { text: "fn stream() {}", isError: false, truncated: true } });
     expect(await client.toolOutput!(SID, "tool-1")).toEqual({ text: "fn stream() {}", failed: false, truncated: true });

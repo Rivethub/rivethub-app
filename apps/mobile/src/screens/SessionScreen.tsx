@@ -1,6 +1,7 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
 import { splitInjected } from "@rivethub/client";
+import { exchanges } from "@rivethub/client-runtime/exchange";
 import { harnessNames, originNote, toolLine } from "@rivethub/client-runtime/format";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useState, type ReactNode } from "react";
@@ -12,6 +13,7 @@ import { countedNoMessages } from "../lib/sessions";
 import type { RootParams } from "../nav/types";
 import { useTheme } from "../theme/Theme";
 import { BackButton, DataBanner, GhostButton, KindTag, Loading, PrimaryButton, RichText, Screen, Segment, Sheet } from "../ui/chrome";
+import { ExchangeCard } from "./Exchange";
 import { NewTopic } from "./NewTopic";
 import { changeLabel, clock, errorText, shortDate } from "../ui/format";
 import { IconFile, IconKeep, IconShare, IconTrash } from "../ui/icons";
@@ -175,15 +177,20 @@ function Transcript({ id, empty, range, onClear, sender }: { id: SessionId; empt
   const turns = transcript.data?.filter((turn) => !range || (turn.index >= range[0] && turn.index <= range[1])) ?? [];
   if (!transcript.data) return <Loading label={transcript.isError ? "The transcript did not load." : "Loading transcript…"} />;
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 18 }}>
       {range ? (
         <Pressable accessibilityRole="button" onPress={onClear} style={{ minHeight: 44, justifyContent: "center" }}>
           <Text style={{ color: palette.info }}>Showing messages {range[0]}–{range[1]}. Clear</Text>
         </Pressable>
       ) : null}
       {turns[0]?.missing === "before" ? <MissingNote side="before" /> : null}
-      {turns.map((turn) => (
-        <Bubble key={turn.index} turn={turn} sender={sender} />
+      {exchanges(turns).map((exchange) => (
+        <ExchangeCard
+          key={exchange.index}
+          exchange={exchange}
+          open={range !== null}
+          prompt={exchange.prompt ? <Bubble turn={exchange.prompt} sender={sender} /> : null}
+        />
       ))}
       {turns.at(-1)?.missing === "after" ? <MissingNote side="after" /> : null}
     </View>

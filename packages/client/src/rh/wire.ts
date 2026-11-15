@@ -148,6 +148,7 @@ export const messageUsage = z.object({
 export const transcriptTurn = z.object({
   role: z.enum(["user", "assistant"]),
   text: z.string().default(""),
+  replyText: nullish(z.string()),
   thinking: nullish(z.string()),
   tools: nullish(rows(transcriptTool)),
   usage: nullish(messageUsage),
