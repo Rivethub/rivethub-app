@@ -33,7 +33,10 @@ describe.runIf(process.env["RIVETHUB_PACKAGE_CHECK"] === "1" && (arch === "x64" 
     expect(await readFile(path.join(outputDir, manifest), "utf8")).toMatch(new RegExp(`^version: ${NIGHTLY.replaceAll(".", "\\.")}$`, "m"));
 
     await exec(appImage!, ["--appimage-extract", "resources/app-update.yml"], { cwd: outputDir });
+    await exec(appImage!, ["--appimage-extract", "resources/LICENSE"], { cwd: outputDir });
     const appUpdate = await readFile(path.join(outputDir, "squashfs-root/resources/app-update.yml"), "utf8");
+    const shippedLicense = await readFile(path.join(outputDir, "squashfs-root/resources/LICENSE"), "utf8");
+    expect(shippedLicense).toBe(await readFile(path.resolve(import.meta.dirname, "../../..", "LICENSE"), "utf8"));
     expect(appUpdate).toMatch(/^url: https:\/\/get\.rivethub\.io\/desktop\/nightly\/$/m);
     expect(appUpdate).not.toMatch(/^channel:/m);
   });

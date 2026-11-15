@@ -110,3 +110,5 @@ ln -sfn "$dest" ~/.local/opt/rivethub/web/current
 ```
 
 Point `gateway.static_dir` in the `rh` config at `~/.local/opt/rivethub/web/current`.
+
+Licensed under Apache-2.0.
