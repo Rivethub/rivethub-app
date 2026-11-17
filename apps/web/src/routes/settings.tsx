@@ -223,6 +223,17 @@ export function Connections({ phone }: { phone: boolean }) {
   const jobs = useModelJobs(true);
   const [connecting, setConnecting] = useState<{ h: HarnessStatus; part: "capture" | "recall" } | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scannedAt, setScannedAt] = useState<number | null>(null);
+  async function rescan() {
+    setScanning(true);
+    try {
+      const result = await harnesses.refetch();
+      if (!result.isError) setScannedAt(Date.now());
+    } finally {
+      setScanning(false);
+    }
+  }
   if (harnesses.isPending || jobs.isPending) return <Loading />;
   if (harnesses.isError) return <ErrorNote error={harnesses.error} />;
   if (jobs.isError) return <ErrorNote error={jobs.error} />;
@@ -262,7 +273,8 @@ export function Connections({ phone }: { phone: boolean }) {
         <div className="flex items-baseline gap-2.5">
           <h2 id="harnesses-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "HARNESSES · CAPTURE · RECALL" : "Harnesses"}</h2>
           {!phone && <span className="text-[12px] text-muted-foreground">{every.filter((h) => h.found).length} found on this machine</span>}
-          <Button size="xs" onClick={() => void harnesses.refetch()}>Rescan</Button>
+          {scannedAt !== null && <span className="text-[12px] text-muted-foreground">Scanned {ago(new Date(scannedAt).toISOString())}</span>}
+          <Button size="xs" disabled={scanning} onClick={() => void rescan()}>{scanning ? "Scanning…" : "Rescan"}</Button>
         </div>
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">

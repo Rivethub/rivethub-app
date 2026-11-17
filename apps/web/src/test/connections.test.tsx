@@ -1,6 +1,7 @@
 import type { HarnessStatus, IsoTime } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { act, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import type { AppClient } from "../client/context";
@@ -103,6 +104,27 @@ describe("Connections", () => {
     const loaded = harnessCalls;
     window.dispatchEvent(new Event("visibilitychange"));
     await waitFor(() => expect(harnessCalls).toBeGreaterThan(loaded));
+  });
+
+  it("says when a rescan finished, including when nothing changed", async () => {
+    let calls = 0;
+    let release: () => void = () => {};
+    renderWith("/settings/connections", (c) => ({
+      harnesses: async () => {
+        const list = await c.harnesses();
+        calls += 1;
+        if (calls > 1) await new Promise<void>((resolve) => { release = resolve; });
+        return list;
+      },
+    }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Rescan" }));
+    expect(await screen.findByRole("button", { name: "Scanning…" })).toBeDisabled();
+    expect(screen.queryByText("Scanned just now")).not.toBeInTheDocument();
+    release();
+    expect(await screen.findByText("Scanned just now")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rescan" })).toBeEnabled();
+    expect(screen.getByRole("row", { name: /Claude Code/ })).toBeInTheDocument();
   });
 });
 
