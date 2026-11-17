@@ -1,14 +1,14 @@
 import type { HarnessStatus, IsoTime } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import type { AppClient } from "../client/context";
 import { createSampleClient } from "../dev/sample-client";
 
 function renderWith(path: string, change: (c: AppClient) => Partial<AppClient>) {
   const base = createSampleClient();
-  render(<App client={{ ...base, ...change(base) } as AppClient} history={createMemoryHistory({ initialEntries: [path] })} />);
+  return render(<App client={{ ...base, ...change(base) } as AppClient} history={createMemoryHistory({ initialEntries: [path] })} />);
 }
 
 const at = (iso: string) => iso as IsoTime;
@@ -53,4 +53,59 @@ describe("Connections", () => {
     expect(screen.getByText(/Kimi Code is not connected/)).toBeInTheDocument();
     expect(screen.queryByText(/stopped sending/)).not.toBeInTheDocument();
   });
+
+  it("refetches while Connections is open, and not on other screens", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let harnessCalls = 0;
+    let jobCalls = 0;
+    const count = (c: AppClient): Partial<AppClient> => ({
+      harnesses: async () => {
+        harnessCalls += 1;
+        return c.harnesses();
+      },
+      modelJobs: async () => {
+        jobCalls += 1;
+        return c.modelJobs();
+      },
+    });
+    const connections = renderWith("/settings/connections", count);
+    await screen.findByRole("button", { name: "Rescan" });
+    expect(harnessCalls).toBe(1);
+    expect(jobCalls).toBe(1);
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(harnessCalls).toBe(2));
+    expect(jobCalls).toBe(2);
+    connections.unmount();
+
+    harnessCalls = 0;
+    renderWith("/", count);
+    await screen.findByRole("region", { name: /What changed/ });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    const afterLoad = harnessCalls;
+    await vi.advanceTimersByTimeAsync(15_000);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(harnessCalls).toBe(afterLoad);
+  });
+
+  it("refetches Connections when the window becomes visible again", async () => {
+    let harnessCalls = 0;
+    renderWith("/settings/connections", (c) => ({
+      harnesses: async () => {
+        harnessCalls += 1;
+        return c.harnesses();
+      },
+    }));
+    await screen.findByRole("button", { name: "Rescan" });
+    const loaded = harnessCalls;
+    window.dispatchEvent(new Event("visibilitychange"));
+    await waitFor(() => expect(harnessCalls).toBeGreaterThan(loaded));
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });

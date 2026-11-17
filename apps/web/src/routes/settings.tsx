@@ -219,8 +219,8 @@ function ConnectDialog({ harness, part, onClose }: { harness: HarnessStatus; par
 }
 
 export function Connections({ phone }: { phone: boolean }) {
-  const harnesses = useHarnesses();
-  const jobs = useModelJobs();
+  const harnesses = useHarnesses(true);
+  const jobs = useModelJobs(true);
   const [connecting, setConnecting] = useState<{ h: HarnessStatus; part: "capture" | "recall" } | null>(null);
   const [showAll, setShowAll] = useState(false);
   if (harnesses.isPending || jobs.isPending) return <Loading />;

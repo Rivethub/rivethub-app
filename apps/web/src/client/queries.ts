@@ -23,9 +23,15 @@ import { withFreshLogin } from "./auth";
 import { markStep } from "../lib/journey";
 import { useClient, type AppClient } from "./context";
 
-function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true) {
+function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true, live = false) {
   const client = useClient();
-  return useQuery({ queryKey: key, queryFn: () => fn(client), enabled });
+  return useQuery({
+    queryKey: key,
+    queryFn: () => fn(client),
+    enabled,
+    // Only Connections asks for this. Other screens keep the 30s cache and do not poll.
+    ...(live ? { refetchInterval: 15_000, refetchOnWindowFocus: "always" as const } : {}),
+  });
 }
 
 export const useCapabilities = () => q(keys.capabilities, (c) => c.capabilities());
@@ -41,8 +47,8 @@ export const useTranscript = (id: SessionId, enabled = true) => q(keys.transcrip
 export const useToolOutput = (id: SessionId, tool: string, enabled: boolean) => q([...keys.transcript(id), "tool", tool], (c) => c.toolOutput(id, tool), enabled);
 export const useSummaryTree = (id: SessionId, enabled = true) => q(keys.summaryTree(id), (c) => c.summaryTree(id), enabled);
 export const useSearch = (text: string, options: SearchOptions = {}) => q([...keys.search(text), options], (c) => c.search(text, options));
-export const useHarnesses = () => q(keys.harnesses, (c) => c.harnesses());
-export const useModelJobs = () => q(keys.modelJobs, (c) => c.modelJobs());
+export const useHarnesses = (live = false) => q(keys.harnesses, (c) => c.harnesses(), true, live);
+export const useModelJobs = (live = false) => q(keys.modelJobs, (c) => c.modelJobs(), true, live);
 export const useHubs = () => q(keys.hubs, (c) => c.hubs());
 export const useAccount = () => q(keys.account, (c) => c.account());
 
