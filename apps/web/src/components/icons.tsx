@@ -12,7 +12,9 @@ function Svg({ size = 16, children, strokeWidth = 2, ...rest }: P) {
 
 export const SearchIcon = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>;
 export const GearIcon = (p: P) => (
-  <Svg {...p}><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></Svg>
+  <Svg {...p} fill="currentColor" stroke="none">
+    <path fillRule="evenodd" d="M9.4 4.6 8.7 1.2h6.6l-.7 3.4 2.2.9 2.6-2.6 4.2 4.2-2.6 2.6.9 2.2 3.4-.7v6.6l-3.4-.7-.9 2.2 2.6 2.6-4.2 4.2-2.6-2.6-2.2.9.7 3.4H8.7l.7-3.4-2.2-.9-2.6 2.6-4.2-4.2 2.6-2.6-.9-2.2-3.4.7V9.9l3.4.7.9-2.2-2.6-2.6 4.2-4.2 2.6 2.6 2.2-.9zM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z" />
+  </Svg>
 );
 export const TodayIcon = (p: P) => <Svg strokeWidth={1.8} {...p}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Svg>;
 export const ReviewIcon = (p: P) => (

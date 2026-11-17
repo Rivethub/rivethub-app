@@ -58,6 +58,20 @@ describe("Guide steps", () => {
   });
 });
 
+describe("Settings icon", () => {
+  it("draws a gear with a centre hole, not a sun", async () => {
+    renderWith("/", () => ({}));
+    const link = await screen.findByRole("link", { name: "Settings" });
+    const svg = link.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg!.getAttribute("width")).toBe("16");
+    expect(svg!.innerHTML).not.toContain("M12 2v3");
+    const path = svg!.querySelector("path");
+    expect(path?.getAttribute("fill-rule")).toBe("evenodd");
+    expect(path?.getAttribute("d")?.match(/M/g)?.length).toBe(2);
+  });
+});
+
 describe("Hub footer", () => {
   it("names the space beside the local hub", async () => {
     renderWith("/", () => ({}));
