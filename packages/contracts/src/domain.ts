@@ -327,9 +327,13 @@ export interface ModelJob {
   provider?: string;
   model?: string;
   inheritsDefault: boolean;
-  health: "healthy" | "slow" | "failing" | (string & {});
+  health: "healthy" | "slow" | "failing" | "unconfigured" | "not-running" | (string & {});
   detail: string;
   queued: number;
+  /** When a worker last finished a job for this role. Absent on hubs that do not report it. */
+  lastRan?: IsoTime;
+  /** Why a worker that had been running has stopped claiming jobs. */
+  outage?: string;
 }
 
 export interface Hub {

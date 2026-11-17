@@ -344,9 +344,11 @@ export const modelJobList = rows(
     provider: nullish(z.string()),
     model: nullish(z.string()),
     inheritsDefault: z.boolean(),
-    health: descriptive(["healthy", "slow", "failing"]),
+    health: descriptive(["healthy", "slow", "failing", "unconfigured", "not-running"]),
     detail: z.string(),
     queued: z.number(),
+    lastRan: nullish(timeSchema),
+    outage: nullish(z.string()),
   }),
 );
 
