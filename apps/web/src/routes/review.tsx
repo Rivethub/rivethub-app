@@ -1,5 +1,5 @@
 import { SubjectType } from "../components/subject-type";
-import { reviewText, dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
+import { filingCreatesTopic, filingTopicName, reviewText, dayLabel, primaryAction, shortDate } from "@rivethub/client-runtime/format";
 import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -98,7 +98,8 @@ function ReviewDesktop() {
   }
 
   function acceptGroup(group: ReviewItem["group"]) {
-    const items = visible.filter((i) => i.group === group && !i.rawGroup);
+    const items = visible.filter((i) => i.group === group && !i.rawGroup && !filingCreatesTopic(i));
+    if (!items.length) return;
     const next = visible.find((i) => i.group !== group && visible.indexOf(i) > visible.indexOf(items.at(-1)!)) ?? visible.find((i) => i.group !== group);
     setSelectedId(next?.id);
     for (const i of items) decide.mutate({ id: i.id, decision: primaryDecision(i) });
@@ -159,9 +160,13 @@ function ReviewDesktop() {
               <div className="flex items-center gap-2">
                 <span className="text-[12px] font-semibold tracking-[0.04em] uppercase" style={{ color: g.color }}>{g.title} ({g.items.length})</span>
                 <span className="flex-1 text-[12px] text-muted-foreground">{g.hint}</span>
-                {g.filter !== "Other" && g.group !== "conflict" && g.items.length > 1 && (
+                {g.filter !== "Other" && g.group !== "conflict" && (g.group === "filing" ? g.items.filter((i) => !filingCreatesTopic(i)).length : g.items.length) > 1 && (
                   <Button size="xs" onClick={() => acceptGroup(g.group)}>
-                    {g.group === "filing" ? "File" : "Accept"} all {g.items.length}
+                    {g.group === "filing"
+                      ? g.items.every((i) => !filingCreatesTopic(i))
+                        ? `File all ${g.items.length}`
+                        : `File ${g.items.filter((i) => !filingCreatesTopic(i)).length} into existing topics`
+                      : `Accept all ${g.items.length}`}
                   </Button>
                 )}
               </div>
@@ -180,6 +185,7 @@ function ReviewDesktop() {
                     <span className="flex flex-wrap items-baseline gap-2">
                       <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
                       <span className="min-w-[180px] flex-1 leading-[1.45]">{reviewText(item)}</span>
+                      {filingCreatesTopic(item) && <span className="basis-full text-[13px]">Creates a new topic named {filingTopicName(item)}.</span>}
                       <span className="text-[12px] text-muted-foreground">
                         {item.group === "conflict" ? `${item.options?.length ?? 0} sessions` : item.group === "filing" || item.group === "tag" || item.group === "tidy" ? "categorizer" : `${dayLabel(item.createdAt).replace("Today", "today")} · ${item.evidence[0]?.session.title ?? ""}`}
                       </span>
@@ -379,6 +385,7 @@ function ReviewPhone() {
                 <Link to={subjectHref(item.subject)} className="font-semibold">{item.subject.title}</Link>{item.subject.kind === "entity" && <SubjectType subject={item.subject} />}
               </span>
               <span className="text-[18px] leading-[1.35] font-semibold">{item.group === "conflict" ? `Which ${reviewText(item).toLowerCase()} is right?` : reviewText(item)}</span>
+              {filingCreatesTopic(item) && <span className="text-[15px]">Creates a new topic named {filingTopicName(item)}.</span>}
               {item.group === "conflict" && item.options && (
                 <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
                   <legend className="sr-only">Pick a value</legend>

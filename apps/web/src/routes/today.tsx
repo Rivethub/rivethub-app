@@ -1,5 +1,5 @@
 import { SubjectType } from "../components/subject-type";
-import { count, reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { count, filingCreatesTopic, filingTopicName, reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useDecisionError, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
@@ -105,25 +105,47 @@ function NeedsCard({ item }: { item: ReviewItem }) {
   );
 }
 
-/** Several filing proposals read better as one card that files them all. */
-function FilingCard({ items }: { items: ReviewItem[] }) {
-  const decide = useDecide();
-  const kind = reviewKindLabel.filing;
+/** A filing that would create a topic is a Review decision: Today never accepts it. */
+function NewTopicFiling({ item }: { item: ReviewItem }) {
   return (
     <article className="flex flex-col gap-2 rounded-[10px] border border-border bg-card p-3">
       <span className="flex items-center gap-1.5">
-        <KindTag {...kind} />
-        <Link to="/review" className="text-[13px] font-medium">{items.length} sessions</Link>
+        <KindTag {...reviewKindLabel.filing} />
+        <span className="text-[13px] font-medium">{item.subject.title}</span>
       </span>
-      <span className="flex-1 leading-[1.45]">Unfiled sessions with suggested topics.</span>
-      <span className="flex gap-1.5">
-        <Button variant="primary" size="xs" className="px-2.5 py-[3px]" disabled={decide.isPending} onClick={() => items.forEach((i) => decide.mutate({ id: i.id, decision: { kind: "accept" } }))}>
-          File all
-        </Button>
-        <Button size="xs" className="px-2.5 py-[3px]" disabled={decide.isPending} onClick={() => items.forEach((i) => decide.mutate({ id: i.id, decision: { kind: "later" } }))}>
-          Later
-        </Button>
+      <span className="flex-1 leading-[1.45]">Creates a new topic named {filingTopicName(item)}.</span>
+      <Link to="/review" className="text-[13px]">Review 1</Link>
+    </article>
+  );
+}
+
+/** Several filing proposals are one card. Only proposals for a topic that already exists can be filed from here. */
+function FilingCard({ items }: { items: ReviewItem[] }) {
+  const decide = useDecide();
+  const existing = items.filter((item) => !filingCreatesTopic(item));
+  const creating = items.filter((item) => filingCreatesTopic(item));
+  return (
+    <article className="flex flex-col gap-2 rounded-[10px] border border-border bg-card p-3">
+      <span className="flex items-center gap-1.5">
+        <KindTag {...reviewKindLabel.filing} />
+        <span className="text-[13px] font-medium">{existing.length} of {items.length} go into a topic that already exists</span>
       </span>
+      {creating.length > 0 && (
+        <span className="flex-1 leading-[1.45]">
+          {creating.length === 1 ? "1 would create a new topic." : `${creating.length} would create new topics.`} Review each name first.{" "}
+          <Link to="/review">Review {creating.length}</Link>
+        </span>
+      )}
+      {existing.length > 0 && (
+        <span className="flex gap-1.5">
+          <Button variant="primary" size="xs" className="px-2.5 py-[3px]" disabled={decide.isPending} onClick={() => existing.forEach((i) => decide.mutate({ id: i.id, decision: { kind: "accept" } }))}>
+            {creating.length === 0 ? "File all" : `File ${existing.length} into existing topics`}
+          </Button>
+          <Button size="xs" className="px-2.5 py-[3px]" disabled={decide.isPending} onClick={() => existing.forEach((i) => decide.mutate({ id: i.id, decision: { kind: "later" } }))}>
+            Later
+          </Button>
+        </span>
+      )}
     </article>
   );
 }
@@ -133,7 +155,8 @@ function NeedsCards({ digest }: { digest: TodayDigest }) {
   return (
     <>
       {digest.needsYou.map((item, i) => {
-        if (item.group !== "filing" || filing.length <= 1) return <NeedsCard key={item.id} item={item} />;
+        if (item.group !== "filing") return <NeedsCard key={item.id} item={item} />;
+        if (filing.length <= 1) return filingCreatesTopic(item) ? <NewTopicFiling key={item.id} item={item} /> : <NeedsCard key={item.id} item={item} />;
         // Several filing proposals are one decision. Show the card where the first of them falls.
         return digest.needsYou.findIndex((other) => other.group === "filing") === i ? <FilingCard key="filing" items={filing} /> : null;
       })}

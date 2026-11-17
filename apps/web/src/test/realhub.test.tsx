@@ -39,7 +39,79 @@ describe("Today on a busy hub", () => {
     }));
     const needs = await screen.findByRole("region", { name: /Needs you/ });
     expect(within(needs).getAllByRole("button", { name: "File all" })).toHaveLength(1);
-    expect(within(needs).getByText("3 sessions")).toBeInTheDocument();
+    expect(within(needs).getByText("3 of 3 go into a topic that already exists")).toBeInTheDocument();
+    expect(within(needs).queryByText(/would create a new topic/)).not.toBeInTheDocument();
+  });
+
+  it("files only into topics that already exist and sends a new topic to review with its name", async () => {
+    const filing = (n: number, text: string, after: string): ReviewItem => ({
+      id: `f-${n}` as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: `s-${n}` as SessionId, title: `Session ${n}` },
+      text,
+      after,
+      evidence: [],
+      createdAt: now,
+    });
+    const items = [filing(1, "→ Home lab", "topic-home"), filing(2, "→ Home lab › Network", "topic-net"), filing(3, "→ Printers (new topic)", "Printers")];
+    const decided: string[] = [];
+    const { user } = renderWith("/", (c) => ({
+      reviewQueue: async () => items,
+      today: async (date) => ({ ...(await c.today(date)), needsYou: items, reviewCount: 3 }),
+      decide: async (id) => {
+        decided.push(id);
+      },
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(needs).getByText("2 of 3 go into a topic that already exists")).toBeInTheDocument();
+    expect(within(needs).getByText(/1 would create a new topic/)).toBeInTheDocument();
+    expect(within(needs).getByRole("link", { name: "Review 1" })).toHaveAttribute("href", "/review");
+    expect(within(needs).queryByRole("button", { name: "File all" })).not.toBeInTheDocument();
+    await user.click(within(needs).getByRole("button", { name: "File 2 into existing topics" }));
+    await waitFor(() => expect(decided).toEqual(["f-1", "f-2"]));
+  });
+
+  it("does not file one new topic from today", async () => {
+    const item: ReviewItem = {
+      id: "f-1" as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: "s-1" as SessionId, title: "Session 1" },
+      text: "→ Printers (new topic)",
+      after: "Printers",
+      evidence: [],
+      createdAt: now,
+    };
+    renderWith("/", (c) => ({
+      reviewQueue: async () => [item],
+      today: async (date) => ({ ...(await c.today(date)), needsYou: [item], reviewCount: 1 }),
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(needs).getByText("Creates a new topic named Printers.")).toBeInTheDocument();
+    expect(within(needs).getByRole("link", { name: "Review 1" })).toBeInTheDocument();
+    expect(within(needs).queryByRole("button", { name: "File" })).not.toBeInTheDocument();
+    expect(within(needs).queryByRole("button", { name: "Later" })).not.toBeInTheDocument();
+  });
+
+  it("names a new topic on the review row and leaves it out of file all", async () => {
+    const filing = (n: number, text: string, after: string): ReviewItem => ({
+      id: `f-${n}` as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: `s-${n}` as SessionId, title: `Session ${n}` },
+      text,
+      after,
+      evidence: [],
+      createdAt: now,
+    });
+    const decided: string[] = [];
+    const { user } = renderWith("/review", () => ({
+      reviewQueue: async () => [filing(1, "→ Home lab", "topic-home"), filing(2, "→ Home lab › Network", "topic-net"), filing(3, "→ Printers (new topic)", "Printers")],
+      decide: async (id) => {
+        decided.push(id);
+      },
+    }));
+    expect(await screen.findByText("Creates a new topic named Printers.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "File 2 into existing topics" }));
+    await waitFor(() => expect(decided).toEqual(["f-1", "f-2"]));
   });
 
   it("takes a decision off the screen before the hub answers, and puts it back if that fails", async () => {

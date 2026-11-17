@@ -168,3 +168,15 @@ export function reviewText(item: Pick<ReviewItem, "group" | "text">): string {
   const colon = item.text.indexOf(":");
   return colon < 0 ? factLabel(item.text) : factLabel(item.text.slice(0, colon)) + item.text.slice(colon);
 }
+
+/** rh 0.8.12 marks a filing that would create a topic by ending the text with `(new topic)` and puts the name in `after`. */
+export function filingCreatesTopic(item: Pick<ReviewItem, "group" | "text">): boolean {
+  return item.group === "filing" && item.text.trimEnd().endsWith("(new topic)");
+}
+
+/** The topic name a filing would create. `after` is that name; older rows only have it in the text. */
+export function filingTopicName(item: Pick<ReviewItem, "text" | "after">): string {
+  const named = item.after?.trim();
+  if (named) return named;
+  return item.text.trimEnd().replace(/\s*\(new topic\)\s*$/, "").replace(/^→\s*/, "").trim();
+}
