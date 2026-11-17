@@ -1,5 +1,5 @@
 import { DeviceApproval } from "../components/device-login";
-import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/format";
+import { ago, shortDate, time } from "@rivethub/client-runtime/format";
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
@@ -11,6 +11,7 @@ import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
 import { harnessAction } from "../lib/connections";
 import { listSentence } from "../lib/format";
+import { describeMemoryRole, memoryRoleStatus } from "../lib/memoryRole";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
 import { SERVERS_KEY, shareServerStatus, shareServerTitle, TeamForm } from "../share/destination";
@@ -157,19 +158,7 @@ function recallLine(h: HarnessStatus): { text: string; color: string } {
 
 /** A job with no model is switched off, not broken: capture and word search work without any model. */
 const unset = (j: ModelJob) => j.health === "unconfigured";
-const healthColor = (j: ModelJob) => (j.health === "healthy" ? ok : unset(j) ? dim : j.health === "slow" ? warn : "var(--error)");
-const ownModel = (j: ModelJob) => [j.provider, j.model].filter(Boolean).join(" · ");
-const modelLabel = (j: ModelJob, all: ModelJob[]) => {
-  if (unset(j)) return "Not set";
-  // The embedder's endpoint is its own, even when the hub also marks the role as inheriting.
-  if (j.role === "embedder") return ownModel(j) || "Not set";
-  if (j.inheritsDefault) {
-    const d = all.find((x) => x.role === "default");
-    return `Default${d?.model ? ` · ${d.provider} ${d.model}` : ""}`;
-  }
-  return ownModel(j) || "Not set";
-};
-const jobStatus = (j: ModelJob) => `${j.detail}${j.queued ? ` · ${j.queued} waiting` : ""}`;
+const stateColor = (state: string) => (state === "Running" ? ok : state === "No model set" ? dim : state === "Failing" ? "var(--error)" : warn);
 
 const header = (line: string) => line.startsWith("---") || line.startsWith("+++");
 
@@ -247,14 +236,15 @@ export function Connections({ phone }: { phone: boolean }) {
   const hs = showAll || here.length === 0 ? every : here;
   const hidden = every.length - hs.length;
   const js = jobs.data;
+  const readings = js.map((job) => describeMemoryRole(job, js));
   const actionable = hs.flatMap((h) => {
     const action = harnessAction(h);
     return action ? [{ h, action }] : [];
   });
-  const slow = js.filter((j) => j.health !== "healthy" && !unset(j));
+  const trouble = readings.filter((reading) => reading.state !== "Running" && reading.state !== "No model set");
   const issues = [
     ...actionable.map(({ h, action }) => action.part === "recall" ? `${h.name} recall is not connected` : `${h.name} is not connected`),
-    ...slow.map((j) => `the ${readableName(j.role).toLowerCase()} is ${j.health}`),
+    ...trouble.map((reading) => `the ${reading.name.toLowerCase()} is ${reading.state.toLowerCase()}`),
   ];
   const firstFix = actionable[0];
   const issueText = listSentence(issues);
@@ -358,20 +348,23 @@ export function Connections({ phone }: { phone: boolean }) {
         )}
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
-            {js.filter((j) => j.role !== "default").map((j) => (
-              <div key={j.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
-                <span className="flex flex-1 flex-col"><span>{readableName(j.role)}</span><span className="text-[12px] text-muted-foreground">{modelLabel(j, js)}</span></span>
-                <span className="text-[12px]" style={{ color: healthColor(j) }}>{j.health === "healthy" ? "OK" : unset(j) ? "Not set" : j.health === "slow" ? "Slow" : "Failing"}</span>
+            {readings.filter((reading) => reading.role !== "default").map((reading) => (
+              <div key={reading.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span>{reading.name}</span>
+                  <span className="break-all text-[12px] text-muted-foreground">{reading.modelLine}</span>
+                  <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
+                </span>
               </div>
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
-            {js.map((j) => (
-              <div key={j.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: j.health === "healthy" || unset(j) ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
-                <span className="flex items-center justify-between"><span className="font-semibold">{readableName(j.role)}</span><Dot color={healthColor(j)} size={7} /></span>
-                <span className="text-[13px]">{modelLabel(j, js)}</span>
-                <span className="text-[12px]" style={{ color: healthColor(j) }}>{jobStatus(j)}</span>
+            {readings.map((reading) => (
+              <div key={reading.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: reading.state === "Running" || reading.state === "No model set" ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
+                <span className="flex items-center justify-between"><span className="font-semibold">{reading.name}</span><Dot color={stateColor(reading.state)} size={7} /></span>
+                <span className="break-all text-[13px]">{reading.modelLine}</span>
+                <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
               </div>
             ))}
           </div>

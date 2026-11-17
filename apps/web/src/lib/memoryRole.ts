@@ -21,6 +21,7 @@ const ROLE_NAME: Record<string, string> = {
 };
 
 export interface MemoryRoleReading {
+  role: string;
   name: string;
   /** Provider and model, "Default · …" only when the role inherits one, or "No model set". */
   modelLine: string;
@@ -75,6 +76,7 @@ export function describeMemoryRole(job: ModelJob, roles: readonly ModelJob[]): M
   const modelLine = modelLineOf(job, roles);
   const outage = job.outage?.trim() || undefined;
   return {
+    role: job.role,
     name,
     modelLine,
     state: stateOf(job, modelLine),

@@ -147,10 +147,31 @@ describe("Connections", () => {
     expect(screen.getByText(/hub's configuration/)).toBeInTheDocument();
 
     const wiki = screen.getByText("Wiki writer").parentElement!.parentElement!;
-    expect(wiki).toHaveTextContent("Not set");
+    expect(wiki).toHaveTextContent("No model set");
     expect(wiki).not.toHaveTextContent("opus");
     expect(wiki).not.toHaveTextContent(/Default ·/);
     expect(screen.getByText("Summarizer").parentElement!.parentElement).toHaveTextContent("Default · claude-cli opus");
+  });
+
+  it("shows the same state and outage, and not Default when the role has its own model", async () => {
+    renderWith("/settings/connections", (c) => ({
+      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, canConnect: false, capture: { ...h.capture, state: "receiving" as const }, recall: { state: "connected" as const, detail: "yes" } })),
+      modelJobs: async () => [
+        { role: "summarizer", provider: "gpubox", model: "thinkingcap-flash-next", inheritsDefault: false, health: "healthy", detail: "idle", queued: 0 },
+        { role: "categorizer", provider: "gpubox", model: "thinkingcap-flash-next", inheritsDefault: false, health: "failing", detail: "stopped", queued: 1628, outage: "the worker stopped claiming" },
+        { role: "wiki-writer", inheritsDefault: false, health: "not-running", detail: "not running", queued: 27 },
+      ],
+    }));
+    const summarizer = (await screen.findByText("Summarizer")).parentElement!.parentElement!;
+    expect(summarizer).toHaveTextContent("gpubox · thinkingcap-flash-next");
+    expect(summarizer).toHaveTextContent("Running · 0 waiting");
+    expect(summarizer).not.toHaveTextContent(/Default ·/);
+    const categorizer = screen.getByText("Categorizer").parentElement!.parentElement!;
+    expect(categorizer).toHaveTextContent("Failing · 1,628 waiting · the worker stopped claiming");
+    const wiki = screen.getByText("Wiki writer").parentElement!.parentElement!;
+    expect(wiki).toHaveTextContent("No model set");
+    expect(wiki).toHaveTextContent("Not running · 27 waiting");
+    expect(wiki).not.toHaveTextContent(/Default ·/);
   });
 });
 

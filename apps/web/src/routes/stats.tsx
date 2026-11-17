@@ -45,7 +45,7 @@ const grid = "grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5";
 
 function readingFor(id: WorkerId, jobs: ModelJob[]): MemoryRoleReading {
   const role = jobs.find((job) => job.role === STATS_WORKER_ROLE[id]);
-  return role ? describeMemoryRole(role, jobs) : { name: workerName[id].name, modelLine: "No model set", state: "No model set", waiting: 0, problem: "" };
+  return role ? describeMemoryRole(role, jobs) : { role: STATS_WORKER_ROLE[id], name: workerName[id].name, modelLine: "No model set", state: "No model set", waiting: 0, problem: "" };
 }
 
 const workerTrouble = (state: string) => state === "Failing" || state === "Slow" || state === "Not running";
