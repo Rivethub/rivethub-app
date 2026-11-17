@@ -36,7 +36,9 @@ for (const phone of [false, true]) {
       }));
       const fullDetail = await screen.findByTitle(detail);
       expect(fullDetail).toHaveClass("truncate");
-      const action = screen.getByRole("button", { name: phone ? /Test harness.*tap to connect/ : "Connect Test harness" });
+      const action = phone
+        ? screen.getByRole("button", { name: /Test harness.*tap to connect/ })
+        : within(screen.getByRole("table")).getByRole("button", { name: "Connect Test harness" });
       expect(action).toBeEnabled();
       if (!phone) expect(screen.getByRole("table")).toHaveClass("table-fixed");
       await userEvent.setup().click(action);
@@ -154,7 +156,7 @@ describe("model jobs that are off or behind", () => {
 
   it("does not call a hub with no model broken", async () => {
     renderWith("/settings/connections", c => ({
-      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capture: { ...h.capture, state: "receiving" } })),
+      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, canConnect: false, capture: { ...h.capture, state: "receiving" as const }, recall: { state: "connected" as const, detail: "yes" } })),
       modelJobs: async () => ["default", "summarizer", "categorizer"].map((role) => job(role, "unconfigured")),
     }));
     expect(await screen.findByText("No model is set.")).toBeInTheDocument();
@@ -163,7 +165,7 @@ describe("model jobs that are off or behind", () => {
 
   it("still lists a job that is slow or failing", async () => {
     renderWith("/settings/connections", c => ({
-      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capture: { ...h.capture, state: "receiving" } })),
+      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, canConnect: false, capture: { ...h.capture, state: "receiving" as const }, recall: { state: "connected" as const, detail: "yes" } })),
       modelJobs: async () => [job("summarizer", "unconfigured"), job("categorizer", "slow", 12)],
     }));
     expect((await screen.findByText(/1 thing to fix/)).parentElement).toHaveTextContent("The categorizer is slow.");

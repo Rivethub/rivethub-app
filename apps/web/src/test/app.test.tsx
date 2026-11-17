@@ -128,8 +128,8 @@ describe("Connect", () => {
   it("shows the dry-run diff first and writes only when Connect is pressed", async () => {
     const { user, client } = renderAt("/settings/connections");
     const connect = vi.spyOn(client, "connectHarness");
-    const fix = (await screen.findAllByRole("button", { name: /Fix/ }))[0]!;
-    await user.click(fix);
+    const connectButton = await screen.findByRole("button", { name: "Connect opencode" });
+    await user.click(connectButton);
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
     expect(connect.mock.calls[0]![2]).toEqual({ dryRun: true });

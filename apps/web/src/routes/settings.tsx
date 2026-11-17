@@ -9,6 +9,7 @@ import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
+import { harnessAction } from "../lib/connections";
 import { listSentence } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
@@ -143,8 +144,8 @@ const dim = "var(--muted-foreground)";
 function captureLine(h: HarnessStatus): { text: string; color: string } {
   const when = h.capture.lastCaptureAt ? ago(h.capture.lastCaptureAt) : "";
   if (h.capture.state === "receiving") return { text: `Yes${when ? ` · ${when}` : ""}`, color: ok };
-  if (h.capture.state === "stale") return { text: `Stopped${when ? ` · ${when}` : ""}`, color: warn };
-  if (h.capture.state === "idle") return { text: "Ready · nothing captured yet", color: dim };
+  // Wired and quiet. Today's hub calls that stale. A hub that stops treating idle as stopped calls it idle.
+  if (h.capture.state === "stale" || h.capture.state === "idle") return { text: when ? `Last captured ${when}` : "Ready · nothing captured yet", color: dim };
   return { text: h.capture.state === "not-connected" ? "Not connected" : h.capture.state, color: dim };
 }
 
@@ -153,15 +154,6 @@ function recallLine(h: HarnessStatus): { text: string; color: string } {
   if (h.recall.state === "elsewhere") return { text: h.recall.detail, color: dim };
   return { text: h.recall.state === "not-connected" ? "Not connected" : h.recall.state, color: dim };
 }
-
-function harnessAction(h: HarnessStatus): { label: string; part: "capture" | "recall" } | null {
-  if (!h.canConnect) return null;
-  if (h.capture.state === "stale") return { label: "Fix", part: "capture" };
-  if (h.capture.state === "not-connected") return { label: "Connect", part: "capture" };
-  if (h.recall.state === "not-connected") return { label: "Connect recall", part: "recall" };
-  return null;
-}
-
 
 /** A job with no model is switched off, not broken: capture and word search work without any model. */
 const unset = (j: ModelJob) => j.health === "unconfigured";
@@ -240,10 +232,16 @@ export function Connections({ phone }: { phone: boolean }) {
   const hs = showAll || here.length === 0 ? every : here;
   const hidden = every.length - hs.length;
   const js = jobs.data;
-  const stale = hs.filter((h) => h.capture.state === "stale");
+  const actionable = hs.flatMap((h) => {
+    const action = harnessAction(h);
+    return action ? [{ h, action }] : [];
+  });
   const slow = js.filter((j) => j.health !== "healthy" && !unset(j));
-  const issues = [...stale.map((h) => `${h.name} stopped sending sessions`), ...slow.map((j) => `the ${readableName(j.role).toLowerCase()} is ${j.health}`)];
-  const firstFix = stale.find((h) => h.canConnect);
+  const issues = [
+    ...actionable.map(({ h, action }) => action.part === "recall" ? `${h.name} recall is not connected` : `${h.name} is not connected`),
+    ...slow.map((j) => `the ${readableName(j.role).toLowerCase()} is ${j.health}`),
+  ];
+  const firstFix = actionable[0];
   const issueText = listSentence(issues);
 
   const banner = issues.length > 0 && (
@@ -252,7 +250,7 @@ export function Connections({ phone }: { phone: boolean }) {
       <span className={cx("flex-1 leading-[1.4]", !phone && "min-w-60")}>
         {!phone && issues.length === 1 ? "Mostly healthy. " : ""}<b>{issues.length} thing{issues.length === 1 ? "" : "s"} to fix{phone ? "." : ":"}</b> {issueText[0]!.toUpperCase() + issueText.slice(1)}.
       </span>
-      {firstFix && <Button variant="primary" size={phone ? "lg" : "md"} className={phone ? "font-semibold" : ""} onClick={() => setConnecting({ h: firstFix, part: "capture" })}>{phone ? "Fix" : `Fix ${firstFix.name}`}</Button>}
+      {firstFix && <Button variant="primary" size={phone ? "lg" : "md"} className={phone ? "font-semibold" : ""} aria-label={`${firstFix.action.label} ${firstFix.h.name}`} onClick={() => setConnecting({ h: firstFix.h, part: firstFix.action.part })}>{phone ? firstFix.action.label : `${firstFix.action.label} ${firstFix.h.name}`}</Button>}
     </div>
   );
 
@@ -306,7 +304,7 @@ export function Connections({ phone }: { phone: boolean }) {
                   const rec = recallLine(h);
                   const action = harnessAction(h);
                   return (
-                    <tr key={h.id} className="border-t border-border" style={h.capture.state === "stale" ? { background: "color-mix(in srgb, var(--warning) 6%, transparent)" } : undefined}>
+                    <tr key={h.id} className="border-t border-border">
                       <th scope="row" className="px-3.5 py-2.5 text-left font-normal">
                         <span className="flex min-w-0 flex-col gap-px">
                           <span className="font-medium">{h.name}</span>

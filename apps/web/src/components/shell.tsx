@@ -4,6 +4,7 @@ import type { Hub } from "@rivethub/contracts";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount, useHarnesses, useHubs, useLibraryCounts, useMe, useMemoryStats, useModelJobs, usePins, useReviewQueue } from "../client/queries";
+import { harnessAction } from "../lib/connections";
 import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
 import { useTheme, THEMES } from "../theme";
@@ -299,7 +300,7 @@ function HubSheet({ hubs, onClose }: { hubs: Hub[]; onClose: () => void }) {
   const jobs = useModelJobs().data;
   const account = useAccount().data;
   const theme = useTheme();
-  const toFix = (harnesses?.filter((h) => h.capture.state === "stale").length ?? 0) + (jobs?.filter((j) => j.health !== "healthy").length ?? 0);
+  const toFix = (harnesses?.filter((h) => harnessAction(h)).length ?? 0) + (jobs?.filter((j) => j.health !== "healthy").length ?? 0);
   const rows = [
     { label: "Connections", section: "connections", hint: toFix ? `${toFix} to fix` : "", color: "var(--warning)" },
     { label: "Account and updates", section: "account", hint: account?.pendingUpdate ? `${account.pendingUpdate.version} ready` : "", color: "var(--info)" },
