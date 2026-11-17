@@ -29,6 +29,35 @@ beforeEach(() => {
   clearDecisionError();
 });
 
+describe("Guide steps", () => {
+  it("marks a step done or dismisses it, and either one counts toward 10 of 10", async () => {
+    localStorage.setItem("rivethub.journey", JSON.stringify({ done: ["palette"], hidden: false }));
+    const { user } = renderWith("/guide", () => ({ pins: async () => [] }));
+    const pin = (await screen.findByText("Pin what you come back to")).closest("li")!;
+    expect(within(pin).getByRole("link", { name: "Pin a topic" })).toHaveAttribute("href", "/topics");
+    expect(pin).toHaveTextContent(", not done yet");
+    const share = screen.getByRole("link", { name: "Share a session" }).closest("li")!;
+    expect(share).toHaveTextContent("Share a session");
+    await user.click(within(pin).getByRole("link", { name: "Pin a topic" }));
+    await user.click(await screen.findByRole("link", { name: /^Guide/ }));
+    const pinAgain = (await screen.findByText("Pin what you come back to")).closest("li")!;
+    expect(pinAgain).toHaveTextContent(", not done yet");
+    await user.click(within(pinAgain).getByRole("button", { name: "Dismiss Pin what you come back to" }));
+    expect(pinAgain).toHaveTextContent("Dismissed");
+    expect(pinAgain).toHaveTextContent(", done");
+    const palette = screen.getByText("Jump anywhere with Ctrl K").closest("li")!;
+    expect(palette).toHaveTextContent(", done");
+    for (;;) {
+      const marks = screen.queryAllByRole("button", { name: /^Mark / });
+      if (!marks.length) break;
+      await user.click(marks[0]!);
+    }
+    expect(screen.getByText("You have done every step. The rest is using it.")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Guide progress" })).toHaveAttribute("aria-valuenow", "10");
+    expect(screen.getByRole("progressbar", { name: "Guide progress" })).toHaveAttribute("aria-valuemax", "10");
+  });
+});
+
 describe("Hub footer", () => {
   it("names the space beside the local hub", async () => {
     renderWith("/", () => ({}));
