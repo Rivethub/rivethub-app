@@ -179,4 +179,15 @@ describe("model jobs that are off or behind", () => {
     expect(await screen.findByText("The categorizer is behind, with 1,519 waiting.")).toBeInTheDocument();
     expect(screen.queryByText(/embedder/)).not.toBeInTheDocument();
   });
+
+  it("names a worker that is not running while jobs wait, and ignores one with no model", async () => {
+    renderWith("/", c => ({
+      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, capture: { ...h.capture, state: "receiving" } })),
+      modelJobs: async () => [job("summarizer", "unconfigured", 40), job("categorizer", "not-running", 1628), job("wiki-writer", "not-running", 0)],
+    }));
+    const line = await screen.findByText("The categorizer is not running, with 1,628 waiting.");
+    const status = line.closest("[role=status]")!;
+    expect(status).not.toHaveTextContent(/summarizer/);
+    expect(status).not.toHaveTextContent(/wiki/i);
+  });
 });

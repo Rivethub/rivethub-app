@@ -1,5 +1,5 @@
 import { SubjectType } from "../components/subject-type";
-import { count, filingCreatesTopic, filingTopicName, reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
+import { filingCreatesTopic, filingTopicName, reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useDecide, useDecisionError, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
@@ -7,6 +7,7 @@ import { NextStep } from "../components/journey";
 import { Frame, MainSidebar, MobileHeader } from "../components/shell";
 import { Button, Dot, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
 import { changeKind, listSentence, reviewKindLabel, subjectHref } from "../lib/format";
+import { describeMemoryRole } from "../lib/memoryRole";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/");
@@ -48,7 +49,8 @@ function Lede({ digest, phone }: { digest: TodayDigest; phone?: boolean }) {
 
 /**
  * One line, only when memory is not being fed or worked on properly: a tool
- * stopped sending sessions, nothing is connected, or a model job is failing.
+ * stopped sending sessions, nothing is connected, a model is failing, or a
+ * worker is not running while jobs wait. A hub with no model is not broken.
  * Silent when all is well.
  */
 function Health({ phone }: { phone?: boolean }) {
@@ -58,14 +60,12 @@ function Health({ phone }: { phone?: boolean }) {
   const stale = harnesses.filter((h) => h.capture.state === "stale");
   // A tool that is set up and has sent nothing yet is not sending, and has not stopped either.
   const none = !harnesses.some((h) => h.capture.state === "receiving" || h.capture.state === "stale");
-  const failing = (jobs ?? []).filter((j) => j.health === "failing");
-  // A job that is in trouble while work piles up behind it is not keeping up, whatever the hub calls it.
-  const behind = (jobs ?? []).filter((j) => j.health === "slow" && j.queued > 0);
+  const roles = jobs ?? [];
+  const roleProblems = roles.map((job) => describeMemoryRole(job, roles).problem).filter(Boolean);
   const problems = [
     none ? "No tool is sending sessions yet" : "",
     stale.length ? `${stale.map((h) => h.name).join(" and ")} stopped sending sessions` : "",
-    failing.length ? `the ${failing.map((j) => j.role).join(" and ")} ${failing.length === 1 ? "model is" : "models are"} failing` : "",
-    behind.length ? `the ${behind.map((j) => j.role).join(" and ")} ${behind.length === 1 ? "is" : "are"} behind, with ${count(behind.reduce((total, j) => total + j.queued, 0))} waiting` : "",
+    ...roleProblems,
   ].filter(Boolean);
   if (!problems.length) return null;
   const text = listSentence(problems);
