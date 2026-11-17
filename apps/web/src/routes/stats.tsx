@@ -22,7 +22,7 @@ function Tile({ label, value, note, tone, wrap }: { label: string; value: ReactN
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-card px-3.5 py-3">
       <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className={cx("leading-tight font-medium", wrap ? "break-all text-[15px]" : "text-[20px]", tone === "warn" && "text-warning")}>{value}</span>
+      <span className={cx("leading-tight font-medium", wrap ? "break-words text-[15px]" : "text-[20px]", tone === "warn" && "text-warning")}>{value}</span>
       {note && <span className="text-[12px] leading-[1.4] text-muted-foreground">{note}</span>}
     </div>
   );

@@ -352,7 +352,7 @@ export function Connections({ phone }: { phone: boolean }) {
               <div key={reading.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span>{reading.name}</span>
-                  <span className="break-all text-[12px] text-muted-foreground">{reading.modelLine}</span>
+                  <span className="break-words text-[12px] text-muted-foreground">{reading.modelLine}</span>
                   <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
                 </span>
               </div>
@@ -363,7 +363,7 @@ export function Connections({ phone }: { phone: boolean }) {
             {readings.map((reading) => (
               <div key={reading.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: reading.state === "Running" || reading.state === "No model set" ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
                 <span className="flex items-center justify-between"><span className="font-semibold">{reading.name}</span><Dot color={stateColor(reading.state)} size={7} /></span>
-                <span className="break-all text-[13px]">{reading.modelLine}</span>
+                <span className="break-words text-[13px]">{reading.modelLine}</span>
                 <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
               </div>
             ))}
