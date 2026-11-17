@@ -149,6 +149,11 @@ export interface TopicNode {
   id: TopicId;
   name: string;
   parentId?: TopicId;
+  /**
+   * Who the topic belongs to, when the hub says. The same string as `/api/me`'s `user` means the
+   * signed-in person. A different string is a teammate's topic.
+   */
+  owner?: string;
   sessionCount: number;
   lastActivity?: IsoTime;
   status: "open" | "closed";

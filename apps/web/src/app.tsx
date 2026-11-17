@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, type RouterHistory } from "@tanstack/react-router";
 import { useState } from "react";
 import { MemoryClientProvider, type AppClient } from "./client/context";
+import { TopicDragProvider } from "./components/topic-drag";
 import { makeRouter } from "./router";
 
 export function App({ client, history }: { client: AppClient; history?: RouterHistory }) {
@@ -10,7 +11,9 @@ export function App({ client, history }: { client: AppClient; history?: RouterHi
   return (
     <MemoryClientProvider client={client}>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <TopicDragProvider>
+          <RouterProvider router={router} />
+        </TopicDragProvider>
       </QueryClientProvider>
     </MemoryClientProvider>
   );

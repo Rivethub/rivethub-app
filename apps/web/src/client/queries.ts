@@ -164,7 +164,7 @@ export function useDecide() {
 export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
-    (a) => [keys.topic(a.id), keys.topicTree],
+    () => [keys.topicTree, ["topic"]],
   );
 export const useCreateTopic = () =>
   useWrite(

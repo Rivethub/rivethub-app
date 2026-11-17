@@ -42,6 +42,7 @@ export function buildTree(topics: wire.TopicSummary[]): TopicNode[] {
         id: topicId(topic.id),
         name: topic.name,
         parentId: topic.parent === undefined ? undefined : topicId(topic.parent),
+        owner: topic.owner,
         sessionCount: topic.sessionCount,
         lastActivity: topic.lastActive,
         status: topicStatus(topic),

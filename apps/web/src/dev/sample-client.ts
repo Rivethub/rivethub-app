@@ -36,6 +36,10 @@ function flatten(nodes: TopicNode[]): TopicNode[] {
   return nodes.flatMap((n) => [n, ...flatten(n.children)]);
 }
 
+function contains(node: TopicNode, id: string): boolean {
+  return node.children.some((child) => child.id === id || contains(child, id));
+}
+
 /**
  * An in-memory hub seeded from the design boards. Writes change its state
  * so screens react the way they will against a live hub.
@@ -287,6 +291,27 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     async updateTopic(id, patch) {
       const node = topicById().get(id);
       if (!node) throw new Error(`No topic ${id}`);
+      // topicTree() hands back this nested array, so a new parent has to move the node itself.
+      const nextParent = patch.parentId === null ? undefined : patch.parentId;
+      if (patch.parentId !== undefined && nextParent !== node.parentId) {
+        if (nextParent !== undefined) {
+          if (!topicById().has(nextParent)) throw new Error(`No topic ${nextParent}`);
+          if (nextParent === id || contains(node, nextParent)) throw new Error("a topic cannot move inside itself");
+        }
+        const pull = (nodes: TopicNode[]): boolean => {
+          const index = nodes.findIndex((item) => item.id === id);
+          if (index >= 0) {
+            nodes.splice(index, 1);
+            return true;
+          }
+          return nodes.some((item) => pull(item.children));
+        };
+        pull(tree);
+        if (nextParent === undefined) delete node.parentId;
+        else node.parentId = nextParent;
+        const parent = nextParent ? topicById().get(nextParent) : undefined;
+        (parent ? parent.children : tree).push(node);
+      }
       if (patch.name !== undefined) node.name = patch.name;
       if (patch.aliases !== undefined) extraFor(id).aliases = patch.aliases;
       if (patch.folder !== undefined) folders.set(id, patch.folder);

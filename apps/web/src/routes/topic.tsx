@@ -4,15 +4,17 @@ import type { TopicArticle, TopicId } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useClient } from "../client/context";
-import { useAddDecision, useCreateTopic, useTopic, useChanges, useTopicTree, useUpdateTopic } from "../client/queries";
+import { useAddDecision, useCreateTopic, useMe, useTopic, useChanges, useTopicTree, useUpdateTopic } from "../client/queries";
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, SidePanel, type Tab } from "../components/article";
 import { EditableText } from "../components/editable";
 import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library";
 import { articleBody, Markdown } from "../components/markdown";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
+import { MoveTopicButton, TopLevelDrop, TopicDragItem } from "../components/topic-drag";
 import { Button, Chip, ErrorNote, Eyebrow, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind, plural } from "../lib/format";
+import { findNode, topicIsMovable, topicPath } from "../lib/topic-move";
 import { useIsPhone } from "../lib/media";
 
 const route = getRouteApi("/topics/$topicId");
@@ -74,6 +76,8 @@ export function EmptyLibrary({ kind }: { kind: "topics" | "entities" }) {
 export function TopicsIndex() {
   const phone = useIsPhone();
   const tree = useTopicTree();
+  const me = useMe().data?.user;
+  const roots = tree.data ?? [];
   return (
     <Frame sidebar={<MainSidebar><TopicTreeSection /></MainSidebar>} tabs>
       {phone ? (
@@ -89,15 +93,18 @@ export function TopicsIndex() {
               <NewTopic />
             </div>
             <p className="m-0 text-muted-foreground">Every session is filed under a topic. Open one to read what your agents worked out there.</p>
-            {tree.data?.length === 0 && <EmptyLibrary kind="topics" />}
+            {roots.length === 0 && <EmptyLibrary kind="topics" />}
+            <TopLevelDrop tree={roots} me={me} />
             <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5">
-              {tree.data?.map((t) => (
-                <Link key={t.id} to="/topics/$topicId" params={{ topicId: t.id }} className="flex flex-col gap-1 rounded-[10px] border border-border bg-card p-3.5 text-foreground hover:no-underline">
-                  <span className="font-semibold">{t.name}</span>
-                  <span className="text-[12px] text-muted-foreground">
-                    {plural(t.sessionCount, "session")} · {plural(t.children.length, "subtopic")}{t.lastActivity ? ` · ${whenLabel(t.lastActivity)}` : ""}
-                  </span>
-                </Link>
+              {roots.map((t) => (
+                <TopicDragItem key={t.id} id={t.id} name={t.name} {...(t.owner ? { owner: t.owner } : {})} tree={roots} me={me} className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border bg-card">
+                  <Link draggable={false} to="/topics/$topicId" params={{ topicId: t.id }} className="flex min-w-0 flex-1 flex-col gap-1 p-3.5 text-foreground hover:no-underline">
+                    <span className="font-semibold">{t.name}</span>
+                    <span className="text-[12px] text-muted-foreground">
+                      {plural(t.sessionCount, "session")} · {plural(t.children.length, "subtopic")}{t.lastActivity ? ` · ${whenLabel(t.lastActivity)}` : ""}
+                    </span>
+                  </Link>
+                </TopicDragItem>
               ))}
             </div>
           </div>
@@ -120,11 +127,15 @@ export function TopicPage() {
     { id: "history", label: "History", count: history.data?.length || t?.decisions.length || 0 },
   ];
   const body = topic.isPending ? <Loading /> : topic.isError ? <ErrorNote error={topic.error} /> : null;
+  const tree = useTopicTree().data;
+  const fromTree = tree ? topicPath(tree, topicId) : [];
+  const path = fromTree.length ? fromTree : (t?.path ?? []);
+  const parentCrumb = path.length > 1 ? path[path.length - 2] : undefined;
 
   if (phone) {
     return (
       <Frame sidebar={null}>
-        <MobileBack to={t?.path.length && t.path.length > 1 ? `/topics/${t.path.at(-2)!.id}` : "/topics"} label={t?.path.slice(0, -1).map((p) => p.name).join(" › ") || "Topics"}>
+        <MobileBack to={parentCrumb ? `/topics/${parentCrumb.id}` : "/topics"} label={path.slice(0, -1).map((p) => p.name).join(" › ") || "Topics"}>
           {t && <PinButton subject={{ kind: "topic", id: t.id, title: t.name }} className="size-11" />}
         </MobileBack>
         {body ?? (
@@ -145,7 +156,7 @@ export function TopicPage() {
     <Frame sidebar={<MainSidebar><TopicTreeSection selected={topicId} /></MainSidebar>}>
       {body ?? (
         <>
-          <ArticleBar crumbs={<Crumbs items={t!.path.map((p, i) => (i < t!.path.length - 1 ? { label: p.name, to: `/topics/${p.id}` } : { label: p.name }))} />}>
+          <ArticleBar crumbs={<Crumbs items={path.map((p, i) => (i < path.length - 1 ? { label: p.name, to: `/topics/${p.id}` } : { label: p.name }))} />}>
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ tab: id })} />
             <span className="ml-2 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px]" title="Who can see this topic"><VisibilityName value={t!.visibility} /></span>
             <PinButton subject={{ kind: "topic", id: t!.id, title: t!.name }} />
@@ -195,6 +206,10 @@ function TopicTab({ t, tab }: { t: TopicArticle; tab: TabId }) {
 function TopicOverview({ t }: { t: TopicArticle }) {
   const add = useAddDecision();
   const [draft, setDraft] = useState("");
+  const tree = useTopicTree().data;
+  const me = useMe().data?.user;
+  const place = tree ? findNode(tree, t.id) : undefined;
+  const subs = place?.node.children;
   const body = t.article ? articleBody(t.article, t.name) : "";
   return (
     <>
@@ -227,16 +242,25 @@ function TopicOverview({ t }: { t: TopicArticle }) {
           </label>
         </form>
       </div>
-      {t.subtopics.length > 0 && (
+      {(subs ? subs.length > 0 : t.subtopics.length > 0) && (
         <>
           <H2>Inside this topic</H2>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2 font-sans text-[14px]">
-            {t.subtopics.map((s) => (
-              <Link key={s.id} to="/topics/$topicId" params={{ topicId: s.id }} className="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2.5 text-foreground hover:no-underline">
-                <span className="font-medium">{s.name}</span>
-                <span className="text-[12px] text-muted-foreground">{s.state}</span>
-              </Link>
-            ))}
+            {subs && tree
+              ? subs.map((s) => (
+                  <TopicDragItem key={s.id} id={s.id} name={s.name} {...(s.owner ? { owner: s.owner } : {})} tree={tree} me={me} className="flex flex-wrap items-center rounded-lg border border-border bg-card">
+                    <Link draggable={false} to="/topics/$topicId" params={{ topicId: s.id }} className="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2.5 text-foreground hover:no-underline">
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-[12px] text-muted-foreground">{s.status === "closed" ? "Closed" : "Open"} · {plural(s.sessionCount, "session")}</span>
+                    </Link>
+                  </TopicDragItem>
+                ))
+              : t.subtopics.map((s) => (
+                  <Link key={s.id} to="/topics/$topicId" params={{ topicId: s.id }} className="flex flex-col gap-0.5 rounded-lg border border-border bg-card px-3 py-2.5 text-foreground hover:no-underline">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-[12px] text-muted-foreground">{s.state}</span>
+                  </Link>
+                ))}
           </div>
         </>
       )}
@@ -270,11 +294,27 @@ function TopicHistory({ t }: { t: TopicArticle }) {
 
 function TopicSide({ t }: { t: TopicArticle }) {
   const update = useUpdateTopic();
-  const parent = t.path.at(-2);
+  const tree = useTopicTree().data;
+  const me = useMe().data?.user;
+  const place = tree ? findNode(tree, t.id) : undefined;
+  const parent = place ? place.parent : t.path.at(-2);
+  const owner = place?.node.owner;
   const save = (patch: Parameters<typeof update.mutate>[0]["patch"]) => update.mutate({ id: t.id, patch });
   const [alias, setAlias] = useState<string | null>(null);
   const rows: { k: string; v: React.ReactNode }[] = [
-    { k: "Inside", v: parent ? <Link to="/topics/$topicId" params={{ topicId: parent.id }}>{parent.name}</Link> : <span className="text-muted-foreground">Top level</span> },
+    {
+      k: "Inside",
+      v: (
+        <span className="flex flex-wrap items-center gap-2">
+          {parent ? <Link to="/topics/$topicId" params={{ topicId: parent.id }}>{parent.name}</Link> : <span className="text-muted-foreground">Top level</span>}
+          {topicIsMovable(owner, me) ? (
+            <MoveTopicButton id={t.id} name={t.name} {...(owner ? { owner } : {})} />
+          ) : (
+            owner && <span className="text-muted-foreground">This is {owner}’s topic. Only they can move it.</span>
+          )}
+        </span>
+      ),
+    },
     { k: "Folder", v: <EditableText label="Folder" mono value={t.folder ?? ""} placeholder="No folder" onSave={(v) => save({ folder: v || null })} /> },
     { k: "Status", v: t.status === "open" ? "Open" : "Closed" },
     { k: "Shared", v: <VisibilityName value={t.visibility} /> },
