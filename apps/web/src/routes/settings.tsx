@@ -426,7 +426,17 @@ function AccountCard({ account }: { account: Account }) {
 function DangerZone({ signedIn }: { signedIn: boolean }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const deleteAccount = useDeleteAccount();
-  if (!signedIn) return null;
+  const accountUrl = deleteAccount.data?.accountUrl;
+  if (!signedIn) {
+    // The node is signed out; the account itself is deleted in the cloud, so the link has to outlive the sign-out.
+    if (!accountUrl) return null;
+    return (
+      <section aria-label="Finish deleting your account" className="flex flex-col gap-2 rounded-xl border border-error/40 p-4">
+        <p className="m-0 text-error">This node is signed out. Your account still exists until you delete it in your cloud account settings.</p>
+        <a href={accountUrl} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby="danger-h" className="flex flex-col gap-3">
       <h2 id="danger-h" className="m-0 text-[15px] font-semibold text-error">Danger</h2>
@@ -441,7 +451,7 @@ function DangerZone({ signedIn }: { signedIn: boolean }) {
         ) : (
           <Button variant="danger" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
         )}
-        <a href={deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
+        <a href={accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
         {deleteAccount.error != null && <ErrorNote error={deleteAccount.error} />}
       </div>
     </section>

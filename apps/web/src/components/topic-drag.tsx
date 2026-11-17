@@ -66,6 +66,9 @@ export function TopicDragProvider({ children }: { children: ReactNode }) {
     (id: TopicId, parentId: TopicId | null, me: string | undefined) => {
       const tree = qc.getQueryData<TopicNode[]>(keys.topicTree) ?? [];
       if (dropReason(tree, id, parentId, me) !== null) return;
+      // The move re-mounts the dragged row, so its `dragend` may never reach React.
+      setDragging(null);
+      setHover(null);
       const name = findNode(tree, id)?.node.name ?? "Topic";
       const previous = tree;
       qc.setQueryData(keys.topicTree, relocate(tree, id, parentId));

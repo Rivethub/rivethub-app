@@ -103,10 +103,13 @@ export function useDecisionError(): string | null {
   );
 }
 
+const DECIDE = ["decide"] as const;
+
 export function useDecide() {
   const client = useClient();
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: DECIDE,
     mutationFn: (a: { id: ReviewItemId; decision: ReviewDecision }) => {
       if (a.decision.kind !== "later") markStep("review");
       return client.decide(a.id, a.decision);
@@ -157,6 +160,8 @@ export function useDecide() {
     },
     onSuccess: () => setDecisionError(null),
     onSettled: () => {
+      // A refetch while other decisions are still in flight would bring their items back.
+      if (qc.isMutating({ mutationKey: DECIDE }) > 1) return;
       for (const queryKey of memoryWideKeys) void qc.invalidateQueries({ queryKey });
     },
   });
@@ -164,7 +169,8 @@ export function useDecide() {
 export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
-    () => [keys.topicTree, ["topic"]],
+    // A move changes the path shown on sessions and Today as well.
+    (a) => ("parentId" in a.patch ? memoryWideKeys : [keys.topicTree, ["topic"]]),
   );
 export const useCreateTopic = () =>
   useWrite(

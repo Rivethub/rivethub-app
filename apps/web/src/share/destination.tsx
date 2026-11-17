@@ -1,6 +1,7 @@
 import type { ShareLoginStep, ShareServer } from "@rivethub/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { withFreshLogin } from "../client/auth";
 import { useShareClient } from "../client/context";
 import { Button, cx, Loading } from "../components/ui";
 import { describeFailure, type Failure } from "./failure";
@@ -176,8 +177,7 @@ export function TeamForm({ onSignedIn, onFail }: { onSignedIn: (origin: string) 
         const sent = { kind: "team" as const, origin: origin.trim(), token: token.trim() };
         setToken("");
         setBusy(true);
-        share
-          .login(sent)
+        withFreshLogin(() => share.login(sent))
           .then((step) => {
             if (step.state === "signed-in") {
               setOpen(false);

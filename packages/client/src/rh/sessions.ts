@@ -288,6 +288,8 @@ interface StoredRow {
   content: string;
   createdAt?: IsoTime | undefined;
   toolName?: string | undefined;
+  toolArgs?: Record<string, unknown> | undefined;
+  toolResult?: string | undefined;
 }
 
 function storedTurns(messages: StoredRow[], imported: boolean): TranscriptTurn[] {
@@ -298,7 +300,17 @@ function storedTurns(messages: StoredRow[], imported: boolean): TranscriptTurn[]
       index: i + 1,
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: toolWhat(message.toolName, content) } : said(message.role, content)],
+      parts: [
+        tool
+          ? {
+              kind: "tool",
+              name: message.toolName ?? "tool",
+              summary: toolWhat(message.toolName, content),
+              ...(message.toolArgs ? { input: message.toolArgs } : {}),
+              ...(message.toolResult ? { result: message.toolResult } : {}),
+            }
+          : said(message.role, content),
+      ],
     };
   });
 }
