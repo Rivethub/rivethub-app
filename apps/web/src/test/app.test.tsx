@@ -1,7 +1,9 @@
+import { ReauthRequiredError } from "@rivethub/client";
+import type { RivetHubDesktop } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import { createSampleClient } from "../dev/sample-client";
 import { applyStoredTheme } from "../theme";
@@ -162,6 +164,52 @@ describe("Account", () => {
     await within(card).findByText("Not signed in");
     expect(del).toHaveBeenCalledOnce();
   }, 12000);
+
+  afterEach(() => {
+    delete (window as { rivethub?: RivetHubDesktop }).rivethub;
+    vi.unstubAllGlobals();
+  });
+
+  it("refreshes a stale desktop sign-in and then shows the device code", async () => {
+    const relogin = vi.fn(async () => "once");
+    (window as { rivethub?: RivetHubDesktop }).rivethub = { relogin, updates: {} as RivetHubDesktop["updates"] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ csrf: "fresh" }), { status: 200 })));
+    const { user, client } = renderAt("/settings/account");
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await screen.findByText("Not signed in");
+    let calls = 0;
+    vi.spyOn(client, "signIn").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) throw new ReauthRequiredError("/api/account/signin");
+      return { userCode: "RVTB-HUBS", verificationUri: "https://rivethub.cloud/device", expiresIn: 600, pollIntervalMs: 60_000 };
+    });
+    await user.click(screen.getByRole("button", { name: "Sign in with your RivetHub account" }));
+    expect(await screen.findByText("RVTB-HUBS")).toBeInTheDocument();
+    expect(screen.queryByText(/\/api\//)).not.toBeInTheDocument();
+    expect(relogin).toHaveBeenCalledOnce();
+    expect(calls).toBe(2);
+  });
+
+  it("says what to do when this page cannot refresh a stale sign-in", async () => {
+    const { user, client } = renderAt("/settings/account");
+    vi.spyOn(client, "signOut").mockRejectedValue(new ReauthRequiredError("/api/account/signout"));
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("more than five minutes old");
+    expect(alert).toHaveTextContent("rh open");
+    expect(alert.textContent).not.toMatch(/\/api\//);
+  });
+
+  it("says what to do when deletion needs a fresh sign-in and this page cannot refresh it", async () => {
+    const { user, client } = renderAt("/settings/account");
+    const del = vi.spyOn(client, "deleteAccount").mockRejectedValue(new ReauthRequiredError("/api/account"));
+    await user.click(await screen.findByRole("button", { name: "Delete account…" }));
+    await user.click(screen.getByRole("button", { name: "Sign this node out" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("more than five minutes old");
+    expect(alert.textContent).not.toMatch(/\/api\//);
+    expect(del).toHaveBeenCalledOnce();
+  });
 });
 
 describe("History", () => {

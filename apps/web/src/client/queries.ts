@@ -16,6 +16,7 @@ import type {
   Visibility,
 } from "@rivethub/contracts";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { withFreshLogin } from "./auth";
 import { markStep } from "../lib/journey";
 import { useClient, type AppClient } from "./context";
 
@@ -114,8 +115,8 @@ export const useConnectHarness = () =>
   );
 export const useUpdateAccount = () =>
   useWrite((c, patch: Parameters<AppClient["updateAccount"]>[0]) => c.updateAccount(patch), () => [keys.account]);
-export const useSignOut = () => useWrite((c, _: void) => c.signOut(), () => [keys.account]);
-export const useDeleteAccount = () => useWrite((c, _: void) => c.deleteAccount(), () => [keys.account]);
+export const useSignOut = () => useWrite((c, _: void) => withFreshLogin(() => c.signOut()), () => [keys.account]);
+export const useDeleteAccount = () => useWrite((c, _: void) => withFreshLogin(() => c.deleteAccount()), () => [keys.account]);
 export const useSetPinned = () =>
   useWrite(
     (c, a: { ref: SubjectRef; pinned: boolean }) => (c.setPinned ? c.setPinned(a.ref, a.pinned) : Promise.resolve()),
