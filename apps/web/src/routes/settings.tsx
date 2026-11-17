@@ -1,6 +1,7 @@
 import { DeviceApproval } from "../components/device-login";
-import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/format";
+import { ago, shortDate, time } from "@rivethub/client-runtime/format";
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
@@ -8,9 +9,12 @@ import { MobileBack } from "../components/article";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
+import { harnessAction } from "../lib/connections";
 import { listSentence } from "../lib/format";
+import { describeMemoryRole, memoryRoleStatus } from "../lib/memoryRole";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
+import { SERVERS_KEY, shareServerStatus, shareServerTitle, TeamForm } from "../share/destination";
 import { ShareKeys } from "../share/keys";
 import { useDeviceSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
@@ -141,8 +145,8 @@ const dim = "var(--muted-foreground)";
 function captureLine(h: HarnessStatus): { text: string; color: string } {
   const when = h.capture.lastCaptureAt ? ago(h.capture.lastCaptureAt) : "";
   if (h.capture.state === "receiving") return { text: `Yes${when ? ` · ${when}` : ""}`, color: ok };
-  if (h.capture.state === "stale") return { text: `Stopped${when ? ` · ${when}` : ""}`, color: warn };
-  if (h.capture.state === "idle") return { text: "Ready · nothing captured yet", color: dim };
+  // Wired and quiet. Today's hub calls that stale. A hub that stops treating idle as stopped calls it idle.
+  if (h.capture.state === "stale" || h.capture.state === "idle") return { text: when ? `Last captured ${when}` : "Ready · nothing captured yet", color: dim };
   return { text: h.capture.state === "not-connected" ? "Not connected" : h.capture.state, color: dim };
 }
 
@@ -152,26 +156,9 @@ function recallLine(h: HarnessStatus): { text: string; color: string } {
   return { text: h.recall.state === "not-connected" ? "Not connected" : h.recall.state, color: dim };
 }
 
-function harnessAction(h: HarnessStatus): { label: string; part: "capture" | "recall" } | null {
-  if (!h.canConnect) return null;
-  if (h.capture.state === "stale") return { label: "Fix", part: "capture" };
-  if (h.capture.state === "not-connected") return { label: "Connect", part: "capture" };
-  if (h.recall.state === "not-connected") return { label: "Connect recall", part: "recall" };
-  return null;
-}
-
-
 /** A job with no model is switched off, not broken: capture and word search work without any model. */
 const unset = (j: ModelJob) => j.health === "unconfigured";
-const healthColor = (j: ModelJob) => (j.health === "healthy" ? ok : unset(j) ? dim : j.health === "slow" ? warn : "var(--error)");
-const modelLabel = (j: ModelJob, all: ModelJob[]) => {
-  if (j.inheritsDefault) {
-    const d = all.find((x) => x.role === "default");
-    return `Default${d?.model ? ` · ${d.provider} ${d.model}` : ""}`;
-  }
-  return [j.provider, j.model].filter(Boolean).join(" · ") || "Not set";
-};
-const jobStatus = (j: ModelJob) => `${j.detail}${j.queued ? ` · ${j.queued} waiting` : ""}`;
+const stateColor = (state: string) => (state === "Running" ? ok : state === "No model set" ? dim : state === "Failing" ? "var(--error)" : warn);
 
 const header = (line: string) => line.startsWith("---") || line.startsWith("+++");
 
@@ -225,10 +212,33 @@ function ConnectDialog({ harness, part, onClose }: { harness: HarnessStatus; par
 }
 
 export function Connections({ phone }: { phone: boolean }) {
-  const harnesses = useHarnesses();
-  const jobs = useModelJobs();
+  const harnesses = useHarnesses(true);
+  const jobs = useModelJobs(true);
   const [connecting, setConnecting] = useState<{ h: HarnessStatus; part: "capture" | "recall" } | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scannedAt, setScannedAt] = useState<number | null>(null);
+  // The query library refetches when the page becomes visible. A desktop window that was only behind
+  // another one stays visible, so coming back to it is a focus event.
+  const refetchHarnesses = harnesses.refetch;
+  const refetchJobs = jobs.refetch;
+  useEffect(() => {
+    const refresh = () => {
+      void refetchHarnesses({ cancelRefetch: false });
+      void refetchJobs({ cancelRefetch: false });
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refetchHarnesses, refetchJobs]);
+  async function rescan() {
+    setScanning(true);
+    try {
+      const result = await harnesses.refetch();
+      if (!result.isError) setScannedAt(Date.now());
+    } finally {
+      setScanning(false);
+    }
+  }
   if (harnesses.isPending || jobs.isPending) return <Loading />;
   if (harnesses.isError) return <ErrorNote error={harnesses.error} />;
   if (jobs.isError) return <ErrorNote error={jobs.error} />;
@@ -238,10 +248,17 @@ export function Connections({ phone }: { phone: boolean }) {
   const hs = showAll || here.length === 0 ? every : here;
   const hidden = every.length - hs.length;
   const js = jobs.data;
-  const stale = hs.filter((h) => h.capture.state === "stale");
-  const slow = js.filter((j) => j.health !== "healthy" && !unset(j));
-  const issues = [...stale.map((h) => `${h.name} stopped sending sessions`), ...slow.map((j) => `the ${readableName(j.role).toLowerCase()} is ${j.health}`)];
-  const firstFix = stale.find((h) => h.canConnect);
+  const readings = js.map((job) => describeMemoryRole(job, js));
+  const actionable = hs.flatMap((h) => {
+    const action = harnessAction(h);
+    return action ? [{ h, action }] : [];
+  });
+  const trouble = readings.filter((reading) => reading.state !== "Running" && reading.state !== "No model set");
+  const issues = [
+    ...actionable.map(({ h, action }) => action.part === "recall" ? `${h.name} recall is not connected` : `${h.name} is not connected`),
+    ...trouble.map((reading) => `the ${reading.name.toLowerCase()} is ${reading.state.toLowerCase()}`),
+  ];
+  const firstFix = actionable[0];
   const issueText = listSentence(issues);
 
   const banner = issues.length > 0 && (
@@ -250,7 +267,7 @@ export function Connections({ phone }: { phone: boolean }) {
       <span className={cx("flex-1 leading-[1.4]", !phone && "min-w-60")}>
         {!phone && issues.length === 1 ? "Mostly healthy. " : ""}<b>{issues.length} thing{issues.length === 1 ? "" : "s"} to fix{phone ? "." : ":"}</b> {issueText[0]!.toUpperCase() + issueText.slice(1)}.
       </span>
-      {firstFix && <Button variant="primary" size={phone ? "lg" : "md"} className={phone ? "font-semibold" : ""} onClick={() => setConnecting({ h: firstFix, part: "capture" })}>{phone ? "Fix" : `Fix ${firstFix.name}`}</Button>}
+      {firstFix && <Button variant="primary" size={phone ? "lg" : "md"} className={phone ? "font-semibold" : ""} aria-label={`${firstFix.action.label} ${firstFix.h.name}`} onClick={() => setConnecting({ h: firstFix.h, part: firstFix.action.part })}>{phone ? firstFix.action.label : `${firstFix.action.label} ${firstFix.h.name}`}</Button>}
     </div>
   );
 
@@ -262,7 +279,8 @@ export function Connections({ phone }: { phone: boolean }) {
         <div className="flex items-baseline gap-2.5">
           <h2 id="harnesses-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "HARNESSES · CAPTURE · RECALL" : "Harnesses"}</h2>
           {!phone && <span className="text-[12px] text-muted-foreground">{every.filter((h) => h.found).length} found on this machine</span>}
-          <Button size="xs" onClick={() => void harnesses.refetch()}>Rescan</Button>
+          {scannedAt !== null && <span className="text-[12px] text-muted-foreground">Scanned {ago(new Date(scannedAt).toISOString())}</span>}
+          <Button size="xs" disabled={scanning} onClick={() => void rescan()}>{scanning ? "Scanning…" : "Rescan"}</Button>
         </div>
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
@@ -304,7 +322,7 @@ export function Connections({ phone }: { phone: boolean }) {
                   const rec = recallLine(h);
                   const action = harnessAction(h);
                   return (
-                    <tr key={h.id} className="border-t border-border" style={h.capture.state === "stale" ? { background: "color-mix(in srgb, var(--warning) 6%, transparent)" } : undefined}>
+                    <tr key={h.id} className="border-t border-border">
                       <th scope="row" className="px-3.5 py-2.5 text-left font-normal">
                         <span className="flex min-w-0 flex-col gap-px">
                           <span className="font-medium">{h.name}</span>
@@ -333,8 +351,8 @@ export function Connections({ phone }: { phone: boolean }) {
       <section aria-labelledby="jobs-h" className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
           <h2 id="jobs-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "WHO DOES THE WORK" : "Who does the work"}</h2>
-          {!phone && <span className="text-[12px] text-muted-foreground">Jobs with no model of their own use Default</span>}
         </div>
+        <p className="m-0 text-[12px] text-muted-foreground">Set in the hub's configuration, under <code className="font-mono">memory.models</code>. This screen cannot change them.</p>
         {js.every(unset) && (
           <p className="m-0 max-w-[70ch] rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.55] text-muted-foreground">
             <span className="font-semibold text-foreground">No model is set.</span> Capture, the session list and word search work without one. Summaries, topics, entities and the wiki need a chat model, and search by meaning needs an embedding model; both can run on this machine. Set them under <code className="rounded bg-code px-1 py-px font-mono text-[12px]">memory.models</code> in <code className="rounded bg-code px-1 py-px font-mono text-[12px]">~/.rivethub/config.yaml</code>, then restart <code className="rounded bg-code px-1 py-px font-mono text-[12px]">rh</code>.
@@ -342,20 +360,23 @@ export function Connections({ phone }: { phone: boolean }) {
         )}
         {phone ? (
           <div className="overflow-hidden rounded-[14px] border border-border bg-card">
-            {js.filter((j) => j.role !== "default").map((j) => (
-              <div key={j.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
-                <span className="flex flex-1 flex-col"><span>{readableName(j.role)}</span><span className="text-[12px] text-muted-foreground">{modelLabel(j, js)}</span></span>
-                <span className="text-[12px]" style={{ color: healthColor(j) }}>{j.health === "healthy" ? "OK" : unset(j) ? "Not set" : j.health === "slow" ? "Slow" : "Failing"}</span>
+            {readings.filter((reading) => reading.role !== "default").map((reading) => (
+              <div key={reading.role} className="flex min-h-[52px] items-center gap-2.5 border-b border-border px-3.5 py-1.5 last:border-b-0">
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span>{reading.name}</span>
+                  <span className="break-words text-[12px] text-muted-foreground">{reading.modelLine}</span>
+                  <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
+                </span>
               </div>
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2.5">
-            {js.map((j) => (
-              <div key={j.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: j.health === "healthy" || unset(j) ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
-                <span className="flex items-center justify-between"><span className="font-semibold">{readableName(j.role)}</span><Dot color={healthColor(j)} size={7} /></span>
-                <span className="rounded-md border border-input bg-background px-2 py-[5px] text-[12px]" style={{ color: j.inheritsDefault ? dim : undefined }}>{modelLabel(j, js)}</span>
-                <span className="text-[12px]" style={{ color: healthColor(j) }}>{jobStatus(j)}</span>
+            {readings.map((reading) => (
+              <div key={reading.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: reading.state === "Running" || reading.state === "No model set" ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
+                <span className="flex items-center justify-between"><span className="font-semibold">{reading.name}</span><Dot color={stateColor(reading.state)} size={7} /></span>
+                <span className="break-words text-[13px]">{reading.modelLine}</span>
+                <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
               </div>
             ))}
           </div>
@@ -387,11 +408,9 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const signIn = useDeviceSignIn();
   const signOut = useSignOut();
-  const deleteAccount = useDeleteAccount();
-  const failure = signIn.state.phase === "failed" ? signIn.state.error : (signOut.error ?? deleteAccount.error);
+  const failure = signIn.state.phase === "failed" ? signIn.state.error : signOut.error;
   const waiting = signIn.state.phase === "waiting" || signIn.state.phase === "starting";
   return (
     <section aria-label="Account" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -411,21 +430,42 @@ function AccountCard({ account }: { account: Account }) {
           {waiting ? <Button onClick={signIn.cancel}>Cancel</Button> : <Button variant="primary" onClick={() => void signIn.start()}>Sign in with your RivetHub account</Button>}
         </div>
       )}
-      {account.email && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          {confirmDelete ? (
-            <>
-              <span className="flex-1 text-[13px]">Sign this node out, then open your cloud account to delete it there. Your memory stays on this hub.</span>
-              <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Sign this node out</Button>
-              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
-            </>
-          ) : (
-            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
-          )}
-        </div>
-      )}
-      <a href={deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer">Open cloud account settings to delete your account</a>
       {failure !== undefined && failure !== null && <ErrorNote error={failure} />}
+    </section>
+  );
+}
+
+function DangerZone({ signedIn }: { signedIn: boolean }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteAccount = useDeleteAccount();
+  const accountUrl = deleteAccount.data?.accountUrl;
+  if (!signedIn) {
+    // The node is signed out; the account itself is deleted in the cloud, so the link has to outlive the sign-out.
+    if (!accountUrl) return null;
+    return (
+      <section aria-label="Finish deleting your account" className="flex flex-col gap-2 rounded-xl border border-error/40 p-4">
+        <p className="m-0 text-error">This node is signed out. Your account still exists until you delete it in your cloud account settings.</p>
+        <a href={accountUrl} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
+      </section>
+    );
+  }
+  return (
+    <section aria-labelledby="danger-h" className="flex flex-col gap-3">
+      <h2 id="danger-h" className="m-0 text-[15px] font-semibold text-error">Danger</h2>
+      <div className="flex flex-col gap-3 rounded-xl border border-error/40 p-4">
+        <p className="m-0 text-error">Don't click here unless you really wanted to delete your account.</p>
+        {confirmDelete ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex-1 text-[13px] text-error">Sign this node out, then open your cloud account to delete it there. Your memory stays on this hub.</span>
+            <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Sign this node out</Button>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
+          </div>
+        ) : (
+          <Button variant="danger" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
+        )}
+        <a href={accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
+        {deleteAccount.error != null && <ErrorNote error={deleteAccount.error} />}
+      </div>
     </section>
   );
 }
@@ -493,6 +533,7 @@ function AccountSettings() {
         </div>
         <span className="text-[12px] text-muted-foreground">On a team hub, the hub's admin can turn reporting off for everyone.</span>
       </section>
+      <DangerZone signedIn={!!a.email} />
     </>
   );
 }
@@ -526,17 +567,63 @@ function Appearance() {
 
 function Server() {
   const hubs = useHubs();
+  const me = useMe();
+  const share = useShareClient();
+  const qc = useQueryClient();
+  const [teamFailure, setTeamFailure] = useState<string | null>(null);
+  const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share!.servers(), enabled: share !== null, retry: false });
   if (hubs.isPending) return <Loading />;
   if (hubs.isError) return <ErrorNote error={hubs.error} />;
+  const current = hubs.data.find((hub) => hub.current);
+  const spaces = me.data?.spaces ?? [];
+  const others = hubs.data.filter((hub) => !hub.current);
   return (
-    <>
+    <div className="flex max-w-xl flex-col gap-6">
       <SampleBadge capability="hubs" />
-      <p className="m-0 text-muted-foreground">Each hub keeps its own memory. Open another hub to switch to it.</p>
-      <div role="menu" aria-label="Memory hubs" className="flex max-w-xl flex-col gap-1 rounded-xl border border-border bg-card p-1.5">
-        <HubList hubs={hubs.data} />
-      </div>
-      <p className="m-0 text-[13px] text-muted-foreground">Connecting this app to a new hub needs rh's hub pairing, which is not available yet.</p>
-    </>
+      <section aria-labelledby="this-node" className="flex flex-col gap-1.5">
+        <h2 id="this-node" className="m-0 text-[15px] font-semibold">This node</h2>
+        <p className="m-0">{current ? current.name : "This window is not connected to a hub."}</p>
+        <p className="m-0 text-[13px] text-muted-foreground">
+          {me.isPending ? "Loading spaces…" : spaces.length ? `Spaces on this node: ${spaces.map((space) => space.name).join(", ")}` : "You are not in a space on this node."}
+        </p>
+      </section>
+      {others.length > 0 && (
+        <div role="menu" aria-label="Memory hubs" className="flex flex-col gap-1 rounded-xl border border-border bg-card p-1.5">
+          <HubList hubs={others} />
+        </div>
+      )}
+      <section aria-labelledby="team-servers" className="flex flex-col gap-2">
+        <h2 id="team-servers" className="m-0 text-[15px] font-semibold">Team servers</h2>
+        <p className="m-0 text-[13px] text-muted-foreground">A team server connection sends and receives shared sessions. It does not switch this window.</p>
+        {share ? (
+          <>
+            {servers.isPending && <Loading label="Loading servers" />}
+            {servers.isError && <ErrorNote error={servers.error} />}
+            {servers.data && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {servers.data.servers.map((server) => (
+                  <li key={server.origin} className="flex flex-col rounded-lg border border-border px-3 py-2">
+                    <span className="font-medium">{shareServerTitle(server)}</span>
+                    <span className="text-[12px] text-muted-foreground">{shareServerStatus(server)}</span>
+                  </li>
+                ))}
+                {servers.data.servers.length === 0 && <li className="text-muted-foreground">No share servers are set up.</li>}
+              </ul>
+            )}
+            {teamFailure && <p role="alert" className="m-0 text-error">{teamFailure}</p>}
+            <TeamForm
+              onSignedIn={() => {
+                setTeamFailure(null);
+                void qc.invalidateQueries({ queryKey: SERVERS_KEY });
+              }}
+              onFail={(error) => setTeamFailure(error instanceof Error ? error.message : "Could not sign in to that team server.")}
+            />
+          </>
+        ) : (
+          <p className="m-0 text-[13px] text-muted-foreground">Adding a team server is in the RivetHub desktop app.</p>
+        )}
+      </section>
+    </div>
   );
 }
 

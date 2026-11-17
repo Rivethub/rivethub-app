@@ -149,6 +149,11 @@ export interface TopicNode {
   id: TopicId;
   name: string;
   parentId?: TopicId;
+  /**
+   * Who the topic belongs to, when the hub says. The same string as `/api/me`'s `user` means the
+   * signed-in person. A different string is a teammate's topic.
+   */
+  owner?: string;
   sessionCount: number;
   lastActivity?: IsoTime;
   status: "open" | "closed";
@@ -327,9 +332,13 @@ export interface ModelJob {
   provider?: string;
   model?: string;
   inheritsDefault: boolean;
-  health: "healthy" | "slow" | "failing" | (string & {});
+  health: "healthy" | "slow" | "failing" | "unconfigured" | "not-running" | (string & {});
   detail: string;
   queued: number;
+  /** When a worker last finished a job for this role. Absent on hubs that do not report it. */
+  lastRan?: IsoTime;
+  /** Why a worker that had been running has stopped claiming jobs. */
+  outage?: string;
 }
 
 export interface Hub {

@@ -7,7 +7,9 @@ import type {
   HarnessId,
   IsoTime,
   ReviewDecision,
+  ReviewItem,
   ReviewItemId,
+  TodayDigest,
   SearchOptions,
   SessionId,
   SessionQuery,
@@ -16,12 +18,20 @@ import type {
   Visibility,
 } from "@rivethub/contracts";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useSyncExternalStore } from "react";
+import { withFreshLogin } from "./auth";
 import { markStep } from "../lib/journey";
 import { useClient, type AppClient } from "./context";
 
-function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true) {
+function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true, live = false) {
   const client = useClient();
-  return useQuery({ queryKey: key, queryFn: () => fn(client), enabled });
+  return useQuery({
+    queryKey: key,
+    queryFn: () => fn(client),
+    enabled,
+    // Only Connections asks for this. Other screens keep the 30s cache and do not poll.
+    ...(live ? { refetchInterval: 15_000, refetchOnWindowFocus: "always" as const } : {}),
+  });
 }
 
 export const useCapabilities = () => q(keys.capabilities, (c) => c.capabilities());
@@ -37,8 +47,8 @@ export const useTranscript = (id: SessionId, enabled = true) => q(keys.transcrip
 export const useToolOutput = (id: SessionId, tool: string, enabled: boolean) => q([...keys.transcript(id), "tool", tool], (c) => c.toolOutput(id, tool), enabled);
 export const useSummaryTree = (id: SessionId, enabled = true) => q(keys.summaryTree(id), (c) => c.summaryTree(id), enabled);
 export const useSearch = (text: string, options: SearchOptions = {}) => q([...keys.search(text), options], (c) => c.search(text, options));
-export const useHarnesses = () => q(keys.harnesses, (c) => c.harnesses());
-export const useModelJobs = () => q(keys.modelJobs, (c) => c.modelJobs());
+export const useHarnesses = (live = false) => q(keys.harnesses, (c) => c.harnesses(), true, live);
+export const useModelJobs = (live = false) => q(keys.modelJobs, (c) => c.modelJobs(), true, live);
 export const useHubs = () => q(keys.hubs, (c) => c.hubs());
 export const useAccount = () => q(keys.account, (c) => c.account());
 
@@ -67,18 +77,103 @@ function useWrite<A, R>(fn: (c: AppClient, arg: A) => Promise<R>, invalidate: (a
   });
 }
 
-export const useDecide = () =>
-  useWrite(
-    (c, a: { id: ReviewItemId; decision: ReviewDecision }) => {
-      if (a.decision.kind !== "later") markStep("review");
-      return c.decide(a.id, a.decision);
+export const DECISION_FAILED = "That didn't go through, so it's back for you to try again.";
+
+let decisionError: string | null = null;
+const decisionErrorListeners = new Set<() => void>();
+
+function setDecisionError(message: string | null) {
+  decisionError = message;
+  decisionErrorListeners.forEach((listener) => listener());
+}
+
+export function clearDecisionError() {
+  setDecisionError(null);
+}
+
+/** Survives the card unmounting when the item leaves the list, so a failed decision can still be said. */
+export function useDecisionError(): string | null {
+  return useSyncExternalStore(
+    (listener) => {
+      decisionErrorListeners.add(listener);
+      return () => decisionErrorListeners.delete(listener);
     },
-    () => memoryWideKeys,
+    () => decisionError,
+    () => null,
   );
+}
+
+const DECIDE = ["decide"] as const;
+
+export function useDecide() {
+  const client = useClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: DECIDE,
+    mutationFn: (a: { id: ReviewItemId; decision: ReviewDecision }) => {
+      if (a.decision.kind !== "later") markStep("review");
+      return client.decide(a.id, a.decision);
+    },
+    onMutate: async (a) => {
+      setDecisionError(null);
+      await qc.cancelQueries({ queryKey: keys.review });
+      await qc.cancelQueries({ queryKey: ["today"] });
+      const review = qc.getQueryData<ReviewItem[]>(keys.review);
+      const todays = qc.getQueriesData<TodayDigest>({ queryKey: ["today"] });
+      const reviewIndex = review?.findIndex((item) => item.id === a.id) ?? -1;
+      const removed = (reviewIndex >= 0 ? review?.[reviewIndex] : undefined) ?? todays.map(([, digest]) => digest?.needsYou.find((item) => item.id === a.id)).find((item) => item !== undefined);
+      if (review && reviewIndex >= 0) qc.setQueryData<ReviewItem[]>(keys.review, review.filter((item) => item.id !== a.id));
+      const placements: { key: QueryKey; index: number }[] = [];
+      for (const [key, digest] of todays) {
+        const index = digest?.needsYou.findIndex((item) => item.id === a.id) ?? -1;
+        if (!digest || index < 0) continue;
+        placements.push({ key, index });
+        qc.setQueryData<TodayDigest>(key, {
+          ...digest,
+          needsYou: digest.needsYou.filter((item) => item.id !== a.id),
+          reviewCount: Math.max(0, digest.reviewCount - 1),
+        });
+      }
+      return { removed, reviewIndex, placements };
+    },
+    onError: (_error, _a, ctx) => {
+      const removed = ctx?.removed;
+      if (removed) {
+        if ((ctx?.reviewIndex ?? -1) >= 0) {
+          qc.setQueryData<ReviewItem[]>(keys.review, (current) => {
+            if (!current || current.some((item) => item.id === removed.id)) return current;
+            const next = [...current];
+            next.splice(Math.min(ctx!.reviewIndex, next.length), 0, removed);
+            return next;
+          });
+        }
+        for (const { key, index } of ctx?.placements ?? []) {
+          qc.setQueryData<TodayDigest>(key, (digest) => {
+            if (!digest || digest.needsYou.some((item) => item.id === removed.id)) return digest;
+            const needsYou = [...digest.needsYou];
+            needsYou.splice(Math.min(index, needsYou.length), 0, removed);
+            return { ...digest, needsYou, reviewCount: digest.reviewCount + 1 };
+          });
+        }
+      }
+      setDecisionError(DECISION_FAILED);
+    },
+    onSuccess: () => setDecisionError(null),
+    onSettled: () => {
+      // A refetch while other decisions are still in flight would bring their items back. This one still
+      // counts as in flight until the callback returns, so the check waits a tick; the last to settle refetches.
+      setTimeout(() => {
+        if (qc.isMutating({ mutationKey: DECIDE }) > 0) return;
+        for (const queryKey of memoryWideKeys) void qc.invalidateQueries({ queryKey });
+      }, 0);
+    },
+  });
+}
 export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),
-    (a) => [keys.topic(a.id), keys.topicTree],
+    // A move changes the path shown on sessions and Today as well.
+    (a) => ("parentId" in a.patch ? memoryWideKeys : [keys.topicTree, ["topic"]]),
   );
 export const useCreateTopic = () =>
   useWrite(
@@ -114,8 +209,8 @@ export const useConnectHarness = () =>
   );
 export const useUpdateAccount = () =>
   useWrite((c, patch: Parameters<AppClient["updateAccount"]>[0]) => c.updateAccount(patch), () => [keys.account]);
-export const useSignOut = () => useWrite((c, _: void) => c.signOut(), () => [keys.account]);
-export const useDeleteAccount = () => useWrite((c, _: void) => c.deleteAccount(), () => [keys.account]);
+export const useSignOut = () => useWrite((c, _: void) => withFreshLogin(() => c.signOut()), () => [keys.account]);
+export const useDeleteAccount = () => useWrite((c, _: void) => withFreshLogin(() => c.deleteAccount()), () => [keys.account]);
 export const useSetPinned = () =>
   useWrite(
     (c, a: { ref: SubjectRef; pinned: boolean }) => (c.setPinned ? c.setPinned(a.ref, a.pinned) : Promise.resolve()),

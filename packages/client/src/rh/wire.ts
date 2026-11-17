@@ -233,6 +233,25 @@ export const memoryBrowse = z.object({
 
 export type BrowsedMessage = z.infer<typeof memoryBrowse>["messages"][number];
 
+// One session's stored messages. `next` is the cursor rh issued; tool rows are included.
+export const sessionMessage = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  role: z.string().default("assistant"),
+  agent: nullish(z.string()),
+  content: z.string().default(""),
+  toolName: nullish(z.string()),
+  toolArgs: nullish(z.record(z.unknown())),
+  toolResult: nullish(z.string()),
+  createdAt: nullish(timeSchema),
+});
+export const sessionMessagesPage = z.object({
+  session: nullish(z.string()),
+  items: rows(sessionMessage).default([]),
+  total: nullish(z.number()),
+  next: nullish(z.string()),
+  quotedFrom: nullish(z.object({ author: nullish(z.string()), originDate: nullish(timeSchema), verification: nullish(z.string()) })),
+});
+
 export const catalogRow = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -344,9 +363,11 @@ export const modelJobList = rows(
     provider: nullish(z.string()),
     model: nullish(z.string()),
     inheritsDefault: z.boolean(),
-    health: descriptive(["healthy", "slow", "failing"]),
+    health: descriptive(["healthy", "slow", "failing", "unconfigured", "not-running"]),
     detail: z.string(),
     queued: z.number(),
+    lastRan: nullish(timeSchema),
+    outage: nullish(z.string()),
   }),
 );
 

@@ -3,6 +3,7 @@ import { signInWithDevice, type SignInState } from "@rivethub/client-runtime/sig
 import type { Account } from "@rivethub/contracts";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { withFreshLogin } from "../client/auth";
 import { useClient } from "../client/context";
 
 export function useDeviceSignIn(onSignedIn?: (account: Account) => void) {
@@ -27,7 +28,7 @@ export function useDeviceSignIn(onSignedIn?: (account: Account) => void) {
       running.current = controller;
       setState({ phase: "starting" });
       try {
-        const account = await signInWithDevice(client, controller.signal, (details) => { if (!controller.signal.aborted) setState({ phase: "waiting", details }); });
+        const account = await withFreshLogin(() => signInWithDevice(client, controller.signal, (details) => { if (!controller.signal.aborted) setState({ phase: "waiting", details }); }));
         if (controller.signal.aborted) return;
         running.current = null;
         setState({ phase: "idle" });

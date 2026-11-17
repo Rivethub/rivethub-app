@@ -22,6 +22,7 @@ describe("topics", () => {
     const runtime = tree[0]!.children[0]!;
     expect(runtime.name).toBe("rh runtime");
     expect(runtime.parentId).toBe("t-a");
+    expect(runtime.owner).toBe("owner-1");
     expect(runtime.children[0]).toMatchObject({ name: "Capture hooks", status: "closed", sessionCount: 1 });
     expect(runtime.children[0]!.lastActivity).toBe("2026-11-06T12:00:00.000Z");
   });

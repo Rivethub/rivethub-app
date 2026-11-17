@@ -7,10 +7,11 @@ export interface HubSummary {
 }
 
 /** What the hub switcher shows for the hub this app is reading. */
-export function currentHubSummary(hubs: Hub[] | undefined, harnessCount: number | undefined): HubSummary {
+export function currentHubSummary(hubs: Hub[] | undefined, harnessCount: number | undefined, spaces?: readonly string[]): HubSummary {
   const current = hubs?.find((h) => h.current);
   if (!current) return { name: "No hub", meta: "Not connected", online: false };
-  const meta = current.kind === "local" ? `Local hub${harnessCount !== undefined ? ` · ${harnessCount} ${harnessCount === 1 ? "tool" : "tools"}` : ""}` : current.detail;
+  const tools = harnessCount !== undefined ? `${harnessCount} ${harnessCount === 1 ? "tool" : "tools"}` : "";
+  const meta = current.kind === "local" ? [spaces?.filter(Boolean).join(", "), "Local hub", tools].filter(Boolean).join(" · ") : current.detail;
   return { name: current.name, meta, online: current.online };
 }
 

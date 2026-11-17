@@ -1,7 +1,7 @@
 import type { EntityId } from "@rivethub/contracts";
 import type { ReviewItem } from "@rivethub/contracts";
 import { describe, expect, it } from "vitest";
-import { ago, dayLabel, harnessNames, localDay, parseDay, primaryAction, toolLine, whenLabel } from "./format";
+import { ago, dayLabel, filingCreatesTopic, filingTopicName, harnessNames, localDay, parseDay, primaryAction, toolLine, whenLabel } from "./format";
 
 describe("format", () => {
   it("names every tool rh lists as rh names it", () => {
@@ -34,6 +34,16 @@ describe("format", () => {
     expect(toolLine({ name: "Bash", summary: "zpool list NAME SIZE" })).toBe("Bash: zpool list NAME SIZE");
     expect(toolLine({ name: "Bash", summary: "failed" })).toBe("Bash: failed");
     expect(toolLine({ name: "tool", summary: "noted" })).toBe("noted");
+  });
+
+  it("tells a filing that would create a topic from one that files into a topic that exists", () => {
+    const filing = (text: string, after?: string) => ({ group: "filing" as const, text, ...(after === undefined ? {} : { after }) });
+    expect(filingCreatesTopic(filing("→ Home lab › Network", "topic-home"))).toBe(false);
+    expect(filingCreatesTopic(filing("→ Printers (new topic)", "Printers"))).toBe(true);
+    expect(filingCreatesTopic(filing("→ Printers (new topic)  "))).toBe(true);
+    expect(filingCreatesTopic({ group: "fact", text: "note (new topic)" })).toBe(false);
+    expect(filingTopicName(filing("→ Printers (new topic)", "Printers"))).toBe("Printers");
+    expect(filingTopicName(filing("→ Home lab › Printers (new topic)"))).toBe("Home lab › Printers");
   });
 
   it("names a review item's main button", () => {

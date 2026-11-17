@@ -176,6 +176,30 @@ describe("harnesses and models mapping", () => {
     const jobs = await client.methods.modelJobs!();
     expect(jobs.map((job) => [job.role, job.health, job.inheritsDefault])).toEqual([["default", "healthy", false], ["summarizer", "failing", false], ["wiki-writer", "slow", true]]);
     expect(jobs[1]).not.toHaveProperty("provider");
+    expect(jobs[0]).not.toHaveProperty("lastRan");
+    expect(jobs[0]).not.toHaveProperty("outage");
+  });
+
+  it("reads a worker's model, a role that is not running, and a null model", async () => {
+    const ran = Date.parse("2026-11-16T21:00:00.000Z");
+    const { client } = rh({
+      "GET /api/memory/models": [
+        { role: "summarizer", provider: "gpubox", model: "thinkingcap-flash-next", inheritsDefault: false, health: "healthy", detail: "idle", queued: 0, lastRan: ran, outage: null },
+        { role: "categorizer", provider: "gpubox", model: "thinkingcap-flash-next", inheritsDefault: false, health: "failing", detail: "stopped", queued: 1628, outage: "the worker stopped claiming" },
+        { role: "wiki-writer", provider: null, model: null, inheritsDefault: false, health: "not-running", detail: "not running", queued: 27 },
+        { role: "embedder", inheritsDefault: false, health: "unconfigured", detail: "no model is configured", queued: 0, lastRan: null },
+      ],
+    });
+    const jobs = await client.methods.modelJobs!();
+    expect(jobs[0]).toMatchObject({ provider: "gpubox", model: "thinkingcap-flash-next", health: "healthy", lastRan: "2026-11-16T21:00:00.000Z" });
+    expect(jobs[0]).not.toHaveProperty("outage");
+    expect(jobs[1]).toMatchObject({ health: "failing", queued: 1628, outage: "the worker stopped claiming" });
+    expect(jobs[2]).toMatchObject({ health: "not-running", queued: 27 });
+    expect(jobs[2]).not.toHaveProperty("provider");
+    expect(jobs[2]).not.toHaveProperty("model");
+    expect(jobs[3]).toMatchObject({ health: "unconfigured" });
+    expect(jobs[3]).not.toHaveProperty("model");
+    expect(jobs[3]).not.toHaveProperty("lastRan");
   });
 });
 

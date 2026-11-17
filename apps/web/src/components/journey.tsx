@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { setGuideHidden, STAGES, useJourney } from "../lib/journey";
+import { dismissStep, markStepDone, setGuideHidden, STAGES, useJourney } from "../lib/journey";
 import { CheckIcon } from "./icons";
 import { Button, cx } from "./ui";
 
@@ -103,7 +103,14 @@ export function GuideSteps() {
                   </span>
                   <span className="text-[13px] leading-[1.5] text-muted-foreground">{s.why}</span>
                 </span>
-                {!s.done && <Link to={s.action.to} className="rounded-lg border border-border px-2.5 py-1 text-[13px] text-foreground hover:bg-accent hover:no-underline">{s.action.label}</Link>}
+                {s.dismissed && <span className="text-[12px] text-muted-foreground">Dismissed</span>}
+                {!s.done && (
+                  <>
+                    <Link to={s.action.to} className="rounded-lg border border-border px-2.5 py-1 text-[13px] text-foreground hover:bg-accent hover:no-underline">{s.action.label}</Link>
+                    <Button size="xs" aria-label={`Mark ${s.title} done`} onClick={() => markStepDone(s.id)}>Mark done</Button>
+                    <Button size="xs" variant="ghost" aria-label={`Dismiss ${s.title}`} onClick={() => dismissStep(s.id)}>Dismiss</Button>
+                  </>
+                )}
               </li>
             ))}
           </ul>

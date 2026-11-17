@@ -1,9 +1,10 @@
-import type { IsoTime, ReviewItem, ReviewItemId, SessionDetail, SessionId, SessionSummaryRow } from "@rivethub/contracts";
+import type { EntityId, IsoTime, ReviewItem, ReviewItemId, SessionDetail, SessionId, SessionSummaryRow } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "../app";
+import { clearDecisionError } from "../client/queries";
 import type { AppClient } from "../client/context";
 import { createSampleClient } from "../dev/sample-client";
 import { resetJourney } from "../lib/journey";
@@ -23,7 +24,60 @@ const row = (id: string, title: string, messageCount: number, extra: Partial<Ses
   id: id as SessionId, title, harness: "grok-build", startedAt: now, messageCount, visibility: { kind: "private" }, kept: false, trashed: false, memoryState: "queued", ...extra,
 });
 
-beforeEach(() => resetJourney());
+beforeEach(() => {
+  resetJourney();
+  clearDecisionError();
+});
+
+describe("Guide steps", () => {
+  it("marks a step done or dismisses it, and either one counts toward 10 of 10", async () => {
+    localStorage.setItem("rivethub.journey", JSON.stringify({ done: ["palette"], hidden: false }));
+    const { user } = renderWith("/guide", () => ({ pins: async () => [] }));
+    const pin = (await screen.findByText("Pin what you come back to")).closest("li")!;
+    expect(within(pin).getByRole("link", { name: "Pin a topic" })).toHaveAttribute("href", "/topics");
+    expect(pin).toHaveTextContent(", not done yet");
+    const share = screen.getByRole("link", { name: "Share a session" }).closest("li")!;
+    expect(share).toHaveTextContent("Share a session");
+    await user.click(within(pin).getByRole("link", { name: "Pin a topic" }));
+    await user.click(await screen.findByRole("link", { name: /^Guide/ }));
+    const pinAgain = (await screen.findByText("Pin what you come back to")).closest("li")!;
+    expect(pinAgain).toHaveTextContent(", not done yet");
+    await user.click(within(pinAgain).getByRole("button", { name: "Dismiss Pin what you come back to" }));
+    expect(pinAgain).toHaveTextContent("Dismissed");
+    expect(pinAgain).toHaveTextContent(", done");
+    const palette = screen.getByText("Jump anywhere with Ctrl K").closest("li")!;
+    expect(palette).toHaveTextContent(", done");
+    for (;;) {
+      const marks = screen.queryAllByRole("button", { name: /^Mark / });
+      if (!marks.length) break;
+      await user.click(marks[0]!);
+    }
+    expect(screen.getByText("You have done every step. The rest is using it.")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Guide progress" })).toHaveAttribute("aria-valuenow", "10");
+    expect(screen.getByRole("progressbar", { name: "Guide progress" })).toHaveAttribute("aria-valuemax", "10");
+  });
+});
+
+describe("Settings icon", () => {
+  it("draws a gear with a centre hole, not a sun", async () => {
+    renderWith("/", () => ({}));
+    const link = await screen.findByRole("link", { name: "Settings" });
+    const svg = link.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg!.getAttribute("width")).toBe("16");
+    expect(svg!.innerHTML).not.toContain("M12 2v3");
+    const path = svg!.querySelector("path");
+    expect(path?.getAttribute("fill-rule")).toBe("evenodd");
+    expect(path?.getAttribute("d")?.match(/M/g)?.length).toBe(2);
+  });
+});
+
+describe("Hub footer", () => {
+  it("names the space beside the local hub", async () => {
+    renderWith("/", () => ({}));
+    expect(await screen.findByText("household · Local hub · 4 tools")).toBeInTheDocument();
+  });
+});
 
 describe("Today on a busy hub", () => {
   it("shows one card for filing, however many filing proposals need you", async () => {
@@ -35,7 +89,120 @@ describe("Today on a busy hub", () => {
     }));
     const needs = await screen.findByRole("region", { name: /Needs you/ });
     expect(within(needs).getAllByRole("button", { name: "File all" })).toHaveLength(1);
-    expect(within(needs).getByText("3 sessions")).toBeInTheDocument();
+    expect(within(needs).getByText("3 of 3 go into a topic that already exists")).toBeInTheDocument();
+    expect(within(needs).queryByText(/would create a new topic/)).not.toBeInTheDocument();
+  });
+
+  it("files only into topics that already exist and sends a new topic to review with its name", async () => {
+    const filing = (n: number, text: string, after: string): ReviewItem => ({
+      id: `f-${n}` as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: `s-${n}` as SessionId, title: `Session ${n}` },
+      text,
+      after,
+      evidence: [],
+      createdAt: now,
+    });
+    const items = [filing(1, "→ Home lab", "topic-home"), filing(2, "→ Home lab › Network", "topic-net"), filing(3, "→ Printers (new topic)", "Printers")];
+    const decided: string[] = [];
+    const { user } = renderWith("/", (c) => ({
+      reviewQueue: async () => items,
+      today: async (date) => ({ ...(await c.today(date)), needsYou: items, reviewCount: 3 }),
+      decide: async (id) => {
+        decided.push(id);
+      },
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(needs).getByText("2 of 3 go into a topic that already exists")).toBeInTheDocument();
+    expect(within(needs).getByText(/1 would create a new topic/)).toBeInTheDocument();
+    expect(within(needs).getByRole("link", { name: "Review 1" })).toHaveAttribute("href", "/review");
+    expect(within(needs).queryByRole("button", { name: "File all" })).not.toBeInTheDocument();
+    await user.click(within(needs).getByRole("button", { name: "File 2 into existing topics" }));
+    await waitFor(() => expect(decided).toEqual(["f-1", "f-2"]));
+  });
+
+  it("does not file one new topic from today", async () => {
+    const item: ReviewItem = {
+      id: "f-1" as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: "s-1" as SessionId, title: "Session 1" },
+      text: "→ Printers (new topic)",
+      after: "Printers",
+      evidence: [],
+      createdAt: now,
+    };
+    renderWith("/", (c) => ({
+      reviewQueue: async () => [item],
+      today: async (date) => ({ ...(await c.today(date)), needsYou: [item], reviewCount: 1 }),
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(needs).getByText("Creates a new topic named Printers.")).toBeInTheDocument();
+    expect(within(needs).getByRole("link", { name: "Review 1" })).toBeInTheDocument();
+    expect(within(needs).queryByRole("button", { name: "File" })).not.toBeInTheDocument();
+    expect(within(needs).queryByRole("button", { name: "Later" })).not.toBeInTheDocument();
+  });
+
+  it("names a new topic on the review row and leaves it out of file all", async () => {
+    const filing = (n: number, text: string, after: string): ReviewItem => ({
+      id: `f-${n}` as ReviewItemId,
+      group: "filing",
+      subject: { kind: "session", id: `s-${n}` as SessionId, title: `Session ${n}` },
+      text,
+      after,
+      evidence: [],
+      createdAt: now,
+    });
+    const decided: string[] = [];
+    const { user } = renderWith("/review", () => ({
+      reviewQueue: async () => [filing(1, "→ Home lab", "topic-home"), filing(2, "→ Home lab › Network", "topic-net"), filing(3, "→ Printers (new topic)", "Printers")],
+      decide: async (id) => {
+        decided.push(id);
+      },
+    }));
+    expect(await screen.findByText("Creates a new topic named Printers.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "File 2 into existing topics" }));
+    await waitFor(() => expect(decided).toEqual(["f-1", "f-2"]));
+  });
+
+  it("takes a decision off the screen before the hub answers, and puts it back if that fails", async () => {
+    let rejectDecision: (error: Error) => void = () => {};
+    const gate = new Promise<void>((_resolve, reject) => {
+      rejectDecision = reject;
+    });
+    const item: ReviewItem = {
+      id: "f-1" as ReviewItemId,
+      group: "fact",
+      subject: { kind: "entity", id: "e-1" as EntityId, title: "nas-01" },
+      text: "backup time",
+      evidence: [],
+      createdAt: now,
+    };
+    let todayCalls = 0;
+    let releaseRefetch = () => {};
+    const refetchGate = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
+    });
+    const { user } = renderWith("/", (c) => ({
+      reviewQueue: async () => [item],
+      today: async (date) => {
+        todayCalls += 1;
+        if (todayCalls > 1) await refetchGate;
+        return { ...(await c.today(date)), needsYou: [item], reviewCount: 1 };
+      },
+      decide: () => gate,
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    await user.click(within(needs).getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: /Needs you/ })).not.toBeInTheDocument());
+    expect(screen.queryByText("backup time")).not.toBeInTheDocument();
+    expect(todayCalls).toBe(1);
+    rejectDecision(new Error("refused"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("back for you to try again");
+    const again = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(again).getByRole("button", { name: "Accept" })).toBeEnabled();
+    expect(within(again).getByText("backup time")).toBeInTheDocument();
+    expect(todayCalls).toBeGreaterThan(1);
+    releaseRefetch();
   });
 
   it("leaves sessions that captured nothing and changed nothing out of What changed", async () => {

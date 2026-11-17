@@ -1,7 +1,9 @@
+import { ReauthRequiredError } from "@rivethub/client";
+import type { RivetHubDesktop } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import { createSampleClient } from "../dev/sample-client";
 import { applyStoredTheme } from "../theme";
@@ -126,8 +128,8 @@ describe("Connect", () => {
   it("shows the dry-run diff first and writes only when Connect is pressed", async () => {
     const { user, client } = renderAt("/settings/connections");
     const connect = vi.spyOn(client, "connectHarness");
-    const fix = (await screen.findAllByRole("button", { name: /Fix/ }))[0]!;
-    await user.click(fix);
+    const connectButton = await screen.findByRole("button", { name: "Connect opencode" });
+    await user.click(connectButton);
     const dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(connect).toHaveBeenCalledTimes(1));
     expect(connect.mock.calls[0]![2]).toEqual({ dryRun: true });
@@ -156,12 +158,75 @@ describe("Account", () => {
     expect(signIn).toHaveBeenCalledWith();
 
     const del = vi.spyOn(client, "deleteAccount");
-    await user.click(within(card).getByRole("button", { name: "Delete account…" }));
+    await user.click(screen.getByRole("button", { name: "Delete account…" }));
     expect(del).not.toHaveBeenCalled();
-    await user.click(within(card).getByRole("button", { name: "Sign this node out" }));
-    await within(card).findByText("Not signed in");
+    await user.click(screen.getByRole("button", { name: "Sign this node out" }));
+    await screen.findByText("Not signed in");
     expect(del).toHaveBeenCalledOnce();
   }, 12000);
+
+  afterEach(() => {
+    delete (window as { rivethub?: RivetHubDesktop }).rivethub;
+    vi.unstubAllGlobals();
+  });
+
+  it("refreshes a stale desktop sign-in and then shows the device code", async () => {
+    const relogin = vi.fn(async () => "once");
+    (window as { rivethub?: RivetHubDesktop }).rivethub = { relogin, updates: {} as RivetHubDesktop["updates"] };
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ csrf: "fresh" }), { status: 200 })));
+    const { user, client } = renderAt("/settings/account");
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    await screen.findByText("Not signed in");
+    let calls = 0;
+    vi.spyOn(client, "signIn").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) throw new ReauthRequiredError("/api/account/signin");
+      return { userCode: "RVTB-HUBS", verificationUri: "https://rivethub.cloud/device", expiresIn: 600, pollIntervalMs: 60_000 };
+    });
+    await user.click(screen.getByRole("button", { name: "Sign in with your RivetHub account" }));
+    expect(await screen.findByText("RVTB-HUBS")).toBeInTheDocument();
+    expect(screen.queryByText(/\/api\//)).not.toBeInTheDocument();
+    expect(relogin).toHaveBeenCalledOnce();
+    expect(calls).toBe(2);
+  });
+
+  it("says what to do when this page cannot refresh a stale sign-in", async () => {
+    const { user, client } = renderAt("/settings/account");
+    vi.spyOn(client, "signOut").mockRejectedValue(new ReauthRequiredError("/api/account/signout"));
+    await user.click(await screen.findByRole("button", { name: "Sign out" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("more than five minutes old");
+    expect(alert).toHaveTextContent("rh open");
+    expect(alert.textContent).not.toMatch(/\/api\//);
+  });
+
+  it("keeps account deletion in a danger section below privacy, and hides it when signed out", async () => {
+    const { user } = renderAt("/settings/account");
+    const privacy = await screen.findByRole("heading", { name: "Privacy" });
+    const danger = screen.getByRole("region", { name: "Danger" });
+    expect(privacy.compareDocumentPosition(danger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(danger).getByText("Don't click here unless you really wanted to delete your account.")).toBeInTheDocument();
+    expect(within(danger).getByRole("heading", { name: "Danger" })).toHaveClass("text-error");
+    const link = within(danger).getByRole("link", { name: "Open cloud account settings to delete your account" });
+    expect(link.getAttribute("style")).toContain("var(--error)");
+    expect(within(screen.getByRole("region", { name: "Account" })).queryByRole("link", { name: /delete your account/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("Not signed in");
+    expect(screen.queryByRole("region", { name: "Danger" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /delete your account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete account…" })).not.toBeInTheDocument();
+  });
+
+  it("says what to do when deletion needs a fresh sign-in and this page cannot refresh it", async () => {
+    const { user, client } = renderAt("/settings/account");
+    const del = vi.spyOn(client, "deleteAccount").mockRejectedValue(new ReauthRequiredError("/api/account"));
+    await user.click(await screen.findByRole("button", { name: "Delete account…" }));
+    await user.click(screen.getByRole("button", { name: "Sign this node out" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("more than five minutes old");
+    expect(alert.textContent).not.toMatch(/\/api\//);
+    expect(del).toHaveBeenCalledOnce();
+  });
 });
 
 describe("History", () => {

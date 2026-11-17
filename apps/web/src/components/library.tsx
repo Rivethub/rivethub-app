@@ -1,10 +1,11 @@
 import { dayLabel } from "@rivethub/client-runtime/format";
 import type { TopicNode } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
-import { usePins, useTopicTree } from "../client/queries";
+import { useEffect, useState, type ReactNode } from "react";
+import { useMe, usePins, useTopicTree } from "../client/queries";
 import { plural, subjectHref } from "../lib/format";
 import { MobileHeader } from "./shell";
+import { MoveTopicButton, TopLevelDrop, TopicDragItem, useLandedParent } from "./topic-drag";
 import { cx } from "./ui";
 
 export type LibraryKind = "topics" | "entities" | "sessions";
@@ -72,7 +73,18 @@ function ancestors(tree: TopicNode[], id: string | undefined): Set<string> {
 /** The topic tree. The selected topic's ancestors start open. */
 export function TopicTree({ selected, phone }: { selected?: string; phone?: boolean }) {
   const tree = useTopicTree().data ?? [];
+  const me = useMe().data?.user;
+  const landed = useLandedParent();
   const [overrides, setOverrides] = useState<Map<string, boolean>>(() => new Map());
+  useEffect(() => {
+    if (!landed) return;
+    setOverrides((prev) => {
+      if (prev.get(landed.id) === true) return prev;
+      const next = new Map(prev);
+      next.set(landed.id, true);
+      return next;
+    });
+  }, [landed]);
   const auto = ancestors(tree, selected);
   if (selected) auto.add(selected);
   const isOpen = (id: string) => overrides.get(id) ?? (auto.has(id) || (phone === true && tree.some((t) => t.id === id)));
@@ -84,43 +96,56 @@ export function TopicTree({ selected, phone }: { selected?: string; phone?: bool
       const expandable = n.children.length > 0;
       const expanded = expandable && isOpen(n.id);
       rows.push(
-        <li key={n.id} role="treeitem" aria-level={depth + 1} aria-expanded={expandable ? expanded : undefined} aria-selected={n.id === selected}>
-          <div
-            className={cx("flex items-center gap-1.5 rounded-md", phone ? "min-h-12 border-b border-border pr-3" : "py-[5px] pr-2.5 text-[13px]", n.id === selected && "bg-selected", !phone && "hover:bg-accent")}
-            style={{ paddingLeft: (phone ? 12 : 4) + depth * (phone ? 18 : 14) }}
-          >
-            {expandable ? (
-              <button type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${n.name}`} onClick={() => toggle(n.id)} className={cx("flex shrink-0 items-center justify-center text-muted-foreground", phone ? "size-8 text-[12px]" : "size-4 text-[10px]")}>
-                {expanded ? "▾" : "▸"}
-              </button>
-            ) : (
-              <span className={phone ? "size-8" : "size-4"} />
-            )}
-            <Link to="/topics/$topicId" params={{ topicId: n.id }} className="flex min-w-0 flex-1 items-center gap-2 text-foreground hover:no-underline">
-              {phone ? (
-                <span className="flex flex-1 flex-col">
-                  <span className={depth ? "" : "font-semibold"}>{n.name}</span>
-                  <span className="text-[12px] text-muted-foreground">
-                    {plural(n.sessionCount, "session")}{n.status === "closed" ? " · closed" : ""}
-                    {n.lastActivity ? ` · ${dayLabel(n.lastActivity) === "Today" ? "today" : dayLabel(n.lastActivity)}` : ""}
-                  </span>
+        <TopicDragItem
+          as="li"
+          key={n.id}
+          id={n.id}
+          name={n.name}
+          {...(n.owner ? { owner: n.owner } : {})}
+          tree={tree}
+          me={me}
+          role="treeitem"
+          aria-level={depth + 1}
+          aria-expanded={expandable ? expanded : undefined}
+          aria-selected={n.id === selected}
+          className={cx("group flex items-center gap-1.5 rounded-md", phone ? "min-h-12 border-b border-border pr-3" : "py-[5px] pr-2.5 text-[13px]", n.id === selected && "bg-selected", !phone && "hover:bg-accent")}
+          style={{ paddingLeft: (phone ? 12 : 4) + depth * (phone ? 18 : 14) }}
+        >
+          {expandable ? (
+            <button type="button" aria-label={`${expanded ? "Collapse" : "Expand"} ${n.name}`} onClick={() => toggle(n.id)} className={cx("flex shrink-0 items-center justify-center text-muted-foreground", phone ? "size-8 text-[12px]" : "size-4 text-[10px]")}>
+              {expanded ? "▾" : "▸"}
+            </button>
+          ) : (
+            <span className={phone ? "size-8" : "size-4"} />
+          )}
+          <Link draggable={false} to="/topics/$topicId" params={{ topicId: n.id }} className="flex min-w-0 flex-1 items-center gap-2 text-foreground hover:no-underline">
+            {phone ? (
+              <span className="flex flex-1 flex-col">
+                <span className={depth ? "" : "font-semibold"}>{n.name}</span>
+                <span className="text-[12px] text-muted-foreground">
+                  {plural(n.sessionCount, "session")}{n.status === "closed" ? " · closed" : ""}
+                  {n.lastActivity ? ` · ${dayLabel(n.lastActivity) === "Today" ? "today" : dayLabel(n.lastActivity)}` : ""}
                 </span>
-              ) : (
-                <span className="flex-1 truncate">{n.name}</span>
-              )}
-              <span className="text-[11px] text-muted-foreground">{phone ? "›" : n.sessionCount}</span>
-            </Link>
-          </div>
-        </li>,
+              </span>
+            ) : (
+              <span className="flex-1 truncate">{n.name}</span>
+            )}
+            <span className="text-[11px] text-muted-foreground">{phone ? "›" : n.sessionCount}</span>
+          </Link>
+          <MoveTopicButton id={n.id} name={n.name} {...(n.owner ? { owner: n.owner } : {})} quiet={!phone} />
+        </TopicDragItem>,
       );
       if (expanded) walk(n.children, depth + 1);
     }
   };
   walk(tree, 0);
   return (
-    <ul role="tree" aria-label="Topics" className="m-0 flex list-none flex-col p-0">
-      {rows}
-    </ul>
+    <>
+      <TopLevelDrop tree={tree} me={me} className="mx-1 mb-1" />
+      <ul role="tree" aria-label="Topics" className="m-0 flex list-none flex-col p-0">
+        {rows}
+      </ul>
+    </>
   );
 }
 

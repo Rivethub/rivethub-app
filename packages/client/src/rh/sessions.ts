@@ -264,7 +264,8 @@ const STORED_PAGE = 200;
 const STORED_MAX_PAGES = 100;
 /**
  * A received session's start is when its sender's hub first stored it, which is after its first turn ended.
- * Its first messages are older than that, so the span is read from this long before the start.
+ * Its first messages are older than that, so the time-span fallback is read from this long before the start.
+ * The by-session route returns every message of the session and does not need the lead.
  */
 const IMPORT_LEAD_MS = 6 * 60 * 60 * 1000;
 
@@ -282,14 +283,96 @@ export interface StoredTranscript {
   cut?: "older" | "newer";
 }
 
+interface StoredRow {
+  role: string;
+  content: string;
+  createdAt?: IsoTime | undefined;
+  toolName?: string | undefined;
+  toolArgs?: Record<string, unknown> | undefined;
+  toolResult?: string | undefined;
+}
+
+function storedTurns(messages: StoredRow[], imported: boolean): TranscriptTurn[] {
+  return messages.map((message, i): TranscriptTurn => {
+    const tool = message.role === "tool" || message.toolName !== undefined;
+    const content = imported ? unquoted(message.content) : message.content;
+    return {
+      index: i + 1,
+      role: message.role === "user" ? "user" : "assistant",
+      at: message.createdAt ?? EPOCH,
+      parts: [
+        tool
+          ? {
+              kind: "tool",
+              name: message.toolName ?? "tool",
+              summary: toolWhat(message.toolName, content),
+              ...(message.toolArgs ? { input: message.toolArgs } : {}),
+              ...(message.toolResult ? { result: message.toolResult } : {}),
+            }
+          : said(message.role, content),
+      ],
+    };
+  });
+}
+
 /**
- * A session's messages as memory stored them. rh has no route that reads one session's messages, so this
- * browses the session's own time span and keeps the messages that belong to it, a page at a time. Reading
- * stops after 100 pages, or when a page brings nothing new (rh cannot page through more than 200 messages
- * that share one instant); the result then says which side was left unread. The harness transcript has no
- * such limit.
+ * A session's messages as memory stored them. rh serves one session at
+ * `GET /api/sessions/{session}/messages` (oldest first, tool rows included) and pages with `next`.
+ * A hub without that route answers 404 or 405, the same signal as any missing route, so the read
+ * falls back to paging the session's time span. This read stops short when a cursor repeats, a page
+ * adds nothing, or the last page holds fewer rows than `total`. Pages are oldest first, so the
+ * unread side is the newer one.
  */
 export async function storedTranscript(http: Http, id: SessionId): Promise<StoredTranscript> {
+  const path = `/api/sessions/${encodeURIComponent(sessionSegment(id))}/messages`;
+  try {
+    const first = await http.get(path, wire.sessionMessagesPage);
+    return await followSessionMessages(http, id, path, first);
+  } catch (error) {
+    if (!(error instanceof RouteMissingError)) throw error;
+  }
+  return storedByTime(http, id);
+}
+
+async function followSessionMessages(
+  http: Http,
+  id: SessionId,
+  path: string,
+  first: ReturnType<typeof wire.sessionMessagesPage.parse>,
+): Promise<StoredTranscript> {
+  const imported = isImportKey(id);
+  const mine: StoredRow[] = [];
+  const seen = new Set<string>();
+  const cursors = new Set<string>();
+  let page = first;
+  let cut: StoredTranscript["cut"];
+  for (;;) {
+    let added = 0;
+    for (const message of page.items) {
+      if (seen.has(message.id)) continue;
+      seen.add(message.id);
+      mine.push(message);
+      added += 1;
+    }
+    const next = page.next;
+    // `total` counts every stored row. A finished page that holds fewer is a short read, not an empty session.
+    if (next === undefined || (page.total !== undefined && mine.length >= page.total)) {
+      if (page.total !== undefined && mine.length < page.total) cut = "newer";
+      break;
+    }
+    if (added === 0 || cursors.has(next)) {
+      cut = "newer";
+      break;
+    }
+    cursors.add(next);
+    page = await http.get(path, wire.sessionMessagesPage, { cursor: next });
+  }
+  const turns = storedTurns(mine, imported);
+  return cut ? { turns, cut } : { turns };
+}
+
+/** Browse has no session filter and drops tool rows, so this is only the fallback for an older hub. */
+async function storedByTime(http: Http, id: SessionId): Promise<StoredTranscript> {
   const span = await http.get(`/api/sessions/${encodeURIComponent(sessionSegment(id))}`, wire.sessionSpan).catch(() => undefined);
   const pad = (iso: string, ms: number) => new Date(new Date(iso).getTime() + ms).toISOString();
   const imported = isImportKey(id);
@@ -334,16 +417,7 @@ export async function storedTranscript(http: Http, id: SessionId): Promise<Store
     else since = pad(last, -1);
   }
   const ordered = [...mine.values()].map((message, position) => ({ message, position })).sort((a, b) => (a.message.createdAt ?? "").localeCompare(b.message.createdAt ?? "") || a.position - b.position);
-  const turns = ordered.map(({ message }, i): TranscriptTurn => {
-    const tool = message.role === "tool" || message.toolName !== undefined;
-    const content = imported ? unquoted(message.content) : message.content;
-    return {
-      index: i + 1,
-      role: message.role === "user" ? "user" : "assistant",
-      at: message.createdAt ?? EPOCH,
-      parts: [tool ? { kind: "tool", name: message.toolName ?? "tool", summary: toolWhat(message.toolName, content) } : said(message.role, content)],
-    };
-  });
+  const turns = storedTurns(ordered.map(({ message }) => message), imported);
   return cut ? { turns, cut } : { turns };
 }
 
