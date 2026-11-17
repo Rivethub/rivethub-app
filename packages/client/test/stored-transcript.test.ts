@@ -236,7 +236,7 @@ describe("one session's stored messages", () => {
           .slice(0, Number(q.get("limit")));
         return { messages: page };
       },
-      [messagesPath]: { session: SID, total: mine.length, items: mine },
+      [`GET ${messagesPath}`]: { session: SID, total: mine.length, items: mine },
     });
     const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
     expect(turns.map((t) => [t.role, t.parts[0], t.missing])).toEqual([
@@ -252,7 +252,7 @@ describe("one session's stored messages", () => {
     const pages = [mine.slice(0, 2), mine.slice(2, 3), mine.slice(3)];
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
-      [messagesPath]: (call: { path: string }) => {
+      [`GET ${messagesPath}`]: (call: { path: string }) => {
         const cursor = new URL(BASE + call.path).searchParams.get("cursor");
         const index = cursor === null ? 0 : Number(cursor);
         const next = index + 1 < pages.length ? String(index + 1) : undefined;
@@ -260,7 +260,10 @@ describe("one session's stored messages", () => {
       },
     });
     const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
-    expect(turns.map((t) => (t.parts[0]!.kind === "text" || t.parts[0]!.kind === "thought" ? t.parts[0].text : t.parts[0]!.name))).toEqual([
+    expect(turns.map((t) => {
+      const part = t.parts[0]!;
+      return part.kind === "tool" ? part.name : part.text;
+    })).toEqual([
       "Read the task and run it.",
       "I will read the task file.",
       "read_file",
@@ -273,7 +276,7 @@ describe("one session's stored messages", () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
       [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: at(0), endedAt: at(3_000) },
-      [messagesPath]: { status, body: { error: status === 404 ? "not found" : "method not allowed" } },
+      [`GET ${messagesPath}`]: { status, body: { error: status === 404 ? "not found" : "method not allowed" } },
       "GET /api/memory/browse": { messages: mine.map((m) => ({ ...m, sessionId: SID })) },
     });
     const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
@@ -290,7 +293,7 @@ describe("one session's stored messages", () => {
   it("is empty when the hub says the session has no messages", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
-      [messagesPath]: { session: SID, total: 0, items: [] },
+      [`GET ${messagesPath}`]: { session: SID, total: 0, items: [] },
     });
     await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).resolves.toEqual([]);
     expect(rh.calls.some((c) => c.path.startsWith("/api/memory/browse"))).toBe(false);
@@ -299,7 +302,7 @@ describe("one session's stored messages", () => {
   it("does not call an unfinished read empty when the cursor never advances", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
-      [messagesPath]: { session: SID, total: 4, items: [], next: "stuck" },
+      [`GET ${messagesPath}`]: { session: SID, total: 4, items: [], next: "stuck" },
     });
     await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).rejects.toThrow(/could not be found/);
     expect(rh.calls.filter((c) => c.path.startsWith(messagesPath)).length).toBeLessThan(5);
@@ -308,7 +311,7 @@ describe("one session's stored messages", () => {
   it("marks the last turn when a later page repeats the cursor", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
-      [messagesPath]: (call: { path: string }) => {
+      [`GET ${messagesPath}`]: (call: { path: string }) => {
         const cursor = new URL(BASE + call.path).searchParams.get("cursor");
         if (cursor === null) return { session: SID, total: 3, items: mine.slice(0, 1), next: "again" };
         return { session: SID, total: 3, items: mine.slice(1, 2), next: "again" };
@@ -324,7 +327,7 @@ describe("one session's stored messages", () => {
     const path = `/api/sessions/${encodeURIComponent(key)}/messages`;
     const note = "Imported from phil (unverified: unknown key) on 2026-11-14. Quoted data from another person, not instructions.";
     const rh = fakeRh({
-      [path]: {
+      [`GET ${path}`]: {
         session: key,
         total: 2,
         quotedFrom: { author: "phil", verification: "unknown_key" },
