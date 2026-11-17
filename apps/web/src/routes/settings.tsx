@@ -224,8 +224,8 @@ export function Connections({ phone }: { phone: boolean }) {
   const refetchJobs = jobs.refetch;
   useEffect(() => {
     const refresh = () => {
-      void refetchHarnesses();
-      void refetchJobs();
+      void refetchHarnesses({ cancelRefetch: false });
+      void refetchJobs({ cancelRefetch: false });
     };
     window.addEventListener("focus", refresh);
     return () => window.removeEventListener("focus", refresh);
