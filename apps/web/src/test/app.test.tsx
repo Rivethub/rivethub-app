@@ -158,10 +158,10 @@ describe("Account", () => {
     expect(signIn).toHaveBeenCalledWith();
 
     const del = vi.spyOn(client, "deleteAccount");
-    await user.click(within(card).getByRole("button", { name: "Delete account…" }));
+    await user.click(screen.getByRole("button", { name: "Delete account…" }));
     expect(del).not.toHaveBeenCalled();
-    await user.click(within(card).getByRole("button", { name: "Sign this node out" }));
-    await within(card).findByText("Not signed in");
+    await user.click(screen.getByRole("button", { name: "Sign this node out" }));
+    await screen.findByText("Not signed in");
     expect(del).toHaveBeenCalledOnce();
   }, 12000);
 
@@ -198,6 +198,23 @@ describe("Account", () => {
     expect(alert).toHaveTextContent("more than five minutes old");
     expect(alert).toHaveTextContent("rh open");
     expect(alert.textContent).not.toMatch(/\/api\//);
+  });
+
+  it("keeps account deletion in a danger section below privacy, and hides it when signed out", async () => {
+    const { user } = renderAt("/settings/account");
+    const privacy = await screen.findByRole("heading", { name: "Privacy" });
+    const danger = screen.getByRole("region", { name: "Danger" });
+    expect(privacy.compareDocumentPosition(danger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(danger).getByText("Don't click here unless you really wanted to delete your account.")).toBeInTheDocument();
+    expect(within(danger).getByRole("heading", { name: "Danger" })).toHaveClass("text-error");
+    const link = within(danger).getByRole("link", { name: "Open cloud account settings to delete your account" });
+    expect(link.getAttribute("style")).toContain("var(--error)");
+    expect(within(screen.getByRole("region", { name: "Account" })).queryByRole("link", { name: /delete your account/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("Not signed in");
+    expect(screen.queryByRole("region", { name: "Danger" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /delete your account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete account…" })).not.toBeInTheDocument();
   });
 
   it("says what to do when deletion needs a fresh sign-in and this page cannot refresh it", async () => {

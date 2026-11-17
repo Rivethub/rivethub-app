@@ -387,11 +387,9 @@ function Switch({ label, hint, checked, onChange }: { label: string; hint: strin
 }
 
 function AccountCard({ account }: { account: Account }) {
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const signIn = useDeviceSignIn();
   const signOut = useSignOut();
-  const deleteAccount = useDeleteAccount();
-  const failure = signIn.state.phase === "failed" ? signIn.state.error : (signOut.error ?? deleteAccount.error);
+  const failure = signIn.state.phase === "failed" ? signIn.state.error : signOut.error;
   const waiting = signIn.state.phase === "waiting" || signIn.state.phase === "starting";
   return (
     <section aria-label="Account" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -411,21 +409,32 @@ function AccountCard({ account }: { account: Account }) {
           {waiting ? <Button onClick={signIn.cancel}>Cancel</Button> : <Button variant="primary" onClick={() => void signIn.start()}>Sign in with your RivetHub account</Button>}
         </div>
       )}
-      {account.email && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-          {confirmDelete ? (
-            <>
-              <span className="flex-1 text-[13px]">Sign this node out, then open your cloud account to delete it there. Your memory stays on this hub.</span>
-              <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Sign this node out</Button>
-              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
-            </>
-          ) : (
-            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
-          )}
-        </div>
-      )}
-      <a href={deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer">Open cloud account settings to delete your account</a>
       {failure !== undefined && failure !== null && <ErrorNote error={failure} />}
+    </section>
+  );
+}
+
+function DangerZone({ signedIn }: { signedIn: boolean }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteAccount = useDeleteAccount();
+  if (!signedIn) return null;
+  return (
+    <section aria-labelledby="danger-h" className="flex flex-col gap-3">
+      <h2 id="danger-h" className="m-0 text-[15px] font-semibold text-error">Danger</h2>
+      <div className="flex flex-col gap-3 rounded-xl border border-error/40 p-4">
+        <p className="m-0 text-error">Don't click here unless you really wanted to delete your account.</p>
+        {confirmDelete ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex-1 text-[13px] text-error">Sign this node out, then open your cloud account to delete it there. Your memory stays on this hub.</span>
+            <Button variant="danger" disabled={deleteAccount.isPending} onClick={() => deleteAccount.mutate(undefined, { onSettled: () => setConfirmDelete(false) })}>Sign this node out</Button>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>Keep it</Button>
+          </div>
+        ) : (
+          <Button variant="danger" onClick={() => setConfirmDelete(true)}>Delete account…</Button>
+        )}
+        <a href={deleteAccount.data?.accountUrl ?? "https://rivethub.cloud/account"} target="_blank" rel="noreferrer" className="text-error" style={{ color: "var(--error)" }}>Open cloud account settings to delete your account</a>
+        {deleteAccount.error != null && <ErrorNote error={deleteAccount.error} />}
+      </div>
     </section>
   );
 }
@@ -493,6 +502,7 @@ function AccountSettings() {
         </div>
         <span className="text-[12px] text-muted-foreground">On a team hub, the hub's admin can turn reporting off for everyone.</span>
       </section>
+      <DangerZone signedIn={!!a.email} />
     </>
   );
 }
