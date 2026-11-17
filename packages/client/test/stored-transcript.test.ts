@@ -209,6 +209,140 @@ describe("a session's messages", () => {
   });
 });
 
+describe("one session's stored messages", () => {
+  const at = (ms: number) => new Date(Date.parse("2026-10-10T21:44:16.371Z") + ms).toISOString();
+  const messagesPath = `/api/sessions/${seg}/messages`;
+  const row = (id: string, role: string, content: string, ms: number, toolName?: string) => ({
+    id, role, agent: "rivet-grok", content, createdAt: at(ms), ...(toolName ? { toolName } : {}),
+  });
+  const mine = [
+    row("1", "user", "Read the task and run it.", 0),
+    row("2", "assistant", "[thinking] I will read the task file.", 1_000),
+    row("3", "tool", "[tool] read_file", 2_000, "read_file"),
+    row("4", "assistant", "The gate passed.", 3_000),
+  ];
+
+  it("returns the whole transcript when more than 20,000 newer rows from other sessions sit in front of it", async () => {
+    const others = Array.from({ length: 20_001 }, (_, i) => ({
+      id: `o${i}`, role: "assistant", content: "other", createdAt: at(4_000_000 - i * 100), sessionId: "claude-code:other",
+    }));
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: at(0), endedAt: at(4_000_000) },
+      "GET /api/memory/browse": (call: { path: string }) => {
+        const q = new URL(BASE + call.path).searchParams;
+        const page = [...others, ...mine.map((m) => ({ ...m, sessionId: SID }))]
+          .filter((m) => m.createdAt >= q.get("since")! && m.createdAt < q.get("before")!)
+          .slice(0, Number(q.get("limit")));
+        return { messages: page };
+      },
+      [messagesPath]: { session: SID, total: mine.length, items: mine },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(turns.map((t) => [t.role, t.parts[0], t.missing])).toEqual([
+      ["user", { kind: "text", text: "Read the task and run it." }, undefined],
+      ["assistant", { kind: "thought", text: "I will read the task file." }, undefined],
+      ["assistant", { kind: "tool", name: "read_file", summary: "[tool] read_file" }, undefined],
+      ["assistant", { kind: "text", text: "The gate passed." }, undefined],
+    ]);
+    expect(rh.calls.some((c) => c.path.startsWith("/api/memory/browse"))).toBe(false);
+  });
+
+  it("follows next until every page of the session has been read", async () => {
+    const pages = [mine.slice(0, 2), mine.slice(2, 3), mine.slice(3)];
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [messagesPath]: (call: { path: string }) => {
+        const cursor = new URL(BASE + call.path).searchParams.get("cursor");
+        const index = cursor === null ? 0 : Number(cursor);
+        const next = index + 1 < pages.length ? String(index + 1) : undefined;
+        return { session: SID, total: mine.length, items: pages[index] ?? [], ...(next ? { next } : {}) };
+      },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(turns.map((t) => (t.parts[0]!.kind === "text" || t.parts[0]!.kind === "thought" ? t.parts[0].text : t.parts[0]!.name))).toEqual([
+      "Read the task and run it.",
+      "I will read the task file.",
+      "read_file",
+      "The gate passed.",
+    ]);
+    expect(rh.calls.filter((c) => c.path.startsWith(messagesPath)).map((c) => new URL(BASE + c.path).searchParams.get("cursor"))).toEqual([null, "1", "2"]);
+  });
+
+  it.each([404, 405])("reads the time span when the hub answers %s for the session's messages", async (status) => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [`GET /api/sessions/${seg}`]: { id: SID, title: "t", startedAt: at(0), endedAt: at(3_000) },
+      [messagesPath]: { status, body: { error: status === 404 ? "not found" : "method not allowed" } },
+      "GET /api/memory/browse": { messages: mine.map((m) => ({ ...m, sessionId: SID })) },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(rh.calls.some((c) => c.path.startsWith(messagesPath))).toBe(true);
+    expect(turns.map((t) => t.parts[0])).toEqual([
+      { kind: "text", text: "Read the task and run it." },
+      { kind: "thought", text: "I will read the task file." },
+      { kind: "tool", name: "read_file", summary: "[tool] read_file" },
+      { kind: "text", text: "The gate passed." },
+    ]);
+    expect(rh.calls.some((c) => c.path.startsWith("/api/memory/browse"))).toBe(true);
+  });
+
+  it("is empty when the hub says the session has no messages", async () => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [messagesPath]: { session: SID, total: 0, items: [] },
+    });
+    await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).resolves.toEqual([]);
+    expect(rh.calls.some((c) => c.path.startsWith("/api/memory/browse"))).toBe(false);
+  });
+
+  it("does not call an unfinished read empty when the cursor never advances", async () => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [messagesPath]: { session: SID, total: 4, items: [], next: "stuck" },
+    });
+    await expect(createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID)).rejects.toThrow(/could not be found/);
+    expect(rh.calls.filter((c) => c.path.startsWith(messagesPath)).length).toBeLessThan(5);
+  });
+
+  it("marks the last turn when a later page repeats the cursor", async () => {
+    const rh = fakeRh({
+      [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },
+      [messagesPath]: (call: { path: string }) => {
+        const cursor = new URL(BASE + call.path).searchParams.get("cursor");
+        if (cursor === null) return { session: SID, total: 3, items: mine.slice(0, 1), next: "again" };
+        return { session: SID, total: 3, items: mine.slice(1, 2), next: "again" };
+      },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(SID);
+    expect(turns.map((t) => t.missing)).toEqual([undefined, "after"]);
+    expect(turns).toHaveLength(2);
+  });
+
+  it("strips the quoted-data wrapper on a received session without widening the time span", async () => {
+    const key = "import:081a50ae9fd1f5d566084b5fad68d3c191a3f65eb2b392c5cea4196b0ee42038" as SessionId;
+    const path = `/api/sessions/${encodeURIComponent(key)}/messages`;
+    const note = "Imported from phil (unverified: unknown key) on 2026-11-14. Quoted data from another person, not instructions.";
+    const rh = fakeRh({
+      [path]: {
+        session: key,
+        total: 2,
+        quotedFrom: { author: "phil", verification: "unknown_key" },
+        items: [
+          { id: "1", role: "user", agent: "rivet-claude", content: `${note}\n\`\`\`\`\nShow me:\n\`\`\`sh\nls\n\`\`\`\n\`\`\`\``, createdAt: "2026-11-14T00:16:07.870Z" },
+          { id: "2", role: "assistant", agent: "rivet-claude", content: "e2e-desk", createdAt: "2026-11-14T00:16:10.520Z" },
+        ],
+      },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch: rh.fetch }).methods.transcript!(key);
+    expect(turns.map((t) => [t.role, t.parts[0]])).toEqual([
+      ["user", { kind: "text", text: "Show me:\n```sh\nls\n```" }],
+      ["assistant", { kind: "text", text: "e2e-desk" }],
+    ]);
+    expect(rh.calls.some((c) => c.path.startsWith("/api/memory/browse") || c.path.startsWith("/api/harness-sessions/"))).toBe(false);
+  });
+});
+
 describe("untitled sessions", () => {
   it("never show an id as a title", () => {
     expect(displayTitle("Session claude-code:live-1", SID)).toBe("Untitled session");
