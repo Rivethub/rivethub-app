@@ -1,6 +1,7 @@
 import { DeviceApproval } from "../components/device-login";
 import { readableName, ago, shortDate, time } from "@rivethub/client-runtime/format";
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
@@ -11,6 +12,7 @@ import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/
 import { listSentence } from "../lib/format";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
+import { SERVERS_KEY, shareServerStatus, shareServerTitle, TeamForm } from "../share/destination";
 import { ShareKeys } from "../share/keys";
 import { useDeviceSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
@@ -536,17 +538,63 @@ function Appearance() {
 
 function Server() {
   const hubs = useHubs();
+  const me = useMe();
+  const share = useShareClient();
+  const qc = useQueryClient();
+  const [teamFailure, setTeamFailure] = useState<string | null>(null);
+  const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share!.servers(), enabled: share !== null, retry: false });
   if (hubs.isPending) return <Loading />;
   if (hubs.isError) return <ErrorNote error={hubs.error} />;
+  const current = hubs.data.find((hub) => hub.current);
+  const spaces = me.data?.spaces ?? [];
+  const others = hubs.data.filter((hub) => !hub.current);
   return (
-    <>
+    <div className="flex max-w-xl flex-col gap-6">
       <SampleBadge capability="hubs" />
-      <p className="m-0 text-muted-foreground">Each hub keeps its own memory. Open another hub to switch to it.</p>
-      <div role="menu" aria-label="Memory hubs" className="flex max-w-xl flex-col gap-1 rounded-xl border border-border bg-card p-1.5">
-        <HubList hubs={hubs.data} />
-      </div>
-      <p className="m-0 text-[13px] text-muted-foreground">Connecting this app to a new hub needs rh's hub pairing, which is not available yet.</p>
-    </>
+      <section aria-labelledby="this-node" className="flex flex-col gap-1.5">
+        <h2 id="this-node" className="m-0 text-[15px] font-semibold">This node</h2>
+        <p className="m-0">{current ? current.name : "This window is not connected to a hub."}</p>
+        <p className="m-0 text-[13px] text-muted-foreground">
+          {me.isPending ? "Loading spaces…" : spaces.length ? `Spaces on this node: ${spaces.map((space) => space.name).join(", ")}` : "You are not in a space on this node."}
+        </p>
+      </section>
+      {others.length > 0 && (
+        <div role="menu" aria-label="Memory hubs" className="flex flex-col gap-1 rounded-xl border border-border bg-card p-1.5">
+          <HubList hubs={others} />
+        </div>
+      )}
+      <section aria-labelledby="team-servers" className="flex flex-col gap-2">
+        <h2 id="team-servers" className="m-0 text-[15px] font-semibold">Team servers</h2>
+        <p className="m-0 text-[13px] text-muted-foreground">A team server connection sends and receives shared sessions. It does not switch this window.</p>
+        {share ? (
+          <>
+            {servers.isPending && <Loading label="Loading servers" />}
+            {servers.isError && <ErrorNote error={servers.error} />}
+            {servers.data && (
+              <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                {servers.data.servers.map((server) => (
+                  <li key={server.origin} className="flex flex-col rounded-lg border border-border px-3 py-2">
+                    <span className="font-medium">{shareServerTitle(server)}</span>
+                    <span className="text-[12px] text-muted-foreground">{shareServerStatus(server)}</span>
+                  </li>
+                ))}
+                {servers.data.servers.length === 0 && <li className="text-muted-foreground">No share servers are set up.</li>}
+              </ul>
+            )}
+            {teamFailure && <p role="alert" className="m-0 text-error">{teamFailure}</p>}
+            <TeamForm
+              onSignedIn={() => {
+                setTeamFailure(null);
+                void qc.invalidateQueries({ queryKey: SERVERS_KEY });
+              }}
+              onFail={(error) => setTeamFailure(error instanceof Error ? error.message : "Could not sign in to that team server.")}
+            />
+          </>
+        ) : (
+          <p className="m-0 text-[13px] text-muted-foreground">Adding a team server is in the RivetHub desktop app.</p>
+        )}
+      </section>
+    </div>
   );
 }
 

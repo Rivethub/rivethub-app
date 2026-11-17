@@ -86,6 +86,41 @@ const exchangedOnce = () => {
   expect(localStorage.getItem("rh-csrf")).toBe("csrf-fresh");
 };
 
+describe("Settings server", () => {
+  it("shows this node, the spaces on it, and each share server without claiming the window can switch", async () => {
+    const { user } = renderAt("/settings/server", fakeShare({
+      servers: vi.fn(async () => ({
+        tokenStore: "file" as const,
+        servers: [
+          { origin: "https://10.4.20.120:5174", kind: "team" as const, user: "phil", signedIn: true, default: true },
+          { origin: "https://rivethub.cloud", kind: "cloud" as const, signedIn: false, default: false },
+        ],
+      })),
+    }));
+    const node = await screen.findByRole("region", { name: "This node" });
+    expect(within(node).getByText("phildesk")).toBeInTheDocument();
+    expect(within(node).getByText("Spaces on this node: household")).toBeInTheDocument();
+    const team = screen.getByRole("region", { name: "Team servers" });
+    expect(within(team).getByText("A team server connection sends and receives shared sessions. It does not switch this window.")).toBeInTheDocument();
+    expect(within(team).getByText("10.4.20.120:5174")).toBeInTheDocument();
+    expect(within(team).getByText("Team server · signed in as phil · default")).toBeInTheDocument();
+    expect(within(team).getByText("rivethub.cloud")).toBeInTheDocument();
+    expect(within(team).getByText("RivetHub Cloud drop box · signed out")).toBeInTheDocument();
+    expect(screen.queryByText(/not available yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Open another hub/)).not.toBeInTheDocument();
+    await user.click(within(team).getByRole("button", { name: "Add a team server" }));
+    expect(within(team).getByText("Server address")).toBeInTheDocument();
+    expect(within(team).getByText("Your token for that server")).toBeInTheDocument();
+  });
+
+  it("says a team server is added in the desktop app when this page cannot share", async () => {
+    renderAt("/settings/server");
+    expect(await screen.findByText("Adding a team server is in the RivetHub desktop app.")).toBeInTheDocument();
+    expect(screen.getByText("Spaces on this node: household")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add a team server" })).not.toBeInTheDocument();
+  });
+});
+
 describe("Share", () => {
   it("walks from search to a code that is shown once and gone after Done", async () => {
     const share = fakeShare();

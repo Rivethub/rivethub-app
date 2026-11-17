@@ -9,6 +9,16 @@ import { hostOf, sameServer } from "./format";
 
 export const SERVERS_KEY = ["share", "servers"] as const;
 
+export function shareServerTitle(server: ShareServer): string {
+  return server.kind === "cloud" ? "rivethub.cloud" : hostOf(server.origin);
+}
+
+export function shareServerStatus(server: ShareServer): string {
+  const kind = server.kind === "cloud" ? "RivetHub Cloud drop box" : "Team server";
+  const who = server.signedIn ? `signed in${server.user ? ` as ${server.user}` : ""}` : "signed out";
+  return `${kind} · ${who}${server.default ? " · default" : ""}`;
+}
+
 /** Step 4: where the sealed bundle goes. A server is usable once you are signed in to it. */
 export function Destination({ server, signed, onServer, onSigned, onContinue, onBack }: { server: string | undefined; signed: boolean; onServer: (origin: string) => void; onSigned: (signed: boolean) => void; onContinue: () => void; onBack: () => void }) {
   const share = useShareClient()!;
@@ -44,11 +54,8 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
                 <label className={cx("flex min-w-0 flex-1 items-center gap-3", s.signedIn ? "cursor-pointer" : "opacity-80")}>
                   <input type="radio" name="share-server" disabled={!s.signedIn} checked={server === s.origin} onChange={() => onServer(s.origin)} className="accent-primary" />
                   <span className="flex min-w-0 flex-col">
-                    <span className="font-medium">{s.kind === "cloud" ? "rivethub.cloud" : hostOf(s.origin)}</span>
-                    <span className="text-[12px] text-muted-foreground">
-                      {s.kind === "cloud" ? "RivetHub Cloud drop box" : "Team server"} · {s.signedIn ? `signed in${s.user ? ` as ${s.user}` : ""}` : "signed out"}
-                      {s.default ? " · default" : ""}
-                    </span>
+                    <span className="font-medium">{shareServerTitle(s)}</span>
+                    <span className="text-[12px] text-muted-foreground">{shareServerStatus(s)}</span>
                   </span>
                 </label>
                 {!s.signedIn && s.kind === "cloud" && <Button size="sm" aria-label={`Sign in to ${hostOf(s.origin)}`} onClick={() => setSigningIn(s)}>Sign in</Button>}
@@ -152,7 +159,7 @@ function DeviceLogin({ origin, onSignedIn, onCancel, onFail }: { origin: string;
 }
 
 /** A team server takes a token that its admin made for you. It is sent once, kept by rh, and cleared from this form. */
-function TeamForm({ onSignedIn, onFail }: { onSignedIn: (origin: string) => void; onFail: (error: unknown) => void }) {
+export function TeamForm({ onSignedIn, onFail }: { onSignedIn: (origin: string) => void; onFail: (error: unknown) => void }) {
   const share = useShareClient()!;
   const [open, setOpen] = useState(false);
   const [origin, setOrigin] = useState("");

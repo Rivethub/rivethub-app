@@ -3,7 +3,7 @@ import { canSwitchTo, currentHubSummary } from "@rivethub/client-runtime/hub-lis
 import type { Hub } from "@rivethub/contracts";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useAccount, useHarnesses, useHubs, useLibraryCounts, useMemoryStats, useModelJobs, usePins, useReviewQueue } from "../client/queries";
+import { useAccount, useHarnesses, useHubs, useLibraryCounts, useMe, useMemoryStats, useModelJobs, usePins, useReviewQueue } from "../client/queries";
 import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
 import { useTheme, THEMES } from "../theme";
@@ -195,9 +195,10 @@ export function HubList({ hubs, onPick }: { hubs: Hub[]; onPick?: () => void }) 
 function SidebarFooter() {
   const hubs = useHubs().data;
   const harnesses = useHarnesses().data;
+  const spaces = useMe().data?.spaces.map((space) => space.name);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const current = currentHubSummary(hubs, harnesses?.filter((h) => h.capture.state === "receiving").length);
+  const current = currentHubSummary(hubs, harnesses?.filter((h) => h.capture.state === "receiving").length, spaces);
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);

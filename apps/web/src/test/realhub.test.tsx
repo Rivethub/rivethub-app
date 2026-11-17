@@ -29,6 +29,13 @@ beforeEach(() => {
   clearDecisionError();
 });
 
+describe("Hub footer", () => {
+  it("names the space beside the local hub", async () => {
+    renderWith("/", () => ({}));
+    expect(await screen.findByText("household · Local hub · 4 tools")).toBeInTheDocument();
+  });
+});
+
 describe("Today on a busy hub", () => {
   it("shows one card for filing, however many filing proposals need you", async () => {
     const filing = (n: number): ReviewItem => ({ id: `f-${n}` as ReviewItemId, group: "filing", subject: { kind: "session", id: `s-${n}` as SessionId, title: `Session ${n}` }, text: "→ Home lab", evidence: [], createdAt: now });
