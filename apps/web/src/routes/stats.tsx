@@ -1,12 +1,13 @@
 import { readableName, count, whenLabel } from "@rivethub/client-runtime/format";
-import type { MemoryStats, WorkerId } from "@rivethub/contracts";
+import type { MemoryStats, ModelJob, WorkerId } from "@rivethub/contracts";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useDismissFlagged, useFlagged, useMemoryStats, useRetryFlagged } from "../client/queries";
+import { useDismissFlagged, useFlagged, useMemoryStats, useModelJobs, useRetryFlagged } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, Loading } from "../components/ui";
 import { useIsPhone } from "../lib/media";
+import { describeMemoryRole, memoryRoleStatus, STATS_WORKER_ROLE, type MemoryRoleReading } from "../lib/memoryRole";
 
 const workerName: Record<WorkerId, { name: string; does: string }> = {
   embedder: { name: "Embedder", does: "Makes messages findable by meaning." },
@@ -17,11 +18,11 @@ const workerName: Record<WorkerId, { name: string; does: string }> = {
 
 export const jobName = readableName;
 
-function Tile({ label, value, note, tone }: { label: string; value: ReactNode; note?: ReactNode; tone?: "warn" }) {
+function Tile({ label, value, note, tone, wrap }: { label: string; value: ReactNode; note?: ReactNode; tone?: "warn"; wrap?: boolean }) {
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-xl bg-card px-3.5 py-3">
       <span className="text-[12px] text-muted-foreground">{label}</span>
-      <span className={cx("text-[20px] leading-tight font-medium", tone === "warn" && "text-warning")}>{value}</span>
+      <span className={cx("leading-tight font-medium", wrap ? "break-all text-[15px]" : "text-[20px]", tone === "warn" && "text-warning")}>{value}</span>
       {note && <span className="text-[12px] leading-[1.4] text-muted-foreground">{note}</span>}
     </div>
   );
@@ -42,7 +43,14 @@ function Group({ title, hint, children }: { title: string; hint?: string; childr
 
 const grid = "grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2.5";
 
-function Body({ s }: { s: MemoryStats }) {
+function readingFor(id: WorkerId, jobs: ModelJob[]): MemoryRoleReading {
+  const role = jobs.find((job) => job.role === STATS_WORKER_ROLE[id]);
+  return role ? describeMemoryRole(role, jobs) : { name: workerName[id].name, modelLine: "No model set", state: "No model set", waiting: 0, problem: "" };
+}
+
+const workerTrouble = (state: string) => state === "Failing" || state === "Slow" || state === "Not running";
+
+function Body({ s, jobs, jobsPending, jobsError }: { s: MemoryStats; jobs: ModelJob[] | undefined; jobsPending: boolean; jobsError: unknown }) {
   const total = s.searchable.embedded + s.searchable.waiting + s.searchable.failed;
   const filed = s.filing.byCategorizer + s.filing.byYou;
   return (
@@ -75,17 +83,23 @@ function Body({ s }: { s: MemoryStats }) {
         </div>
       </Group>
       <Group title="Workers" hint="The background jobs that keep memory organized.">
-        <div className={grid}>
-          {s.workers.map((w) => (
-            <Tile
-              key={w.id}
-              label={workerName[w.id].name}
-              value={w.lastFinishedAt ? whenLabel(w.lastFinishedAt) : "Not run yet"}
-              note={w.failing ? `${w.failing} failing` : workerName[w.id].does}
-              {...(w.failing ? { tone: "warn" as const } : {})}
-            />
-          ))}
-        </div>
+        {jobsPending ? <Loading /> : jobsError ? <ErrorNote error={jobsError} /> : (
+          <div className={grid}>
+            {s.workers.map((w) => {
+              const reading = readingFor(w.id, jobs ?? []);
+              return (
+                <Tile
+                  key={w.id}
+                  label={workerName[w.id].name}
+                  value={reading.modelLine}
+                  note={memoryRoleStatus(reading)}
+                  wrap
+                  {...(workerTrouble(reading.state) ? { tone: "warn" as const } : {})}
+                />
+              );
+            })}
+          </div>
+        )}
       </Group>
     </>
   );
@@ -119,6 +133,7 @@ function Flagged() {
 export function StatsPage() {
   const phone = useIsPhone();
   const stats = useMemoryStats();
+  const jobs = useModelJobs();
   return (
     <Frame sidebar={<MainSidebar />}>
       {phone && <MobileBack to="/" label="Today" />}
@@ -139,7 +154,7 @@ export function StatsPage() {
                 </p>
               )}
               <Flagged />
-              <Body s={stats.data} />
+              <Body s={stats.data} jobs={jobs.data} jobsPending={jobs.isPending} jobsError={jobs.error} />
             </>
           )}
         </div>
