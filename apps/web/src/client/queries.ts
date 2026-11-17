@@ -160,9 +160,12 @@ export function useDecide() {
     },
     onSuccess: () => setDecisionError(null),
     onSettled: () => {
-      // A refetch while other decisions are still in flight would bring their items back.
-      if (qc.isMutating({ mutationKey: DECIDE }) > 1) return;
-      for (const queryKey of memoryWideKeys) void qc.invalidateQueries({ queryKey });
+      // A refetch while other decisions are still in flight would bring their items back. This one still
+      // counts as in flight until the callback returns, so the check waits a tick; the last to settle refetches.
+      setTimeout(() => {
+        if (qc.isMutating({ mutationKey: DECIDE }) > 0) return;
+        for (const queryKey of memoryWideKeys) void qc.invalidateQueries({ queryKey });
+      }, 0);
     },
   });
 }

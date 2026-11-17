@@ -218,6 +218,18 @@ export function Connections({ phone }: { phone: boolean }) {
   const [showAll, setShowAll] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scannedAt, setScannedAt] = useState<number | null>(null);
+  // The query library refetches when the page becomes visible. A desktop window that was only behind
+  // another one stays visible, so coming back to it is a focus event.
+  const refetchHarnesses = harnesses.refetch;
+  const refetchJobs = jobs.refetch;
+  useEffect(() => {
+    const refresh = () => {
+      void refetchHarnesses();
+      void refetchJobs();
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refetchHarnesses, refetchJobs]);
   async function rescan() {
     setScanning(true);
     try {
