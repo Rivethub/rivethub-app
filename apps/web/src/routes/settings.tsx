@@ -158,12 +158,16 @@ function recallLine(h: HarnessStatus): { text: string; color: string } {
 /** A job with no model is switched off, not broken: capture and word search work without any model. */
 const unset = (j: ModelJob) => j.health === "unconfigured";
 const healthColor = (j: ModelJob) => (j.health === "healthy" ? ok : unset(j) ? dim : j.health === "slow" ? warn : "var(--error)");
+const ownModel = (j: ModelJob) => [j.provider, j.model].filter(Boolean).join(" · ");
 const modelLabel = (j: ModelJob, all: ModelJob[]) => {
+  if (unset(j)) return "Not set";
+  // The embedder's endpoint is its own, even when the hub also marks the role as inheriting.
+  if (j.role === "embedder") return ownModel(j) || "Not set";
   if (j.inheritsDefault) {
     const d = all.find((x) => x.role === "default");
     return `Default${d?.model ? ` · ${d.provider} ${d.model}` : ""}`;
   }
-  return [j.provider, j.model].filter(Boolean).join(" · ") || "Not set";
+  return ownModel(j) || "Not set";
 };
 const jobStatus = (j: ModelJob) => `${j.detail}${j.queued ? ` · ${j.queued} waiting` : ""}`;
 
@@ -345,8 +349,8 @@ export function Connections({ phone }: { phone: boolean }) {
       <section aria-labelledby="jobs-h" className="flex flex-col gap-2">
         <div className="flex items-baseline gap-2.5">
           <h2 id="jobs-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "WHO DOES THE WORK" : "Who does the work"}</h2>
-          {!phone && <span className="text-[12px] text-muted-foreground">Jobs with no model of their own use Default</span>}
         </div>
+        <p className="m-0 text-[12px] text-muted-foreground">Set in the hub's configuration, under <code className="font-mono">memory.models</code>. This screen cannot change them.</p>
         {js.every(unset) && (
           <p className="m-0 max-w-[70ch] rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.55] text-muted-foreground">
             <span className="font-semibold text-foreground">No model is set.</span> Capture, the session list and word search work without one. Summaries, topics, entities and the wiki need a chat model, and search by meaning needs an embedding model; both can run on this machine. Set them under <code className="rounded bg-code px-1 py-px font-mono text-[12px]">memory.models</code> in <code className="rounded bg-code px-1 py-px font-mono text-[12px]">~/.rivethub/config.yaml</code>, then restart <code className="rounded bg-code px-1 py-px font-mono text-[12px]">rh</code>.
@@ -366,7 +370,7 @@ export function Connections({ phone }: { phone: boolean }) {
             {js.map((j) => (
               <div key={j.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: j.health === "healthy" || unset(j) ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
                 <span className="flex items-center justify-between"><span className="font-semibold">{readableName(j.role)}</span><Dot color={healthColor(j)} size={7} /></span>
-                <span className="rounded-md border border-input bg-background px-2 py-[5px] text-[12px]" style={{ color: j.inheritsDefault ? dim : undefined }}>{modelLabel(j, js)}</span>
+                <span className="text-[13px]">{modelLabel(j, js)}</span>
                 <span className="text-[12px]" style={{ color: healthColor(j) }}>{jobStatus(j)}</span>
               </div>
             ))}

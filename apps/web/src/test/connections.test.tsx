@@ -126,6 +126,32 @@ describe("Connections", () => {
     expect(screen.getByRole("button", { name: "Rescan" })).toBeEnabled();
     expect(screen.getByRole("row", { name: /Claude Code/ })).toBeInTheDocument();
   });
+
+  it("shows each model as read-only text, and the embedder's own model", async () => {
+    renderWith("/settings/connections", (c) => ({
+      harnesses: async () => (await c.harnesses()).map((h) => ({ ...h, canConnect: false, capture: { ...h.capture, state: "receiving" as const }, recall: { state: "connected" as const, detail: "yes" } })),
+      modelJobs: async () => [
+        { role: "default", provider: "claude-cli", model: "opus", inheritsDefault: false, health: "healthy", detail: "inherited by summarizer, embedder", queued: 0 },
+        { role: "summarizer", inheritsDefault: true, health: "healthy", detail: "9 queued", queued: 9 },
+        { role: "embedder", provider: "http://10.4.20.12:9402", model: "nemotron-embed-8b", inheritsDefault: true, health: "healthy", detail: "idle", queued: 0 },
+        { role: "wiki-writer", provider: "claude-cli", model: "opus", inheritsDefault: true, health: "unconfigured", detail: "no model is configured", queued: 0 },
+      ],
+    }));
+    const embedder = (await screen.findByText("Embedder")).parentElement!.parentElement!;
+    expect(embedder).toHaveTextContent("http://10.4.20.12:9402");
+    expect(embedder).toHaveTextContent("nemotron-embed-8b");
+    expect(embedder).not.toHaveTextContent(/Default ·/);
+    expect(embedder.querySelector(".border-input")).toBeNull();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByText(/hub's configuration/)).toBeInTheDocument();
+
+    const wiki = screen.getByText("Wiki writer").parentElement!.parentElement!;
+    expect(wiki).toHaveTextContent("Not set");
+    expect(wiki).not.toHaveTextContent("opus");
+    expect(wiki).not.toHaveTextContent(/Default ·/);
+    expect(screen.getByText("Summarizer").parentElement!.parentElement).toHaveTextContent("Default · claude-cli opus");
+  });
 });
 
 afterEach(() => {
