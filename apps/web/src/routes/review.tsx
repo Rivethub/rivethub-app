@@ -3,7 +3,7 @@ import { reviewText, dayLabel, primaryAction, shortDate } from "@rivethub/client
 import type { ReviewDecision, ReviewItem } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useDecide, useReviewQueue } from "../client/queries";
+import { DECISION_FAILED, useDecide, useReviewQueue } from "../client/queries";
 import { Frame, HubChip, MainSidebar } from "../components/shell";
 import { Button, cx, ErrorNote, KindTag, Loading, SampleBadge } from "../components/ui";
 import { reviewGroups, reviewKindLabel, subjectHref } from "../lib/format";
@@ -139,7 +139,7 @@ function ReviewDesktop() {
           </span>
         </div>
         <FilterChips model={model} />
-        {decide.isError && <ErrorNote error={decide.error} />}
+        {decide.isError && <p role="alert" className="m-0 text-[13px] text-error">{DECISION_FAILED}</p>}
       </header>
       {model.queue.isPending ? (
         <Loading />
@@ -338,7 +338,7 @@ function ReviewPhone() {
         </div>
         <FilterChips model={model} phone />
         <SampleBadge capability="review" />
-        {decide.isError && <ErrorNote error={decide.error} />}
+        {decide.isError && <p role="alert" className="m-0 text-[13px] text-error">{DECISION_FAILED}</p>}
       </header>
       {model.queue.isPending ? (
         <Loading />

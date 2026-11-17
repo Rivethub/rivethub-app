@@ -7,7 +7,9 @@ import type {
   HarnessId,
   IsoTime,
   ReviewDecision,
+  ReviewItem,
   ReviewItemId,
+  TodayDigest,
   SearchOptions,
   SessionId,
   SessionQuery,
@@ -16,6 +18,7 @@ import type {
   Visibility,
 } from "@rivethub/contracts";
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { useSyncExternalStore } from "react";
 import { withFreshLogin } from "./auth";
 import { markStep } from "../lib/journey";
 import { useClient, type AppClient } from "./context";
@@ -68,14 +71,90 @@ function useWrite<A, R>(fn: (c: AppClient, arg: A) => Promise<R>, invalidate: (a
   });
 }
 
-export const useDecide = () =>
-  useWrite(
-    (c, a: { id: ReviewItemId; decision: ReviewDecision }) => {
-      if (a.decision.kind !== "later") markStep("review");
-      return c.decide(a.id, a.decision);
+export const DECISION_FAILED = "That didn't go through, so it's back for you to try again.";
+
+let decisionError: string | null = null;
+const decisionErrorListeners = new Set<() => void>();
+
+function setDecisionError(message: string | null) {
+  decisionError = message;
+  decisionErrorListeners.forEach((listener) => listener());
+}
+
+export function clearDecisionError() {
+  setDecisionError(null);
+}
+
+/** Survives the card unmounting when the item leaves the list, so a failed decision can still be said. */
+export function useDecisionError(): string | null {
+  return useSyncExternalStore(
+    (listener) => {
+      decisionErrorListeners.add(listener);
+      return () => decisionErrorListeners.delete(listener);
     },
-    () => memoryWideKeys,
+    () => decisionError,
+    () => null,
   );
+}
+
+export function useDecide() {
+  const client = useClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (a: { id: ReviewItemId; decision: ReviewDecision }) => {
+      if (a.decision.kind !== "later") markStep("review");
+      return client.decide(a.id, a.decision);
+    },
+    onMutate: async (a) => {
+      setDecisionError(null);
+      await qc.cancelQueries({ queryKey: keys.review });
+      await qc.cancelQueries({ queryKey: ["today"] });
+      const review = qc.getQueryData<ReviewItem[]>(keys.review);
+      const todays = qc.getQueriesData<TodayDigest>({ queryKey: ["today"] });
+      const reviewIndex = review?.findIndex((item) => item.id === a.id) ?? -1;
+      const removed = (reviewIndex >= 0 ? review?.[reviewIndex] : undefined) ?? todays.map(([, digest]) => digest?.needsYou.find((item) => item.id === a.id)).find((item) => item !== undefined);
+      if (review && reviewIndex >= 0) qc.setQueryData<ReviewItem[]>(keys.review, review.filter((item) => item.id !== a.id));
+      const placements: { key: QueryKey; index: number }[] = [];
+      for (const [key, digest] of todays) {
+        const index = digest?.needsYou.findIndex((item) => item.id === a.id) ?? -1;
+        if (!digest || index < 0) continue;
+        placements.push({ key, index });
+        qc.setQueryData<TodayDigest>(key, {
+          ...digest,
+          needsYou: digest.needsYou.filter((item) => item.id !== a.id),
+          reviewCount: Math.max(0, digest.reviewCount - 1),
+        });
+      }
+      return { removed, reviewIndex, placements };
+    },
+    onError: (_error, _a, ctx) => {
+      const removed = ctx?.removed;
+      if (removed) {
+        if ((ctx?.reviewIndex ?? -1) >= 0) {
+          qc.setQueryData<ReviewItem[]>(keys.review, (current) => {
+            if (!current || current.some((item) => item.id === removed.id)) return current;
+            const next = [...current];
+            next.splice(Math.min(ctx!.reviewIndex, next.length), 0, removed);
+            return next;
+          });
+        }
+        for (const { key, index } of ctx?.placements ?? []) {
+          qc.setQueryData<TodayDigest>(key, (digest) => {
+            if (!digest || digest.needsYou.some((item) => item.id === removed.id)) return digest;
+            const needsYou = [...digest.needsYou];
+            needsYou.splice(Math.min(index, needsYou.length), 0, removed);
+            return { ...digest, needsYou, reviewCount: digest.reviewCount + 1 };
+          });
+        }
+      }
+      setDecisionError(DECISION_FAILED);
+    },
+    onSuccess: () => setDecisionError(null),
+    onSettled: () => {
+      for (const queryKey of memoryWideKeys) void qc.invalidateQueries({ queryKey });
+    },
+  });
+}
 export const useUpdateTopic = () =>
   useWrite(
     (c, a: { id: TopicId; patch: Parameters<AppClient["updateTopic"]>[1] }) => c.updateTopic(a.id, a.patch),

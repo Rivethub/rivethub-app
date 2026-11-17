@@ -1,9 +1,10 @@
-import type { IsoTime, ReviewItem, ReviewItemId, SessionDetail, SessionId, SessionSummaryRow } from "@rivethub/contracts";
+import type { EntityId, IsoTime, ReviewItem, ReviewItemId, SessionDetail, SessionId, SessionSummaryRow } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "../app";
+import { clearDecisionError } from "../client/queries";
 import type { AppClient } from "../client/context";
 import { createSampleClient } from "../dev/sample-client";
 import { resetJourney } from "../lib/journey";
@@ -23,7 +24,10 @@ const row = (id: string, title: string, messageCount: number, extra: Partial<Ses
   id: id as SessionId, title, harness: "grok-build", startedAt: now, messageCount, visibility: { kind: "private" }, kept: false, trashed: false, memoryState: "queued", ...extra,
 });
 
-beforeEach(() => resetJourney());
+beforeEach(() => {
+  resetJourney();
+  clearDecisionError();
+});
 
 describe("Today on a busy hub", () => {
   it("shows one card for filing, however many filing proposals need you", async () => {
@@ -36,6 +40,47 @@ describe("Today on a busy hub", () => {
     const needs = await screen.findByRole("region", { name: /Needs you/ });
     expect(within(needs).getAllByRole("button", { name: "File all" })).toHaveLength(1);
     expect(within(needs).getByText("3 sessions")).toBeInTheDocument();
+  });
+
+  it("takes a decision off the screen before the hub answers, and puts it back if that fails", async () => {
+    let rejectDecision: (error: Error) => void = () => {};
+    const gate = new Promise<void>((_resolve, reject) => {
+      rejectDecision = reject;
+    });
+    const item: ReviewItem = {
+      id: "f-1" as ReviewItemId,
+      group: "fact",
+      subject: { kind: "entity", id: "e-1" as EntityId, title: "nas-01" },
+      text: "backup time",
+      evidence: [],
+      createdAt: now,
+    };
+    let todayCalls = 0;
+    let releaseRefetch = () => {};
+    const refetchGate = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
+    });
+    const { user } = renderWith("/", (c) => ({
+      reviewQueue: async () => [item],
+      today: async (date) => {
+        todayCalls += 1;
+        if (todayCalls > 1) await refetchGate;
+        return { ...(await c.today(date)), needsYou: [item], reviewCount: 1 };
+      },
+      decide: () => gate,
+    }));
+    const needs = await screen.findByRole("region", { name: /Needs you/ });
+    await user.click(within(needs).getByRole("button", { name: "Accept" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: /Needs you/ })).not.toBeInTheDocument());
+    expect(screen.queryByText("backup time")).not.toBeInTheDocument();
+    expect(todayCalls).toBe(1);
+    rejectDecision(new Error("refused"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("back for you to try again");
+    const again = await screen.findByRole("region", { name: /Needs you/ });
+    expect(within(again).getByRole("button", { name: "Accept" })).toBeEnabled();
+    expect(within(again).getByText("backup time")).toBeInTheDocument();
+    expect(todayCalls).toBeGreaterThan(1);
+    releaseRefetch();
   });
 
   it("leaves sessions that captured nothing and changed nothing out of What changed", async () => {

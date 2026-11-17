@@ -2,7 +2,7 @@ import { SubjectType } from "../components/subject-type";
 import { count, reviewText, harnessNames, hasNoMessages, localDay, longDay, parseDay, primaryAction, shortDate, subjectKindLabel, whenLabel } from "@rivethub/client-runtime/format";
 import type { ReviewItem, TodayDigest } from "@rivethub/contracts";
 import { getRouteApi, Link } from "@tanstack/react-router";
-import { useDecide, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
+import { useDecide, useDecisionError, useHarnesses, useModelJobs, useReviewQueue, useToday } from "../client/queries";
 import { NextStep } from "../components/journey";
 import { Frame, MainSidebar, MobileHeader } from "../components/shell";
 import { Button, Dot, ErrorNote, KindTag, Loading, RichText, SampleBadge } from "../components/ui";
@@ -144,6 +144,12 @@ function NeedsCards({ digest }: { digest: TodayDigest }) {
 /** A session that captured nothing and changed nothing is not news. Tools open such sessions all the time. */
 const worthShowing = (digest: TodayDigest) => digest.entries.filter(({ session, changes }) => changes.length > 0 || !hasNoMessages(session));
 
+function DecisionFailed() {
+  const message = useDecisionError();
+  if (!message) return null;
+  return <p role="alert" className="m-0 text-[13px] text-error">{message}</p>;
+}
+
 function TodayDesktop({ digest }: { digest: TodayDigest }) {
   const entries = worthShowing(digest);
   return (
@@ -151,6 +157,7 @@ function TodayDesktop({ digest }: { digest: TodayDigest }) {
       <div className="flex min-w-0 max-w-[820px] flex-1 flex-col gap-[26px]">
         <Lede digest={digest} />
         <Health />
+        <DecisionFailed />
         {digest.needsYou.length > 0 && (
           <section aria-labelledby="needs-you" className="flex flex-col gap-2.5">
             <div className="flex items-baseline gap-2.5">
@@ -203,6 +210,7 @@ function TodayPhone({ digest }: { digest: TodayDigest }) {
     <div className="flex flex-col gap-[18px] px-4 pb-4 text-[15px]">
       <Lede digest={digest} phone />
       <Health phone />
+      <DecisionFailed />
       {digest.needsYou.length > 0 && (
         <section aria-labelledby="needs-you-m" className="flex flex-col gap-2">
           <div className="flex items-baseline">
