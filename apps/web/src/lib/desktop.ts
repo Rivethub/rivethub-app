@@ -90,7 +90,7 @@ function readHost(value: unknown): RivetHubHost | undefined {
 }
 
 /**
- * Checks `window.rivethub` once. A missing bridge is a normal browser.
+ * Checks `window.rivethub` at the boundary. A missing bridge is a normal browser.
  * A bridge whose `host` is the wrong shape is the same bridge with no host, so a bad embed cannot crash the app.
  */
 export function readDesktopBridge(value: unknown): RivetHubDesktop | null {
