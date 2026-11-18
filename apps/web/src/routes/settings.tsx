@@ -1,6 +1,6 @@
 import { DeviceApproval } from "../components/device-login";
 import { ago, shortDate, time } from "@rivethub/client-runtime/format";
-import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
+import type { Account, DesktopUpdateChannel, DesktopUpdateState, HarnessStatus, ModelJob } from "@rivethub/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
@@ -10,6 +10,7 @@ import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
 import { harnessAction } from "../lib/connections";
+import { desktopBridge } from "../lib/desktop";
 import { listSentence } from "../lib/format";
 import { describeMemoryRole, memoryRoleStatus } from "../lib/memoryRole";
 import { useIsPhone } from "../lib/media";
@@ -484,6 +485,7 @@ function AccountSettings() {
     <>
       <SampleBadge capability="account" />
       <AccountCard account={a} />
+      <AppUpdates />
       <section aria-labelledby="updates-h" className="flex flex-col gap-3">
         <h2 id="updates-h" className="m-0 text-[15px] font-semibold">Updates</h2>
         {a.pendingUpdate && (
@@ -535,6 +537,87 @@ function AccountSettings() {
       </section>
       <DangerZone signedIn={!!a.email} />
     </>
+  );
+}
+
+function updateLine(state: DesktopUpdateState): string {
+  switch (state.state) {
+    case "disabled":
+      return state.reason;
+    case "idle":
+      return state.checkedAt ? `Last checked ${shortDate(state.checkedAt)}` : "Not checked yet";
+    case "checking":
+      return "Checking for an update";
+    case "downloading":
+      return `Downloading ${state.version}, ${Math.round(state.percent)}%`;
+    case "ready":
+      return `${state.version} is ready to install`;
+    case "manual":
+      return `${state.version} is available to download`;
+    case "error":
+      return state.message;
+  }
+}
+
+/** RivetHub's own app updates. Absent when this window's host does not own them. */
+function AppUpdates() {
+  const [updates] = useState(() => desktopBridge()?.updates);
+  const [state, setState] = useState<DesktopUpdateState | null>(null);
+  useEffect(() => {
+    if (!updates) return;
+    let alive = true;
+    const show = (next: DesktopUpdateState) => {
+      if (alive) setState(next);
+    };
+    void updates.getState().then(show, () => {
+      if (alive) setState(null);
+    });
+    let stop = () => {};
+    try {
+      stop = updates.onState(show);
+    } catch {
+      if (alive) setState(null);
+    }
+    return () => {
+      alive = false;
+      try {
+        stop();
+      } catch {
+        // The host already dropped the listener.
+      }
+    };
+  }, [updates]);
+  if (!updates || !state) return null;
+  const setChannel = (channel: DesktopUpdateChannel) => {
+    void updates.setChannel(channel).then(setState, (error: unknown) => {
+      setState({ state: "error", channel: state.channel, message: error instanceof Error ? error.message : "Could not change the update channel." });
+    });
+  };
+  return (
+    <section aria-labelledby="app-updates-h" className="flex flex-col gap-3">
+      <h2 id="app-updates-h" className="m-0 text-[15px] font-semibold">App updates</h2>
+      <div className="overflow-hidden rounded-xl border border-border">
+        <Row label="Status" hint={state.channel === "nightly" ? "Nightly" : "Stable"}><span className="text-[13px]">{updateLine(state)}</span></Row>
+        <Row label="Channel" hint="Nightly is opt-in">
+          <select aria-label="App update channel" value={state.channel} onChange={(e) => setChannel(e.target.value as DesktopUpdateChannel)} className={selectCls}>
+            <option value="stable">Stable</option>
+            <option value="nightly">Nightly</option>
+          </select>
+        </Row>
+      </div>
+      {state.state === "ready" && (
+        <Button
+          onClick={() => {
+            void updates.restartToUpdate().catch((error: unknown) => {
+              setState({ state: "error", channel: state.channel, message: error instanceof Error ? error.message : "Could not restart to update." });
+            });
+          }}
+        >
+          Restart to update
+        </Button>
+      )}
+      {state.state === "manual" && <a href={state.downloadUrl}>Download {state.version}</a>}
+    </section>
   );
 }
 

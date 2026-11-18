@@ -6,7 +6,7 @@ import { useChanges, useEntities, useEntity, useReviewQueue, useSetFact } from "
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, type Tab } from "../components/article";
 import { PinIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
-import { articleBody, Markdown } from "../components/markdown";
+import { articleBody, Markdown, useArticleHash } from "../components/markdown";
 import { Modal } from "../components/modal";
 import { PinButton } from "../components/pin";
 import { SearchIcon } from "../components/icons";
@@ -252,8 +252,8 @@ function EntityTitle({ e, phone }: { e: EntityArticle; phone?: boolean }) {
  * on the page, that list is dropped so the two cannot disagree.
  */
 function EntityArticleBody({ e }: { e: EntityArticle }) {
-  if (!e.article) return null;
-  const body = articleBody(e.article, e.title, { dropFacts: e.facts.length > 0, dropLead: e.lead });
+  const body = e.article ? articleBody(e.article, e.title, { dropFacts: e.facts.length > 0, dropLead: e.lead }) : "";
+  useArticleHash(body.length > 0);
   return body ? <Markdown source={body} /> : null;
 }
 

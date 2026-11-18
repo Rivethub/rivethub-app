@@ -124,7 +124,7 @@ test("the renderer has no Node and sees only rivethub.relogin and rivethub.updat
     updates: ["getState", "onState", "setChannel", "restartToUpdate"],
   });
   // An unpackaged run with no feed of its own never checks for updates.
-  expect(await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.getState())).toEqual({
+  expect(await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.getState())).toEqual({
     state: "disabled",
     channel: "stable",
     reason: "Updates run only in the packaged app.",

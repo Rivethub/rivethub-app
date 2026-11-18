@@ -1,7 +1,7 @@
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import { articleBody, Markdown, parseMarkdown } from "../components/markdown";
 import { createSampleClient } from "../dev/sample-client";
@@ -52,6 +52,14 @@ describe("Markdown", () => {
     expect(container.querySelector("img, script")).toBeNull();
     expect(container.querySelector("a")).toBeNull();
     expect(container).toHaveTextContent('<img src=x onerror="alert(1)">');
+  });
+
+  it("gives each heading a stable id and numbers a repeated one", () => {
+    render(<Markdown source={"## What **stays**\n\n## Services\n\n### Services\n\n## !!!"} />);
+    expect(screen.getByRole("heading", { name: "What stays" })).toHaveAttribute("id", "what-stays");
+    const services = screen.getAllByRole("heading", { name: "Services" });
+    expect(services.map((heading) => heading.id)).toEqual(["services", "services-1"]);
+    expect(screen.getByRole("heading", { name: "!!!" })).toHaveAttribute("id", "section");
   });
 
   it("leaves snake_case names and paths alone and reads a table", () => {
@@ -108,6 +116,20 @@ describe("Pages show their article", () => {
     expect(await screen.findByRole("heading", { level: 3, name: "What stays" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 3, name: "What moved out" })).toBeInTheDocument();
     expect(screen.getAllByText(/The release that turns the RivetHub runtime into a memory product/)).toHaveLength(1);
+  });
+
+  it("scrolls a topic opened at a heading hash to that heading", async () => {
+    const scrolled: Element[] = [];
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {
+      scrolled.push(this);
+    });
+    try {
+      renderAt("/topics/rh-08#what-moved-out");
+      const heading = await screen.findByRole("heading", { level: 3, name: "What moved out" });
+      await waitFor(() => expect(scrolled).toContain(heading));
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
