@@ -1,0 +1,178 @@
+# Publishes the web UI that `rh update` installs.
+#
+# A push of a web-v* tag builds that version and creates the GitHub release. The tag is
+# web-v plus the version: web-v1.2.3 (stable), web-v1.2.3-beta.N (beta), or a nightly.
+# Stable and beta are ordinary releases. A nightly is a prerelease. An existing release
+# is left alone.
+#
+# A push to main that changes apps/web or packages, and a manual run on main, publishes
+# web-v<package version>-nightly.<UTC date>.<run> and deletes nightlies past the newest 10.
+# Path filters are not applied to tag pushes, so a web-v tag releases even when its commit
+# does not touch those paths.
+#
+# A pull request builds and packages without publishing, so a broken release path fails
+# before anyone pushes a tag.
+name: Release web
+
+on:
+  push:
+    tags:
+      - "web-v*"
+    branches:
+      - main
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/web/**"
+      - "packages/**"
+      - ".github/workflows/release-web.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-web-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter "@rivethub/web..."
+      - run: pnpm --filter "@rivethub/web..." typecheck
+      - run: pnpm --filter "@rivethub/web..." test
+      - run: pnpm --filter @rivethub/web build
+      - name: Package the dist
+        run: |
+          set -euo pipefail
+          base=$(node -p 'require("./apps/web/package.json").version')
+          sha="${GITHUB_SHA}"
+          common=(node apps/web/scripts/package-web.ts --dist apps/web/dist --commit "${sha}")
+          check() {
+            local dir="$1"
+            local manifest="${dir}/web-manifest.json"
+            local asset sum
+            asset=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).asset' "${manifest}")
+            sum=$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).sha256' "${manifest}")
+            echo "${sum}  ${dir}/${asset}" | sha256sum -c -
+          }
+          if [[ "${GITHUB_REF}" == refs/tags/web-v* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            "${common[@]}" --output-dir release --version "${tag#web-v}" --tag "${tag}"
+            check release
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            "${common[@]}" --output-dir release --version "${base}" --tag "web-v${base}" --dry-run
+            check release
+            "${common[@]}" --output-dir release-nightly --version "${base}-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}" --dry-run
+            check release-nightly
+          else
+            "${common[@]}" --output-dir release --version "${base}-nightly.$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+            check release
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: success() && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/web-v') || github.ref == 'refs/heads/main')
+        with:
+          name: rivethub-web
+          path: |
+            release/rivethub-web-*.tar.gz
+            release/web-manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  publish:
+    needs: package
+    if: success() && github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/web-v') || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: rivethub-web
+          path: release
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          field() {
+            node -p 'const m = JSON.parse(require("fs").readFileSync("release/web-manifest.json", "utf8")); const v = m[process.argv[1]]; if (typeof v !== "string") process.exit(1); v' "$1"
+          }
+          version=$(field version)
+          channel=$(field channel)
+          commit=$(field commit)
+          min_rh=$(field minRhVersion)
+          asset=$(field asset)
+          sha256=$(field sha256)
+          tag="web-v${version}"
+          if [[ "${GITHUB_REF}" == refs/tags/* && "${GITHUB_REF_NAME}" != "${tag}" ]]; then
+            echo "::error::manifest version ${version} does not match tag ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          if [[ "${commit}" != "${GITHUB_SHA}" ]]; then
+            echo "::error::manifest commit ${commit} does not match ${GITHUB_SHA}"
+            exit 1
+          fi
+          if [[ "${asset}" != "rivethub-web-${version}.tar.gz" ]]; then
+            echo "::error::asset ${asset} does not match version ${version}"
+            exit 1
+          fi
+          test -f "release/${asset}"
+          test -f release/web-manifest.json
+          echo "${sha256}  release/${asset}" | sha256sum -c -
+          # A published version is never replaced. The tag for stable and beta already
+          # exists, because the push of that tag started this run. A nightly tag must not.
+          if gh release view "${tag}" --json tagName >/dev/null 2>&1; then
+            echo "::error::${tag} already has a release and will not be replaced"
+            exit 1
+          fi
+          if [[ "${channel}" == "nightly" ]] && gh api "/repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            echo "::error::tag ${tag} already exists and will not be replaced"
+            exit 1
+          fi
+          notes=$(printf 'Web UI %s (%s).\n\nCommit %s.\nMinimum rh %s.\n' "${version}" "${channel}" "${commit}" "${min_rh}")
+          args=(release create "${tag}" --title "${tag}" --notes "${notes}")
+          # Only nightlies are GitHub prereleases. Beta stays a normal release; its tag and manifest say beta.
+          if [[ "${channel}" == "nightly" ]]; then
+            args+=(--prerelease --target "${GITHUB_SHA}")
+          fi
+          args+=("release/${asset}" release/web-manifest.json)
+          gh "${args[@]}"
+          gh release view "${tag}" --json assets --jq '.assets[].name' | sort > "${RUNNER_TEMP}/got"
+          printf '%s\n' "${asset}" web-manifest.json | sort > "${RUNNER_TEMP}/want"
+          cmp -s "${RUNNER_TEMP}/got" "${RUNNER_TEMP}/want"
+
+      - name: Prune nightlies past the newest 10
+        if: success() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("release/web-manifest.json", "utf8")).version')
+          tag="web-v${version}"
+          prune=$(mktemp)
+          gh release list --limit 200 --json tagName --jq '.[].tagName' \
+            | node apps/web/scripts/package-web.ts --prune --keep 10 --protect "${tag}" > "${prune}"
+          while IFS= read -r old; do
+            [[ -z "${old}" ]] && continue
+            gh release delete "${old}" --yes --cleanup-tag
+          done < "${prune}"

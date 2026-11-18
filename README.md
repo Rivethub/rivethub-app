@@ -4,7 +4,7 @@ Everything in RivetHub that isn't the runtime. The runtime ([rivethub-runtime](h
 
 | Path | What it is |
 | --- | --- |
-| `apps/web` | The memory manager in the browser. `rh` serves the built files from `gateway.static_dir`. |
+| `apps/web` | The memory manager in the browser. `rh` serves the published build, or the directory in `gateway.static_dir` when that is set. |
 | `apps/mobile` | The same memory manager as an Expo app for Android and iOS. |
 | `apps/desktop` | Electron shell around `apps/web`. The window loads the web app from the local `rh` node's own loopback origin. |
 | `packages/contracts` | Types shared by everything here, matching the runtime's HTTP API. |
@@ -100,15 +100,16 @@ The desktop app can share sessions with someone else and receive theirs. Both st
 
 `apps/desktop/e2e/share.live.spec.ts` drives the real screens in Electron against throwaway rh nodes; see the header of that file to run it.
 
-## Deploy the web app to a hub
+## Release the web app
 
-```sh
-pnpm --filter @rivethub/web build
-dest=~/.local/opt/rivethub/web/$(git rev-parse --short HEAD)
-mkdir -p "$dest" && cp -r apps/web/dist/. "$dest"
-ln -sfn "$dest" ~/.local/opt/rivethub/web/current
-```
+A node installs the newest published web build it can run with `rh update`. The build is a GitHub release of this repo. The tag is `web-v` plus the version, and the release holds `rivethub-web-<version>.tar.gz` and `web-manifest.json`.
 
-Point `gateway.static_dir` in the `rh` config at `~/.local/opt/rivethub/web/current`.
+The version lives in `apps/web/package.json`. The first one is 0.8.2, the same version as `apps/desktop`, because that shell already ships this UI. `rivethub.minRhVersion` in the same file is the oldest `rh` the build runs on. It is 0.8.3, the runtime this app was checked against.
+
+Cut a stable release by bumping `version`, merging to `main`, and pushing the tag `web-v` plus that version. The tag for 0.8.2 is `web-v0.8.2`. A beta keeps the package version and puts the beta number in the tag, such as `web-v0.8.2-beta.1`. The Release web workflow checks the tag against the package version, builds and tests `@rivethub/web`, and publishes the archive and the manifest. It stops if that tag already has a release. A published version is not replaced.
+
+A push to `main` that changes `apps/web` or `packages` publishes a nightly prerelease, `web-v<version>-nightly.<UTC date>.<run>`. Dispatching the Release web workflow on `main` publishes one too. The workflow keeps the 10 newest nightlies and deletes the older ones. After stable `x.y.z` ships, bump `version`. A nightly of `x.y.z` sorts below stable `x.y.z`, so a node that takes the newest build stays on the stable release until the package version moves.
+
+To serve a build you made yourself, run `pnpm --filter @rivethub/web build` and set `gateway.static_dir` to `apps/web/dist`. An explicit `static_dir` wins over the copy `rh update` installed.
 
 Licensed under Apache-2.0.
