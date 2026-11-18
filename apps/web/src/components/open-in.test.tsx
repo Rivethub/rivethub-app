@@ -55,6 +55,10 @@ describe("openChoices", () => {
     expect(request).not.toHaveProperty("nativeSessionId");
   });
 
+  it("passes the tool's own session id through when the hub sends one", () => {
+    expect(hostOpenRequest({ ...detail, nativeSessionId: "abc" }).nativeSessionId).toBe("abc");
+  });
+
   it("stays a clipboard menu when no host can open the session", () => {
     expect(openChoices(detail, harnesses).map((choice) => choice.name)).toEqual(["Claude Code", "Codex"]);
   });

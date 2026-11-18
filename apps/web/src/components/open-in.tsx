@@ -36,8 +36,8 @@ export function handoffPrompt(d: Pick<SessionDetail, "id" | "title" | "harness" 
 }
 
 /**
- * What the host receives for this session. The hub's session detail has no separate tool session id,
- * so `nativeSessionId` stays off rather than being guessed from the resume command.
+ * What the host receives for this session. `nativeSessionId` is sent only when the hub sends it;
+ * it is never guessed from the resume command.
  */
 export function hostOpenRequest(d: SessionDetail): HostOpenSessionRequest {
   const request: HostOpenSessionRequest = {
@@ -48,6 +48,7 @@ export function hostOpenRequest(d: SessionDetail): HostOpenSessionRequest {
     handoffPrompt: handoffPrompt(d),
   };
   if (d.cwd !== undefined) request.cwd = d.cwd;
+  if (d.nativeSessionId !== undefined) request.nativeSessionId = d.nativeSessionId;
   if (d.resumeCommand !== undefined) request.resumeCommand = d.resumeCommand;
   return request;
 }
