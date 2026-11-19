@@ -81,9 +81,9 @@ These two paths are the contract. A rename has to break `apps/web/src/test/deep-
 
 The gateway serves both as the public shell, with no session. The client does not send the browser to `/login` on its own.
 
-When the same tab later opens the gateway login page, the app stores the current path in `sessionStorage` under `rivethub.returnTo` on `pagehide`. The login page replaces the document with `/`. The root route then redirects to the stored path, including `?embed=1` when that query was present. The stored value is accepted only as a same-origin path. A protocol-relative URL, a `..` segment, or a URL with a scheme is dropped.
+When the hub answers a request with 401, the app stores the current path in `sessionStorage` under `rivethub.returnTo`. A signed-in visitor never stores one. The login page replaces the document with `/`. The root route then redirects to the stored path, including `?embed=1` when that query was present. The stored value is accepted only as a same-origin path. A protocol-relative URL, a `..` segment, or a URL with a scheme is dropped.
 
-That recovery needs the web app to have loaded in the tab before login. A fresh webview that opens `/login` first still lands on `/`. The gateway login script does that, and this repo does not ship that script. See the runtime ask below.
+That recovery needs the web app to have loaded in the tab, and made its first request, before the host opens the login page. A fresh webview that opens `/login` first still lands on `/`. The gateway login script does that, and this repo does not ship that script. See the runtime ask below.
 
 A memory item path is also exempt from the first-run redirect to `/welcome`.
 

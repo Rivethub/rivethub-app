@@ -1,8 +1,7 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect, retainSearchParams, useRouterState, type RouterHistory } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createRootRoute, createRoute, createRouter, Outlet, redirect, retainSearchParams, type RouterHistory } from "@tanstack/react-router";
 import { PaletteProvider } from "./components/palette";
 import { EmbedState } from "./lib/embed-state";
-import { armReturn, takeReturn } from "./lib/return-to";
+import { takeReturn } from "./lib/return-to";
 import { EntitiesIndex, EntityPage } from "./routes/entity";
 import { GuidePage } from "./routes/guide";
 import { ReceivePage } from "./routes/receive";
@@ -32,16 +31,6 @@ export const ARTICLE_TABS = ["overview", "sessions", "history"] as const;
 export const SETTINGS_SECTIONS = ["connections", "account", "sharing", "keys", "trust", "appearance", "server"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
-function RememberReturn() {
-  const href = useRouterState({ select: (s) => s.location.pathname + s.location.searchStr });
-  useEffect(() => {
-    const arm = () => armReturn(href);
-    window.addEventListener("pagehide", arm);
-    return () => window.removeEventListener("pagehide", arm);
-  }, [href]);
-  return null;
-}
-
 const rootRoute = createRootRoute({
   validateSearch: (s: Raw) => clean({ embed: s.embed === "1" || s.embed === 1 ? (1 as const) : undefined }),
   search: { middlewares: [retainSearchParams(["embed"])] },
@@ -52,7 +41,6 @@ const rootRoute = createRootRoute({
   component: () => (
     <EmbedState>
       <PaletteProvider>
-        <RememberReturn />
         <FirstRunGate />
         <Outlet />
       </PaletteProvider>

@@ -1,5 +1,6 @@
 import { ReauthRequiredError, type AuthSeam } from "@rivethub/client";
 import { desktopBridge } from "../lib/desktop";
+import { armReturn } from "../lib/return-to";
 
 /** Where rh's login page leaves the session's CSRF token (rivethub-runtime CONTRACT note 147). The session cookie itself is httpOnly. */
 export const CSRF_STORAGE_KEY = "rh-csrf";
@@ -13,6 +14,9 @@ export const sessionAuth: AuthSeam = {
     } catch {
       return {};
     }
+  },
+  onUnauthorized() {
+    armReturn(window.location.pathname + window.location.search);
   },
 };
 

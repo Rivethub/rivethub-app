@@ -14,7 +14,10 @@ export function isSafeReturn(href: string): boolean {
   return path !== "" && !path.split("/").includes("..") && !path.includes("//");
 }
 
-/** Called from `pagehide`, while this document's URL is still the one to restore. */
+/**
+ * Called when the hub answers 401. Arming on every page exit would send a signed-in visitor who
+ * loads `/` by hand back to the page they left.
+ */
 export function armReturn(href: string): void {
   if (!isSafeReturn(href)) return;
   const path = href.split(/[?#]/, 1)[0] ?? "";
