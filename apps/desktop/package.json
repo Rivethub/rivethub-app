@@ -19,7 +19,7 @@
   "dependencies": {
     "@rivethub/contracts": "workspace:*",
     "electron-updater": "6.8.11",
-    "zod": "3.25.76"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1",

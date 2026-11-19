@@ -22,7 +22,7 @@ export const timeSchema = z.union([
   }),
 ]);
 
-const nullish = <T extends z.ZodTypeAny>(schema: T) => schema.nullish().transform((value) => value ?? undefined);
+const nullish = <T extends z.ZodType>(schema: T) => schema.nullish().transform((value) => value ?? undefined).optional();
 
 export const topicRecord = z.object({
   id: z.string().min(1),
@@ -103,7 +103,7 @@ export const harnessList = z.object({
   harnesses: rows(
     z.object({
       harnessId: z.string().min(1),
-      capabilities: z.object({ listSessions: z.boolean().default(false), renameSession: z.boolean().default(false) }).default({}),
+      capabilities: z.object({ listSessions: z.boolean().default(false), renameSession: z.boolean().default(false) }).prefault({}),
     }),
   ),
 });
@@ -126,9 +126,9 @@ export const harnessSessionPlaneList = z.object({ sessions: rows(harnessSessionS
 export const transcriptTool = z.object({
   name: z.string(),
   status: descriptive(["running", "done", "error"]).default("done"),
-  args: nullish(z.record(z.unknown())),
+  args: nullish(z.record(z.string(), z.unknown())),
   id: nullish(z.string()),
-  input: nullish(z.record(z.unknown())),
+  input: nullish(z.record(z.string(), z.unknown())),
   resultText: nullish(z.string()),
 });
 
@@ -240,7 +240,7 @@ export const sessionMessage = z.object({
   agent: nullish(z.string()),
   content: z.string().default(""),
   toolName: nullish(z.string()),
-  toolArgs: nullish(z.record(z.unknown())),
+  toolArgs: nullish(z.record(z.string(), z.unknown())),
   toolResult: nullish(z.string()),
   createdAt: nullish(timeSchema),
 });
@@ -427,7 +427,17 @@ export const account = z.object({
   usageCounts: z.boolean(),
 });
 
-export const signInStarted = z.object({ userCode: z.string(), verificationUri: z.string().url(), expiresIn: z.number().positive(), pollIntervalMs: z.number().positive() });
+// Zod 4's URL schema rewrites whitespace. Keep the hub's original string on success.
+export const accountUrl = z.string().refine((value) => {
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+}, "Invalid url");
+
+export const signInStarted = z.object({ userCode: z.string(), verificationUri: accountUrl, expiresIn: z.number().positive(), pollIntervalMs: z.number().positive() });
 export const signInProgress = z.discriminatedUnion("status", [
   z.object({ status: z.literal("expired") }),
   z.object({ status: z.literal("denied") }),
@@ -446,8 +456,6 @@ export const me = z.object({
   settings: z.object({ defaultVisibility: z.string(), chosen: z.boolean() }),
 });
 export const memoryTag = z.object({ id: z.string().min(1), key: z.string(), value: z.string(), state: z.enum(["accepted", "suggested", "rejected"]) });
-export const tagLookup = z.object({ sessions: z.record(z.array(memoryTag)) });
+export const tagLookup = z.object({ sessions: z.record(z.string(), z.array(memoryTag)) });
 export const tagAdded = z.object({ tag: memoryTag });
 export const tagDecided = z.object({ changed: z.number().int().nonnegative() });
-
-export const accountUrl = z.string().url();
