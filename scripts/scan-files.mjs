@@ -42,7 +42,7 @@ function checkBaseline(name, current) {
 }
 
 function skip(file, local) {
-  return (local && /^scripts\/(?:(?:secret|privacy)-scan(?:\.test)?\.mjs|(?:secret|privacy)-denylist\.json|house-identities\.json)$/.test(file))
+  return (local && /^scripts\/(?:(?:secret|privacy)-scan(?:\.test)?\.mjs|(?:secret|privacy)-denylist\.json)$/.test(file))
     || /(^|\/)(?:pnpm-lock\.yaml|Cargo\.lock)$/.test(file)
     || /\.(?:png|jpe?g|gif|webp|ico|svg|pdf|zip|gz|woff2?|ttf|otf|mp3|wav|ogg|mp4|webm|so|a|bin|wasm|jar|keystore)$/i.test(file)
 }

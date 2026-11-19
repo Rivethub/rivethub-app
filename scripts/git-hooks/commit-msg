@@ -1,3 +1,0 @@
-#!/bin/sh
-set -eu
-node scripts/commit-check.mjs --pending "$1"

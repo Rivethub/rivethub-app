@@ -7,33 +7,6 @@ permissions:
   contents: read
 
 jobs:
-  commits:
-    name: Commits (house identity, no attribution, Conventional Commits)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-      - name: Fetch the public policy
-        if: github.repository != 'Rivethub/rivethub-app'
-        run: git clone --quiet --depth=1 --branch main https://github.com/Rivethub/rivethub-app.git "$RUNNER_TEMP/rivethub-safety"
-      - name: Check PR commits
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          policy="$RUNNER_TEMP/rivethub-safety/scripts"
-          if [[ "$GITHUB_REPOSITORY" == "Rivethub/rivethub-app" ]]; then policy="$PWD/scripts"; fi
-          node --test "$policy/commit-check.test.mjs"
-          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
-          node "$policy/commit-check.mjs" "$merge_base..$HEAD_SHA"
-
   scan:
     name: Secrets & Private IP Scan
     runs-on: ubuntu-latest

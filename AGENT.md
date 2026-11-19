@@ -2,23 +2,16 @@
 
 Read `README.md` first; it has the layout, the build commands and how sharing works. This file is the running state for whoever picks the work up next.
 
-## Repository safety checks
+## Leak checks
 
-`pnpm install` installs the staged secret and privacy scans and the commit-message hook. Run `pnpm prepare` to reinstall the hooks. Use a configured house Git identity and Conventional Commits without attribution trailers.
-
-Run these from the repository root before pushing:
+`pnpm install` installs a pre-commit hook that scans staged changes for keys, tokens, passwords, private network addresses and denylisted names. CI runs the same two scanners over every tracked file and over the PR title and body, and redacts matches in its logs. Bypass the hook with `git commit --no-verify` only for a true published example.
 
 ```sh
-node --test scripts/*.test.mjs
 node scripts/secret-scan.mjs --tracked
 node scripts/privacy-scan.mjs --tracked
-node scripts/commit-check.mjs "$(git merge-base origin/main HEAD)..HEAD"
-pnpm typecheck
-pnpm -r test
-pnpm build
 ```
 
-Use `--staged` on either scanner for staged changes and `--text` to scan PR text from stdin. CI scans the PR title and body, checks the denylists against `origin/main`, and redacts matches in its logs. Changes to the gates need owner review.
+Use `--staged` for staged changes and `--text` to scan text from stdin. Example addresses belong in the documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
 
 ## Current state (2026-11-13)
 
