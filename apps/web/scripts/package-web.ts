@@ -12,6 +12,7 @@ import { stdin } from "node:process";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { gzipSync } from "node:zlib";
+import { stampIndexHtml, versionDocument } from "./web-version.ts";
 
 const webDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -304,12 +305,23 @@ function assertRelease(request: PackageWebRequest): void {
   }
 }
 
+function stampEntries(entries: DistEntry[], version: string, commit: string): DistEntry[] {
+  const html = entries.find((entry) => entry.name === "index.html" && entry.typeflag === "0");
+  if (html === undefined) throw new PackageWebError("dist has no index.html");
+  const stamped = entries
+    .filter((entry) => entry.name !== "version.json")
+    .map((entry) => (entry === html ? { ...entry, body: Buffer.from(stampIndexHtml(entry.body.toString("utf8"), version, commit)) } : entry));
+  stamped.push({ name: "version.json", body: Buffer.from(versionDocument(version, commit)), typeflag: "0", mode: 0o644 });
+  stamped.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return stamped;
+}
+
 export async function packageWebRelease(request: PackageWebRequest): Promise<{ archivePath: string; manifestPath: string; manifest: WebManifest }> {
   assertRelease(request);
   const dist = path.resolve(request.distDir);
   const output = path.resolve(request.outputDir);
   if (output === dist || output.startsWith(`${dist}${path.sep}`)) throw new PackageWebError("output dir must not be inside dist");
-  const archived = archiveDist(await readDist(dist));
+  const archived = archiveDist(stampEntries(await readDist(dist), request.version, request.commit));
   const asset = archiveName(request.version);
   const manifest: WebManifest = {
     schemaVersion: 1,

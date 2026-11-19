@@ -21,7 +21,7 @@ async function stage(): Promise<{ dist: string; output: string }> {
   roots.push(root);
   const dist = path.join(root, "dist");
   await mkdir(path.join(dist, "assets"), { recursive: true });
-  await writeFile(path.join(dist, "index.html"), "<!doctype html><title>RivetHub</title>\n");
+  await writeFile(path.join(dist, "index.html"), "<!doctype html><head><meta name=\"rivethub-web-version\" content=\"0.0.0\" /><title>RivetHub</title></head>\n");
   await writeFile(path.join(dist, "assets", "app.js"), "console.log(1)\n");
   return { dist, output: path.join(root, "out") };
 }
@@ -60,12 +60,24 @@ describe("packageWebRelease", () => {
     expect(archived.readUInt32LE(4)).toBe(0);
 
     const listed = (await exec("tar", ["-tzf", result.archivePath])).stdout.trim().split("\n");
-    expect(listed).toEqual(["assets/", "assets/app.js", "index.html"]);
+    expect(listed).toEqual(["assets/", "assets/app.js", "index.html", "version.json"]);
     const names = tarNames(gunzipSync(archived));
-    expect(names.map((member) => member.name)).toEqual(["assets/", "assets/app.js", "index.html"]);
+    expect(names.map((member) => member.name)).toEqual(["assets/", "assets/app.js", "index.html", "version.json"]);
     expect(names.every((member) => member.mtime === 0 && member.uid === 0 && member.gid === 0)).toBe(true);
     expect(names.find((member) => member.name === "index.html")?.mode).toBe(0o644);
     expect(names.find((member) => member.name === "assets/")?.mode).toBe(0o755);
+  });
+
+  it("stamps the published version and commit into index.html and version.json", async () => {
+    const { dist, output } = await stage();
+    const version = "0.8.2-nightly.20261119.4";
+    const result = await packageWebRelease(request(dist, output, version, "nightly"));
+    const html = (await exec("tar", ["-xOf", result.archivePath, "index.html"])).stdout;
+    const json = (await exec("tar", ["-xOf", result.archivePath, "version.json"])).stdout;
+    expect(html).toContain(`<meta name="rivethub-web-version" content="${version}" />`);
+    expect(html).toContain(`<meta name="rivethub-web-commit" content="${COMMIT}" />`);
+    expect(html).not.toContain('content="0.0.0"');
+    expect(JSON.parse(json)).toEqual({ version, commit: COMMIT });
   });
 
   it("packages the same dist to the same bytes", async () => {
