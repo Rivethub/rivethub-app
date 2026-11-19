@@ -32,10 +32,48 @@ export type DesktopUpdateState =
   | { state: "manual"; channel: DesktopUpdateChannel; version: string; downloadUrl: string }
   | { state: "error"; channel: DesktopUpdateChannel; message: string };
 
+/** A captured session the host should open as a thread. */
+export interface HostOpenSessionRequest {
+  /** Memory's id for the session. */
+  sessionId: string;
+  /** HarnessId. */
+  harness: string;
+  title: string;
+  /** ISO time. */
+  startedAt: string;
+  cwd?: string;
+  /** The tool's own id for the session, when the hub sends it. */
+  nativeSessionId?: string;
+  resumeCommand?: string;
+  /** The existing handoffPrompt() text. */
+  handoffPrompt: string;
+}
+
+export type HostOpenSessionResult =
+  | { opened: true; how: "resumed" | "handoff" }
+  | { opened: false; reason: string };
+
+/**
+ * Present when the web app runs inside another app's window.
+ * The host sets this on `window.rivethub`. The web app checks the shape once, at that boundary.
+ */
+export interface RivetHubHost {
+  /** Shown to the person, as in "Open in T3.1 Code". */
+  name: string;
+  appearance?: {
+    get: () => "light" | "dark";
+    /** Calls listener on every change; returns the unsubscribe. */
+    onChange: (listener: (appearance: "light" | "dark") => void) => () => void;
+  };
+  /** Opens a captured session as a thread in the host. Never rejects. */
+  openSession?: (request: HostOpenSessionRequest) => Promise<HostOpenSessionResult>;
+}
+
 /**
  * What the Electron preload exposes as `window.rivethub`, and nothing more.
  * The renderer is apps/web on rh's own origin with a browser session; main
  * holds the owner token and only ever hands the window a fresh login.
+ * A host that only embeds the web app leaves `updates` off and sets `host`.
  */
 export interface RivetHubDesktop {
   /**
@@ -44,7 +82,8 @@ export interface RivetHubDesktop {
    * place, so the screen it is on keeps its state.
    */
   relogin: () => Promise<string | null>;
-  updates: {
+  /** Absent when the host does not own RivetHub's updates (a host that only embeds the web app). */
+  updates?: {
     getState: () => Promise<DesktopUpdateState>;
     /** Calls `listener` on every change; returns the unsubscribe. */
     onState: (listener: (state: DesktopUpdateState) => void) => () => void;
@@ -53,4 +92,6 @@ export interface RivetHubDesktop {
     /** Quits and installs a `ready` update; rejects in any other state. */
     restartToUpdate: () => Promise<void>;
   };
+  /** Present when the web app runs inside another app's window. */
+  host?: RivetHubHost;
 }

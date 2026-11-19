@@ -1,9 +1,11 @@
 import { harnessNames, shortDate } from "@rivethub/client-runtime/format";
-import type { HarnessStatus, SessionDetail } from "@rivethub/contracts";
+import type { HarnessStatus, HostOpenSessionRequest, HostOpenSessionResult, SessionDetail } from "@rivethub/contracts";
 import { useRef, useState } from "react";
+import { desktopBridge } from "../lib/desktop";
 import { cx } from "./ui";
 
-interface Choice {
+interface CopyChoice {
+  kind: "copy";
   id: string;
   name: string;
   /** What choosing it does, in a few words. */
@@ -16,6 +18,14 @@ interface Choice {
   next: string;
 }
 
+interface HostChoice {
+  kind: "host";
+  id: string;
+  name: string;
+}
+
+type Choice = CopyChoice | HostChoice;
+
 /**
  * A first message for another tool. It names the session the way memory knows it, so the tool's own
  * recall finds it; rh starts no tool itself.
@@ -26,36 +36,71 @@ export function handoffPrompt(d: Pick<SessionDetail, "id" | "title" | "harness" 
 }
 
 /**
- * The tools this session can be opened in: its own, which resumes it, then every other tool found on this
- * machine that can recall from memory, which picks it up from there.
+ * What the host receives for this session. `nativeSessionId` is sent only when the hub sends it;
+ * it is never guessed from the resume command.
  */
-export function openChoices(d: SessionDetail, harnesses: HarnessStatus[]): Choice[] {
+export function hostOpenRequest(d: SessionDetail): HostOpenSessionRequest {
+  const request: HostOpenSessionRequest = {
+    sessionId: d.id,
+    harness: d.harness,
+    title: d.title,
+    startedAt: d.startedAt,
+    handoffPrompt: handoffPrompt(d),
+  };
+  if (d.cwd !== undefined) request.cwd = d.cwd;
+  if (d.nativeSessionId !== undefined) request.nativeSessionId = d.nativeSessionId;
+  if (d.resumeCommand !== undefined) request.resumeCommand = d.resumeCommand;
+  return request;
+}
+
+export function hostOpenStatus(name: string, result: HostOpenSessionResult): string {
+  if (!result.opened) return result.reason;
+  return result.how === "resumed" ? `Resumed in ${name}.` : `Continued from memory in ${name}.`;
+}
+
+/**
+ * The tools this session can be opened in. A host that can open it is first.
+ * Then the session's own tool, which resumes it, then every other tool found on this
+ * machine that can recall from memory.
+ */
+export function openChoices(d: SessionDetail, harnesses: HarnessStatus[], hostName?: string | null): Choice[] {
   const own = harnessNames[d.harness] ?? d.harness;
   const out: Choice[] = [];
+  if (hostName) out.push({ kind: "host", id: "host", name: hostName });
   if (d.resumeCommand) {
-    out.push({ id: d.harness, name: own, does: "Resume this session", text: d.resumeCommand, command: d.resumeCommand, next: "Paste it in a terminal." });
+    out.push({ kind: "copy", id: d.harness, name: own, does: "Resume this session", text: d.resumeCommand, command: d.resumeCommand, next: "Paste it in a terminal." });
   }
   for (const harness of harnesses) {
     if (harness.id === d.harness || !harness.found || harness.recall.state !== "connected") continue;
-    out.push({ id: harness.id, name: harness.name, does: "Continue from memory", text: handoffPrompt(d), next: `Paste it as your first message in ${harness.name}.` });
+    out.push({ kind: "copy", id: harness.id, name: harness.name, does: "Continue from memory", text: handoffPrompt(d), next: `Paste it as your first message in ${harness.name}.` });
   }
   return out;
 }
 
-/** "Open in": a menu of the tools found on this machine. Choosing one copies what to paste there. */
+/** "Open in": the embedding host, when it can open the session, then the tools found on this machine. */
 export function OpenIn({ d, harnesses }: { d: SessionDetail; harnesses: HarnessStatus[] }) {
-  const choices = openChoices(d, harnesses);
-  const [copied, setCopied] = useState<Choice | undefined>(undefined);
+  const host = desktopBridge()?.host;
+  const choices = openChoices(d, harnesses, host?.openSession ? host.name : null);
+  const [status, setStatus] = useState("");
   const menu = useRef<HTMLDetailsElement>(null);
   if (choices.length === 0) return null;
   const choose = async (choice: Choice) => {
+    if (menu.current) menu.current.open = false;
+    if (choice.kind === "host") {
+      const open = desktopBridge()?.host?.openSession;
+      if (!open) {
+        setStatus("The host could not open this session.");
+        return;
+      }
+      setStatus(hostOpenStatus(choice.name, await open(hostOpenRequest(d))));
+      return;
+    }
     try {
       await navigator.clipboard.writeText(choice.text);
     } catch {
       window.prompt(`Copy this for ${choice.name}`, choice.text);
     }
-    setCopied(choice);
-    if (menu.current) menu.current.open = false;
+    setStatus(`Copied for ${choice.name}. ${choice.next}`);
   };
   return (
     <div className="flex max-w-full flex-wrap items-center gap-2.5">
@@ -74,17 +119,17 @@ export function OpenIn({ d, harnesses }: { d: SessionDetail; harnesses: HarnessS
                 className={cx("flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-2 text-left hover:bg-selected")}
               >
                 <span className="flex w-full items-baseline gap-2">
-                  <span className="font-medium">{choice.name}</span>
-                  <span className="text-[12px] text-muted-foreground">{choice.does}</span>
+                  <span className="font-medium">{choice.kind === "host" ? `Open in ${choice.name}` : choice.name}</span>
+                  {choice.kind === "copy" && <span className="text-[12px] text-muted-foreground">{choice.does}</span>}
                 </span>
-                {choice.command && <code className="max-w-full font-mono text-[12px] break-all text-muted-foreground">{choice.command}</code>}
+                {choice.kind === "copy" && choice.command && <code className="max-w-full font-mono text-[12px] break-all text-muted-foreground">{choice.command}</code>}
               </button>
             </li>
           ))}
         </ul>
       </details>
       <span role="status" className="text-[13px] text-muted-foreground">
-        {copied ? `Copied for ${copied.name}. ${copied.next}` : ""}
+        {status}
       </span>
     </div>
   );

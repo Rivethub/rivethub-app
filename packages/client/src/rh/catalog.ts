@@ -55,6 +55,7 @@ export function mapCatalogDetail(detail: ReturnType<typeof wire.catalogDetail.pa
     ...row,
     cwd: detail.cwd,
     resumeCommand: detail.resumeCommand,
+    nativeSessionId: detail.nativeSessionId,
     changed,
     entities: detail.entities.map((entity) => ({ id: entity.id as EntityId, title: entity.title })),
     tags,

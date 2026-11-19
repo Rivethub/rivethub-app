@@ -278,6 +278,7 @@ export const catalogPage = z.object({ items: rows(catalogRow), next: nullish(z.s
 export const catalogDetail = catalogRow.extend({
   cwd: nullish(z.string()),
   resumeCommand: nullish(z.string()),
+  nativeSessionId: nullish(z.string()),
   changed: rows(z.object({ summary: z.string() })).default([]),
   entities: rows(z.object({ id: z.string().min(1), title: z.string() })).default([]),
   tags: rows(z.object({ key: z.string(), value: z.string(), state: descriptive(["applied", "suggested"]) })).default([]),

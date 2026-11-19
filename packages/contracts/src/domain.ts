@@ -134,6 +134,8 @@ export interface SummaryNode {
 export interface SessionDetail extends SessionSummaryRow {
   cwd?: string;
   resumeCommand?: string;
+  /** The tool's own id for the session. A hub older than the field leaves it off. */
+  nativeSessionId?: string;
   changed: Change[];
   entities: { id: EntityId; title: string }[];
   tags: TagAssignment[];

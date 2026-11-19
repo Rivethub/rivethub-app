@@ -111,7 +111,7 @@ async function stubPrompts(app: ElectronApplication, button: number): Promise<vo
 const prompts = (app: ElectronApplication) => app.evaluate(() => (globalThis as { asked?: string[] }).asked ?? []);
 
 const updateState = (page: Page) =>
-  page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.getState());
+  page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.getState());
 
 async function settledState(page: Page, states: DesktopUpdateState["state"][]): Promise<DesktopUpdateState> {
   await expect.poll(async () => (await updateState(page)).state, { timeout: 20_000 }).toMatch(new RegExp(`^(${states.join("|")})$`));
@@ -135,7 +135,7 @@ test("an AppImage of 0.1.0 downloads 0.1.1, verifies it, asks, and restarts into
   expect(existsSync(appImage)).toBe(true);
 
   const closed = app.waitForEvent("close");
-  void page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate());
+  void page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.restartToUpdate());
   await closed;
 
   const updated = path.join(path.dirname(appImage), appImageName);
@@ -158,7 +158,7 @@ test("an install that fails keeps this copy running and takes the single-instanc
   // The updater can't remove the old AppImage from a read-only directory.
   chmodSync(path.dirname(appImage), 0o555);
   try {
-    await expect(page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate())).rejects.toThrow(
+    await expect(page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.restartToUpdate())).rejects.toThrow(
       /couldn't be installed/,
     );
   } finally {
@@ -167,7 +167,7 @@ test("an install that fails keeps this copy running and takes the single-instanc
   expect(await updateState(page)).toMatchObject({ state: "error", message: expect.stringMatching(/couldn't be installed/) });
   // electron-updater ignores further installs this session, so no check runs again and nothing offers a restart.
   const requestsBefore = feed.requests.length;
-  await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.setChannel("stable"));
+  await page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.setChannel("stable"));
   await page.waitForTimeout(500);
   expect(await updateState(page)).toMatchObject({ state: "error", message: expect.stringMatching(/couldn't be installed/) });
   expect(feed.requests).toHaveLength(requestsBefore);
@@ -200,7 +200,7 @@ test("a launch during a failing install keeps the lock; the updating copy quits 
   writeFileSync(path.join(fakeBin(), "mv"), `#!/bin/sh\n: > '${started}'\nwhile [ ! -e '${go}' ]; do sleep 0.1; done\nexit 1\n`);
   chmodSync(path.join(fakeBin(), "mv"), 0o755);
   const firstClosed = first.waitForEvent("close");
-  void page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate()).catch(() => {});
+  void page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.restartToUpdate()).catch(() => {});
   await expect.poll(() => existsSync(started)).toBe(true);
 
   const second = await launch(env);
@@ -227,7 +227,7 @@ test("a download whose sha512 doesn't match the feed is refused", async () => {
   expect(state).toMatchObject({ state: "error", channel: "stable" });
   expect(state.state === "error" && state.message).toMatch(/sha512/i);
   expect(await prompts(app)).toEqual([]);
-  await expect(page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.restartToUpdate())).rejects.toThrow(/No update is ready/);
+  await expect(page.evaluate(() => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.restartToUpdate())).rejects.toThrow(/No update is ready/);
   await app.close();
   expect(readFileSync(appImage, "utf8")).toBe("#!/bin/sh\nexit 0\n");
 });
@@ -306,7 +306,7 @@ test("nightly is opt-in, persists, and reads its own feed directory", async () =
   expect(await settledState(page, ["error", "idle"])).toMatchObject({ channel: "stable" });
 
   const setChannel = (channel: string) =>
-    page.evaluate((c) => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates.setChannel(c as "nightly"), channel);
+    page.evaluate((c) => (window as unknown as { rivethub: RivetHubDesktop }).rivethub.updates!.setChannel(c as "nightly"), channel);
   await expect(setChannel("beta")).rejects.toThrow(/stable or nightly/);
   await setChannel("nightly");
   expect(await settledState(page, ["manual", "error"])).toMatchObject({ state: "manual", channel: "nightly", version: "0.2.0-nightly.20261111.1" });

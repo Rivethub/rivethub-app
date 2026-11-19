@@ -8,7 +8,7 @@ import { useAddDecision, useCreateTopic, useMe, useTopic, useChanges, useTopicTr
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, SidePanel, type Tab } from "../components/article";
 import { EditableText } from "../components/editable";
 import { LibraryPhone, TopicTree, TopicTreeSection } from "../components/library";
-import { articleBody, Markdown } from "../components/markdown";
+import { articleBody, Markdown, useArticleHash } from "../components/markdown";
 import { PinButton } from "../components/pin";
 import { Frame, MainSidebar } from "../components/shell";
 import { MoveTopicButton, TopLevelDrop, TopicDragItem } from "../components/topic-drag";
@@ -211,6 +211,7 @@ function TopicOverview({ t }: { t: TopicArticle }) {
   const place = tree ? findNode(tree, t.id) : undefined;
   const subs = place?.node.children;
   const body = t.article ? articleBody(t.article, t.name) : "";
+  useArticleHash(body.length > 0);
   return (
     <>
       {body ? <Markdown source={body} /> : <p className="m-0">{t.lead}</p>}

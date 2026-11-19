@@ -41,7 +41,7 @@ export function visibilityToWire(visibility: Visibility): string {
 }
 
 export function toRow(detail: SessionDetail): SessionSummaryRow {
-  const { cwd: _cwd, resumeCommand: _resume, changed: _changed, entities: _entities, tags: _tags, ...row } = detail;
+  const { cwd: _cwd, resumeCommand: _resume, nativeSessionId: _native, changed: _changed, entities: _entities, tags: _tags, ...row } = detail;
   return row;
 }
 

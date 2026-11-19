@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { hostAppearance } from "./lib/desktop";
 
 export const THEMES = [
   { id: "rivethub", label: "RivetHub", hint: "Emerald on near-black. The default." },
@@ -14,22 +15,59 @@ const KEY = "rivethub.theme";
 const DEFAULT: ThemeId = "rivethub";
 const listeners = new Set<() => void>();
 
+const HOST_THEME = { dark: "t3-dark", light: "t3-light" } as const;
+
 function isTheme(value: unknown): value is ThemeId {
   return THEMES.some((t) => t.id === value);
 }
 
-function read(): ThemeId {
+function storedChoice(): string | null {
   try {
-    const stored = localStorage.getItem(KEY);
-    if (isTheme(stored)) return stored;
+    return localStorage.getItem(KEY);
   } catch {
-    // storage can be blocked; fall back to the default
+    return null;
   }
+}
+
+/**
+ * An explicit saved theme wins. Otherwise a host's appearance selects the T3 theme.
+ * With neither, the app stays on its own default.
+ */
+export function resolveTheme(stored: string | null, appearance: "light" | "dark" | null): ThemeId {
+  if (isTheme(stored)) return stored;
+  if (appearance === "dark" || appearance === "light") return HOST_THEME[appearance];
   return DEFAULT;
 }
 
+function currentTheme(): ThemeId {
+  const appearance = hostAppearance();
+  return resolveTheme(storedChoice(), appearance ? appearance.get() : null);
+}
+
+function paint(theme: ThemeId): void {
+  document.documentElement.dataset.theme = theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
+  listeners.forEach((l) => l());
+}
+
+let stopFollowing: (() => void) | undefined;
+
+function followHost(): void {
+  stopFollowing?.();
+  stopFollowing = undefined;
+  if (isTheme(storedChoice())) return;
+  const appearance = hostAppearance();
+  if (!appearance) return;
+  stopFollowing = appearance.onChange(() => {
+    if (isTheme(storedChoice())) return;
+    paint(currentTheme());
+  });
+}
+
 export function applyStoredTheme(): void {
-  document.documentElement.dataset.theme = read();
+  paint(currentTheme());
+  followHost();
 }
 
 export function setTheme(theme: ThemeId): void {
@@ -38,10 +76,7 @@ export function setTheme(theme: ThemeId): void {
   } catch {
     // the theme still applies for this visit
   }
-  document.documentElement.dataset.theme = theme;
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--background").trim());
-  listeners.forEach((l) => l());
+  paint(theme);
 }
 
 export function useTheme(): ThemeId {
@@ -50,6 +85,6 @@ export function useTheme(): ThemeId {
       listeners.add(l);
       return () => listeners.delete(l);
     },
-    () => (isTheme(document.documentElement.dataset.theme) ? (document.documentElement.dataset.theme as ThemeId) : read()),
+    () => (isTheme(document.documentElement.dataset.theme) ? (document.documentElement.dataset.theme as ThemeId) : currentTheme()),
   );
 }

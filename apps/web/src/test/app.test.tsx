@@ -172,7 +172,7 @@ describe("Account", () => {
 
   it("refreshes a stale desktop sign-in and then shows the device code", async () => {
     const relogin = vi.fn(async () => "once");
-    (window as { rivethub?: RivetHubDesktop }).rivethub = { relogin, updates: {} as RivetHubDesktop["updates"] };
+    (window as { rivethub?: RivetHubDesktop }).rivethub = { relogin, updates: {} as NonNullable<RivetHubDesktop["updates"]> };
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ csrf: "fresh" }), { status: 200 })));
     const { user, client } = renderAt("/settings/account");
     await user.click(await screen.findByRole("button", { name: "Sign out" }));
