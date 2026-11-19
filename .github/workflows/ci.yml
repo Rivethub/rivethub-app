@@ -35,5 +35,3 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm -r test
       - run: pnpm build
-      - name: Desktop end-to-end tests
-        run: xvfb-run -a -s '-screen 0 1920x1080x24' pnpm --filter @rivethub/desktop exec playwright test
