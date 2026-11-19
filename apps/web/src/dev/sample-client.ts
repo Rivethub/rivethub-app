@@ -1,9 +1,10 @@
-import { entityTypeLabel } from "@rivethub/client-runtime/format";
+import { entityTypeLabel, groupEntities } from "@rivethub/client-runtime/format";
 import type {
   Capability,
   Change,
   CrashReport,
   EntityArticle,
+  EntityCategory,
   EntityId,
   EntitySummary,
   Fact,
@@ -112,6 +113,20 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       freshness: "sample",
     });
   }
+
+  const categories = new Map<TopicId, Omit<EntityCategory, "count">>();
+  const categoryFor = (id: TopicId) => {
+    const category = categories.get(id);
+    if (!category) throw new Error(`No category ${id}`);
+    return category;
+  };
+  const registerCategory = (type: string, typeName: string) => {
+    const id = `category-${type}` as TopicId;
+    categories.set(id, { id, type, typeName });
+    return id;
+  };
+  for (const { type, label } of groupEntities([...entities.values()])) registerCategory(type, label);
+  let nextEntity = 0;
 
   const extras: Record<string, data.TopicExtra> = clone(data.topicExtras);
   const extraFor = (id: string): data.TopicExtra => (extras[id] ??= { lead: "", aliases: [], decisions: [], states: {}, entities: [], tags: [] });
@@ -338,6 +353,36 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
           .filter((e) => !type || e.type === type)
           .map(({ id, title, type: t, typeName, sessionCount }): EntitySummary => ({ id, title, type: t, ...(typeName ? { typeName } : {}), sessionCount })),
       ),
+    entityTypes() {
+      const counts = new Map<string, number>();
+      for (const { type, label, items } of groupEntities([...entities.values()])) {
+        counts.set(type, items.length);
+        if (!categories.has(`category-${type}` as TopicId)) registerCategory(type, label);
+      }
+      return wait([...categories.values()].map((category) => ({ ...category, count: counts.get(category.type) ?? 0 })));
+    },
+    async createEntityCategory(name) {
+      const type = name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
+      if (!type) throw new Error("Enter a category name with a letter or number.");
+      if (categories.has(`category-${type}` as TopicId)) throw new Error("That category already exists.");
+      return wait(registerCategory(type, name));
+    },
+    async createEntity(name, categoryId) {
+      const { type, typeName } = categoryFor(categoryId);
+      const id = `entity-${++nextEntity}` as EntityId;
+      entities.set(id, {
+        id, title: name, type, typeName, sessionCount: 0, aliases: [], visibility: { kind: "private" },
+        lead: "", facts: [], timeline: [], connected: [], sessions: [], tags: [], freshness: "sample",
+      });
+      return wait(id);
+    },
+    async moveEntity(id, categoryId) {
+      const { type, typeName } = categoryFor(categoryId);
+      const entity = entities.get(id);
+      if (!entity) throw new Error(`No entity ${id}`);
+      entities.set(id, { ...entity, type, typeName });
+      return wait(undefined);
+    },
     entity(id, asOf) {
       const e = entities.get(id);
       if (!e) return Promise.reject(new Error(`No entity ${id}`));

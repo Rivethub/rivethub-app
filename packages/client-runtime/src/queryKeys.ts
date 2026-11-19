@@ -10,6 +10,7 @@ export const keys = {
   topic: (id: TopicId) => ["topic", id],
   changes: (subject: TopicId | EntityId) => ["changes", subject],
   entities: (type?: EntityType) => ["entities", type ?? "all"],
+  entityTypes: ["entity-types"],
   entity: (id: EntityId, asOf?: IsoTime) => ["entity", id, asOf ?? "now"],
   sessions: (q: SessionQuery) => ["sessions", q],
   session: (id: SessionId) => ["session", id],
