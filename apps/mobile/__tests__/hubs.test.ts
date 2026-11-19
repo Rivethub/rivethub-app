@@ -14,7 +14,7 @@ function memoryKv(): Kv & { raw: Map<string, string> } {
   };
 }
 
-const desk: HubRecord = { id: hubIdFor("https://desk.example"), name: "phildesk", url: "https://desk.example", token: "t" };
+const desk: HubRecord = { id: hubIdFor("https://desk.example"), name: "workstation", url: "https://desk.example", token: "t" };
 const laptop: HubRecord = { id: hubIdFor("https://laptop.example"), name: "laptop", url: "https://laptop.example" };
 
 describe("hub storage", () => {

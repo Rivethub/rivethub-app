@@ -1,0 +1,68 @@
+name: Safety
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  commits:
+    name: Commits (house identity, no attribution, Conventional Commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Fetch the public policy
+        if: github.repository != 'Rivethub/rivethub-app'
+        run: git clone --quiet --depth=1 --branch main https://github.com/Rivethub/rivethub-app.git "$RUNNER_TEMP/rivethub-safety"
+      - name: Check PR commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          policy="$RUNNER_TEMP/rivethub-safety/scripts"
+          if [[ "$GITHUB_REPOSITORY" == "Rivethub/rivethub-app" ]]; then policy="$PWD/scripts"; fi
+          node --test "$policy/commit-check.test.mjs"
+          merge_base=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          node "$policy/commit-check.mjs" "$merge_base..$HEAD_SHA"
+
+  scan:
+    name: Secrets & Private IP Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Fetch the public policy
+        if: github.repository != 'Rivethub/rivethub-app'
+        run: git clone --quiet --depth=1 --branch main https://github.com/Rivethub/rivethub-app.git "$RUNNER_TEMP/rivethub-safety"
+      - name: Self-test and scan files and PR metadata
+        shell: bash
+        run: |
+          policy="$RUNNER_TEMP/rivethub-safety/scripts"
+          if [[ "$GITHUB_REPOSITORY" == "Rivethub/rivethub-app" ]]; then policy="$PWD/scripts"; fi
+          node --test "$policy/secret-scan.test.mjs" "$policy/privacy-scan.test.mjs"
+          status=0
+          for scanner in secret privacy; do
+            node "$policy/$scanner-scan.mjs" --tracked || status=1
+            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+              # Putting PR prose in the step environment would echo it in the Actions log.
+              node -e 'const {title, body} = require(process.env.GITHUB_EVENT_PATH).pull_request;
+                process.stdout.write(title + "\n" + (body ?? "") + "\n")' |
+                node "$policy/$scanner-scan.mjs" --text || status=1
+            fi
+          done
+          exit "$status"

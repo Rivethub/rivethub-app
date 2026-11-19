@@ -9,6 +9,8 @@ import { useTheme } from "../theme/Theme";
 import { BackButton, GhostButton, PrimaryButton, Screen, TextField } from "../ui/chrome";
 import { errorText, hostOf } from "../ui/format";
 
+const EMULATOR_HUB_URL = "https://10.0.2.2:5174"; // secret-scan-allow: Android Emulator host loopback alias
+
 type Props = NativeStackScreenProps<RootParams, "AddHub">;
 
 export function AddHubScreen({ navigation }: Props) {
@@ -81,9 +83,9 @@ export function AddHubScreen({ navigation }: Props) {
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }} keyboardShouldPersistTaps="handled">
           <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
-            Type the hub URL, or scan a pairing code. On the Android emulator this machine is https://10.0.2.2:5174. A phone on the same network needs the machine's LAN address.
+            Type the hub URL, or scan a pairing code. On the Android emulator this machine is {EMULATOR_HUB_URL}. A phone on the same network needs the machine's LAN address.
           </Text>
-          <TextField label="Hub URL" value={url} onChangeText={setUrl} placeholder="https://10.0.2.2:5174" />
+          <TextField label="Hub URL" value={url} onChangeText={setUrl} placeholder="https://192.0.2.11:5174" />
           <TextField label="Name" value={name} onChangeText={setName} placeholder="My desktop" />
           <TextField label="Token, optional" value={token} onChangeText={setToken} placeholder="Bearer token" secure />
           {error ? <Text style={{ color: palette.error, fontSize: 13 }}>{error}</Text> : null}

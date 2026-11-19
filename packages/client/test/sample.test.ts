@@ -32,7 +32,7 @@ describe("the sample world", () => {
     const jobs = await client.modelJobs();
     expect(jobs.find((job) => job.role === "categorizer")).toMatchObject({ health: "slow", queued: 12 });
     expect((await client.hubs()).map((hub) => [hub.name, hub.kind, hub.online])).toEqual([
-      ["phildesk", "local", true],
+      ["workstation", "local", true],
       ["household", "team", true],
       ["lab-server", "team", false],
     ]);
@@ -84,9 +84,9 @@ describe("review", () => {
 
   it("an accepted fact lands on its entity and Today's needs-you list shrinks", async () => {
     const client = createSampleClient();
-    const item = (await client.reviewQueue()).find((candidate) => candidate.subject.title === "phildesk")!;
+    const item = (await client.reviewQueue()).find((candidate) => candidate.subject.title === "workstation")!;
     await client.decide(item.id, { kind: "accept" });
-    expect((await client.entity("phildesk" as EntityId)).facts.find((f) => f.key === "GPU")?.value).toBe("24 GB");
+    expect((await client.entity("workstation" as EntityId)).facts.find((f) => f.key === "GPU")?.value).toBe("24 GB");
     const today = await client.today();
     expect(today.needsYou.length).toBeLessThanOrEqual(3);
     expect(today.needsYou[0]!.group).toBe("conflict");
@@ -135,7 +135,7 @@ describe("entities", () => {
 
   it("filters by type", async () => {
     const machines = await createSampleClient().entities("machine");
-    expect(machines.map((entity) => entity.title).sort()).toEqual(["nas-01", "phildesk"]);
+    expect(machines.map((entity) => entity.title).sort()).toEqual(["nas-01", "workstation"]);
     await expect(createSampleClient().entity("nope" as EntityId)).rejects.toBeInstanceOf(NotFoundError);
   });
 

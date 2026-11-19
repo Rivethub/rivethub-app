@@ -15,7 +15,7 @@ describe("parseNodeUrl", () => {
   });
 
   it.each([
-    ["http://192.168.1.4:5174/", /loopback/],
+    ["http://192.0.2.10:5174/", /loopback/],
     ["http://127.0.0.1.example.com/", /loopback/],
     ["file:///tmp/index.html", /http or https/],
     ["http://user:pw@127.0.0.1:5174/", /credentials/],

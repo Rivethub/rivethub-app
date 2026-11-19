@@ -71,7 +71,7 @@ describe("Markdown", () => {
 });
 
 describe("articleBody", () => {
-  const page = ["# gpubox", "", "A GPU host.", "", "### Services", "- one", "", "### Current facts", "- **ip**: 10.0.0.7", "", "### Later", "kept"].join("\n");
+  const page = ["# gpubox", "", "A GPU host.", "", "### Services", "- one", "", "### Current facts", "- **ip**: 192.0.2.13", "", "### Later", "kept"].join("\n");
 
   it("drops a first heading that repeats the title", () => {
     expect(articleBody(page, "gpubox").startsWith("A GPU host.")).toBe(true);
@@ -81,7 +81,7 @@ describe("articleBody", () => {
   it("drops the worker's Current facts list only when asked, and only that section", () => {
     const body = articleBody(page, "gpubox", { dropFacts: true });
     expect(body).not.toContain("Current facts");
-    expect(body).not.toContain("10.0.0.7");
+    expect(body).not.toContain("192.0.2.13");
     expect(body).toContain("### Services");
     expect(body).toContain("### Later\nkept");
     expect(articleBody(page, "gpubox")).toContain("### Current facts");
@@ -161,6 +161,6 @@ describe("Entities list", () => {
     await user.selectOptions(screen.getByRole("combobox", { name: "Sort" }), "sessions");
     const machines = screen.getByRole("region", { name: "Machine" });
     const titles = within(machines).getAllByRole("link").map((l) => l.textContent ?? "");
-    expect(titles[0]).toMatch(/^phildesk/);
+    expect(titles[0]).toMatch(/^workstation/);
   });
 });

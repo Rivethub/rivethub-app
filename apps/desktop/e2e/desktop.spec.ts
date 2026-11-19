@@ -279,7 +279,7 @@ test("a node that redirects away on first load gets the can't-reach page, not th
 });
 
 test("a rejected RIVETHUB_DESKTOP_URL exits non-zero without a window", async () => {
-  const child = spawn(electronPath, electronArgs(), { env: launchEnv("http://192.168.1.4:5174/"), stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(electronPath, electronArgs(), { env: launchEnv("http://192.0.2.10:5174/"), stdio: ["ignore", "ignore", "pipe"] });
   let stderr = "";
   child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
   const exitCode = await new Promise<number | null>((resolve) => {

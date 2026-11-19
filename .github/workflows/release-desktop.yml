@@ -169,8 +169,6 @@ jobs:
     concurrency:
       group: publish-desktop
       cancel-in-progress: false
-    env:
-      DEPLOY_HOST: 100.120.143.117
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -265,6 +263,11 @@ jobs:
           printf '%s\n' "${DEPLOY_SSH_KEY}" > "${KEY}"
           chmod 600 "${KEY}"
           printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${RUNNER_TEMP}/known_hosts"
+          # The pinned keys name the same SSH endpoint used by rsync.
+          host=$(awk 'NF && $1 !~ /^#/ { print $1 }' "${RUNNER_TEMP}/known_hosts" | sort -u)
+          [[ "$host" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || { echo "::error::DEPLOY_KNOWN_HOSTS must pin a single literal host"; exit 1; }
+          echo "::add-mask::$host"
+          echo "DEPLOY_HOST=$host" >> "$GITHUB_ENV"
           echo "SSH_CMD=ssh -i ${KEY} -o UserKnownHostsFile=${RUNNER_TEMP}/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
 
       # Packages first, manifests last, so a client never reads a manifest whose files aren't there

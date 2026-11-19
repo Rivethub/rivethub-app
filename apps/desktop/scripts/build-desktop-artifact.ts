@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { Arch, build, Platform, type AfterPackContext, type Configuration } from "electron-builder";
+import { archFromString, build, Platform, type AfterPackContext, type Configuration } from "electron-builder";
 
 import { EXECUTABLE_NAME, RESOURCE_DIRS } from "../src/bundle/layout.ts";
 import { rhTargetFor } from "../src/rh/rhLock.ts";
@@ -202,7 +202,7 @@ export async function packageLinux(options: {
     await writeFile(path.join(stage, "package.json"), `${JSON.stringify(stagePackage, null, 2)}\n`);
     return await build({
       projectDir: stage,
-      targets: Platform.LINUX.createTarget([...options.targets], Arch[options.arch]),
+      targets: Platform.LINUX.createTarget([...options.targets], archFromString(options.arch)),
       config: createBuildConfig({ electronVersion, outputDir: options.outputDir, version: options.version }),
       publish: "never",
     });

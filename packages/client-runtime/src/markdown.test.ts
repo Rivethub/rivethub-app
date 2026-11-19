@@ -69,7 +69,7 @@ describe("parseMarkdown", () => {
 });
 
 describe("articleBody", () => {
-  const page = ["# gpubox", "", "A GPU host.", "", "### Services", "- one", "", "### Current facts", "- **ip**: 10.0.0.7", "", "### Later", "kept"].join("\n");
+  const page = ["# gpubox", "", "A GPU host.", "", "### Services", "- one", "", "### Current facts", "- **ip**: 192.0.2.13", "", "### Later", "kept"].join("\n");
 
   it("drops a first heading that repeats the title", () => {
     expect(articleBody(page, "gpubox").startsWith("A GPU host.")).toBe(true);
@@ -79,7 +79,7 @@ describe("articleBody", () => {
   it("drops the worker's Current facts list only when asked, and only that section", () => {
     const body = articleBody(page, "gpubox", { dropFacts: true, dropLead: "A GPU host." });
     expect(body).not.toContain("Current facts");
-    expect(body).not.toContain("10.0.0.7");
+    expect(body).not.toContain("192.0.2.13");
     expect(body).not.toContain("A GPU host.");
     expect(body).toContain("### Services");
     expect(body).toContain("### Later\nkept");

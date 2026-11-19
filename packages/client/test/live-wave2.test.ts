@@ -6,7 +6,7 @@ import { HttpError, MalformedResponseError } from "../src/errors.js";
 import { fakeRh, noContent } from "./fake.js";
 
 const SID = "claude-code:s-1";
-const source = { session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00Z", value: "10.0.0.5" };
+const source = { session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00Z", value: "192.0.2.15" };
 
 /** Shaped like wire::gateway::review::ReviewItem. */
 const conflictItem = {
@@ -15,10 +15,10 @@ const conflictItem = {
   subject: { kind: "entity", id: "nas-01", title: "nas-01" },
   text: "ip",
   options: [
-    { label: "10.0.0.5", value: "10.0.0.5", source },
-    { label: "10.0.0.9", value: "10.0.0.9" },
+    { label: "192.0.2.15", value: "192.0.2.15", source },
+    { label: "192.0.2.16", value: "192.0.2.16" },
   ],
-  evidence: [{ session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00Z", quote: "the nas is at 10.0.0.5", highlight: "10.0.0.5" }],
+  evidence: [{ session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00Z", quote: "the nas is at 192.0.2.15", highlight: "192.0.2.15" }],
   createdAt: "2026-11-06T09:05:00Z",
 };
 const filingItem = {
@@ -36,7 +36,7 @@ const filingItem = {
 const change = {
   kind: "fact",
   subject: { kind: "entity", id: "nas-01", title: "nas-01" },
-  text: "ip is 10.0.0.5",
+  text: "ip is 192.0.2.15",
   at: "2026-11-06T09:00:00Z",
   actor: { kind: "capture", harness: "claude-code" },
   source: { kind: "session", id: SID, title: "Plan the cut" },
@@ -88,10 +88,10 @@ describe("review", () => {
       subject: { kind: "entity", id: "nas-01", title: "nas-01" },
       text: "ip",
       options: [
-        { label: "10.0.0.5", value: "10.0.0.5", source: { session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00.000Z", value: "10.0.0.5" } },
-        { label: "10.0.0.9", value: "10.0.0.9" },
+        { label: "192.0.2.15", value: "192.0.2.15", source: { session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00.000Z", value: "192.0.2.15" } },
+        { label: "192.0.2.16", value: "192.0.2.16" },
       ],
-      evidence: [{ session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00.000Z", quote: "the nas is at 10.0.0.5", highlight: "10.0.0.5" }],
+      evidence: [{ session: { id: SID, title: "Plan the cut" }, at: "2026-11-06T09:00:00.000Z", quote: "the nas is at 192.0.2.15", highlight: "192.0.2.15" }],
       createdAt: "2026-11-06T09:05:00.000Z",
     });
     expect(filing).toMatchObject({ group: "filing", before: "Unfiled", after: "rh runtime", evidence: [] });
@@ -111,8 +111,8 @@ describe("review", () => {
     });
     const client = createClient({ baseUrl: "https://rh.test", fetch: fake.fetch });
     expect((await client.capabilities()).review).toBe("live");
-    await client.decide("conflict:nas-01:ip" as ReviewItemId, { kind: "choose", value: "10.0.0.9" });
-    expect(fake.calls.at(-1)).toEqual({ method: "POST", path: "/api/review/conflict%3Anas-01%3Aip/decision", body: { kind: "choose", value: "10.0.0.9" } });
+    await client.decide("conflict:nas-01:ip" as ReviewItemId, { kind: "choose", value: "192.0.2.16" });
+    expect(fake.calls.at(-1)).toEqual({ method: "POST", path: "/api/review/conflict%3Anas-01%3Aip/decision", body: { kind: "choose", value: "192.0.2.16" } });
   });
 
   it("surfaces an unprocessable decision as an error instead of falling back to the sample", async () => {
@@ -139,7 +139,7 @@ describe("today and changes", () => {
     expect(today.needsYou[0]).toMatchObject({ id: "conflict:nas-01:ip", group: "conflict" });
     expect(today.entries[0]!.session).toMatchObject({ id: SID, visibility: { kind: "private" }, startedAt: "2026-11-06T09:00:00.000Z" });
     expect(today.entries[0]!.changes[0]).toEqual({
-      kind: "fact", subject: { kind: "entity", id: "nas-01", title: "nas-01" }, text: "ip is 10.0.0.5", at: "2026-11-06T09:00:00.000Z",
+      kind: "fact", subject: { kind: "entity", id: "nas-01", title: "nas-01" }, text: "ip is 192.0.2.15", at: "2026-11-06T09:00:00.000Z",
       actor: { kind: "capture", harness: "claude-code" }, source: { kind: "session", id: SID, title: "Plan the cut" },
     });
     expect(today.entries[0]!.changes[1]).not.toHaveProperty("source");

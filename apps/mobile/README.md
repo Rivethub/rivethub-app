@@ -22,12 +22,12 @@ The APK is debug-signed. It is not published to a store.
 
 Phil's hub uses a private certificate authority. Android trusts that CA only after two steps:
 
-1. Copy `/home/phil/.rivetos/mesh/ca-chain.pem` onto the phone.
+1. Copy `$HOME/.rivetos/mesh/ca-chain.pem` onto the phone.
 2. Install it as a CA certificate: Settings → Security → Encryption & credentials → Install a certificate → CA certificate.
 
 The app's network security config trusts user-installed CAs. A system CA is not required.
 
-The emulator reaches this machine at `https://10.0.2.2:5174`. A phone on the LAN must use the machine's LAN URL. `127.0.0.1` on the phone is the phone itself.
+The emulator reaches this machine at `https://10.0.2.2:5174`. A phone on the LAN must use the machine's LAN URL. `127.0.0.1` on the phone is the phone itself. <!-- secret-scan-allow: Android Emulator host loopback alias -->
 
 Pair by typing that URL, or scan a QR whose contents are `rivethub://pair?d=<base64url JSON {url, name, token?}>`. Hubs are stored in the platform secure store, one hub per key.
 

@@ -39,15 +39,15 @@ export const decisionsBody = {
 
 export const topicSessionsBody = {
   sessions: [
-    { sessionId: "claude-code:s-1", topicId: "t-b", by: "categorizer", at: t("2026-11-06T09:30:00Z"), title: "Wire the stream", lastActive: t("2026-11-06T10:00:00Z"), node: "phildesk", visibility: "private" },
+    { sessionId: "claude-code:s-1", topicId: "t-b", by: "categorizer", at: t("2026-11-06T09:30:00Z"), title: "Wire the stream", lastActive: t("2026-11-06T10:00:00Z"), node: "workstation", visibility: "private" },
   ],
   conversations: [],
 };
 
 export const filingBody = {
   sessions: [
-    { sessionId: "claude-code:s-1", topicId: "t-b", by: "categorizer", at: t("2026-11-06T09:30:00Z"), title: "Wire the stream", lastActive: t("2026-11-06T10:00:00Z"), node: "phildesk", visibility: "private" },
-    { sessionId: "codex:s-2", topicId: "t-c", by: "you", at: t("2026-11-05T09:30:00Z"), title: "Hook 401", lastActive: t("2026-11-05T11:00:00Z"), node: "phildesk", visibility: "private" },
+    { sessionId: "claude-code:s-1", topicId: "t-b", by: "categorizer", at: t("2026-11-06T09:30:00Z"), title: "Wire the stream", lastActive: t("2026-11-06T10:00:00Z"), node: "workstation", visibility: "private" },
+    { sessionId: "codex:s-2", topicId: "t-c", by: "you", at: t("2026-11-05T09:30:00Z"), title: "Hook 401", lastActive: t("2026-11-05T11:00:00Z"), node: "workstation", visibility: "private" },
   ],
   conversations: [],
   history: [],

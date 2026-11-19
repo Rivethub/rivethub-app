@@ -101,7 +101,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const addHub = useCallback(
     async (input: { url: string; name: string; token?: string }) => {
       const url = normalizeHubUrl(input.url);
-      if (!url) throw new Error("Enter a hub URL, like https://10.0.2.2:5174.");
+      if (!url) throw new Error("Enter a hub URL, like https://192.0.2.11:5174.");
       const name = input.name.trim();
       if (!name) throw new Error("Name the hub.");
       const record: HubRecord = { id: hubIdFor(url), name, url };

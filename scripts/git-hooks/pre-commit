@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+node scripts/secret-scan.mjs --staged
+node scripts/privacy-scan.mjs --staged

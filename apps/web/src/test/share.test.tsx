@@ -92,17 +92,17 @@ describe("Settings server", () => {
       servers: vi.fn(async () => ({
         tokenStore: "file" as const,
         servers: [
-          { origin: "https://10.4.20.120:5174", kind: "team" as const, user: "phil", signedIn: true, default: true },
+          { origin: "https://192.0.2.14:5174", kind: "team" as const, user: "phil", signedIn: true, default: true },
           { origin: "https://rivethub.cloud", kind: "cloud" as const, signedIn: false, default: false },
         ],
       })),
     }));
     const node = await screen.findByRole("region", { name: "This node" });
-    expect(within(node).getByText("phildesk")).toBeInTheDocument();
+    expect(within(node).getByText("workstation")).toBeInTheDocument();
     expect(within(node).getByText("Spaces on this node: household")).toBeInTheDocument();
     const team = screen.getByRole("region", { name: "Team servers" });
     expect(within(team).getByText("A team server connection sends and receives shared sessions. It does not switch this window.")).toBeInTheDocument();
-    expect(within(team).getByText("10.4.20.120:5174")).toBeInTheDocument();
+    expect(within(team).getByText("192.0.2.14:5174")).toBeInTheDocument();
     expect(within(team).getByText("Team server · signed in as phil · default")).toBeInTheDocument();
     expect(within(team).getByText("rivethub.cloud")).toBeInTheDocument();
     expect(within(team).getByText("RivetHub Cloud drop box · signed out")).toBeInTheDocument();
