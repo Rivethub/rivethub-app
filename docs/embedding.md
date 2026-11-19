@@ -89,7 +89,7 @@ A memory item path is also exempt from the first-run redirect to `/welcome`.
 
 ## Framing and the session cookie
 
-Measured on 2026-11-19 against `rh` 0.8.12, serving this build over `http://127.0.0.1:5298`. The hub's home was `/tmp/rh-e2e-embed`, because `/home/phil/.cache` is on a disk that was full. The real hub was not used.
+Measured on 2026-11-19 against `rh` 0.8.12, serving this build over `http://127.0.0.1:5298`. The hub ran in an isolated home directory. The real hub was not used.
 
 The shell response for `/sessions/embed-probe?embed=1` carried both of these headers.
 
