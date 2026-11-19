@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "../app";
 import { createSampleClient } from "../dev/sample-client";
 import { RETURN_TO_KEY } from "../lib/return-to";
+import { sessionAuth } from "../client/auth";
 
 function show(path: string) {
   const history = createMemoryHistory({ initialEntries: [path] });
@@ -60,10 +61,17 @@ describe("login return", () => {
     expect(document.querySelector("[data-embedded='true']")).toBeTruthy();
   });
 
-  it("remembers the open memory item when the document is leaving", async () => {
+  it("remembers the open page when the hub answers that the visitor is signed out", () => {
+    window.history.pushState({}, "", "/topics/rh-08?embed=1");
+    sessionAuth.onUnauthorized?.();
+    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBe("/topics/rh-08?embed=1");
+    window.history.pushState({}, "", "/");
+  });
+
+  it("does not remember a page for a signed-in visitor who leaves the document", async () => {
     show("/topics/rh-08?embed=1");
     await screen.findByRole("navigation", { name: "Sidebar" });
     window.dispatchEvent(new Event("pagehide"));
-    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBe("/topics/rh-08?embed=1");
+    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBeNull();
   });
 });
