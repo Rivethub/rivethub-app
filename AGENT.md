@@ -32,7 +32,7 @@ The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entit
 - **One sidebar everywhere.** The session list is the main column, not a second sidebar; the topic tree and entity kinds nest under their library row.
 - **Summary first.** A session opens on its summary when it has one, the messages otherwise.
 - **The look is the Rust desktop app's.** Palette from `rivethub-desktop/crates/model/src/palette.rs`, content on one rounded surface, sans type. Phil's call: of every earlier UI, that one was the closest.
-- **The guide stores nothing on the hub.** Steps derive from hub state plus a few flags in `localStorage` (`rivethub.journey`).
+- **The guide stores nothing on the hub.** Steps derive from hub state plus a few flags in `localStorage` (`rivethub.journey`). Pinned topics and entities are kept in the same browser (`rivethub.pins`), not on the hub, and the pin step is done when that list has something in it.
 - **Stats, topic creation and the stored-transcript fallback are client-side additions over existing `rh` routes.** No runtime change was needed.
 
 ## Not done
