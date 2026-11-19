@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "../app";
 import { createSampleClient } from "../dev/sample-client";
+import { RETURN_TO_KEY } from "../lib/return-to";
 
 function show(path: string) {
   const history = createMemoryHistory({ initialEntries: [path] });
@@ -45,5 +46,24 @@ describe("embed mode", () => {
     expect(within(nav).queryByRole("img", { name: "RivetHub" })).not.toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /^Review/ })).toBeInTheDocument();
     expect(document.querySelector("[data-embedded='true']")).toBeTruthy();
+  });
+});
+
+describe("login return", () => {
+  it("lands back on the memory item, with embed=1, after the login page replaces the document with /", async () => {
+    sessionStorage.setItem(RETURN_TO_KEY, "/sessions/s-retention?embed=1");
+    const history = show("/");
+    expect(await screen.findByRole("heading", { level: 1, name: /Retention to 14 days/ })).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/sessions/s-retention");
+    expect(history.location.search).toBe("?embed=1");
+    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBeNull();
+    expect(document.querySelector("[data-embedded='true']")).toBeTruthy();
+  });
+
+  it("remembers the open memory item when the document is leaving", async () => {
+    show("/topics/rh-08?embed=1");
+    await screen.findByRole("navigation", { name: "Sidebar" });
+    window.dispatchEvent(new Event("pagehide"));
+    expect(sessionStorage.getItem(RETURN_TO_KEY)).toBe("/topics/rh-08?embed=1");
   });
 });
