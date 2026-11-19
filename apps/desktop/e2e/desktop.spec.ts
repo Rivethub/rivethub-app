@@ -77,6 +77,22 @@ test("renders Today from sample data on the node's origin", async () => {
   await app.close();
 });
 
+test("a long topic page scrolls in its own pane and leaves the window still", async () => {
+  const app = await launch(`${web.origin}/topics/rh-08?sample`);
+  const page = await app.firstWindow();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.setViewportSize({ width: 1100, height: 420 });
+
+  const overflow = await page.evaluate(() => {
+    const pane = document.getElementById("main")!;
+    const root = document.scrollingElement!;
+    return { pane: pane.scrollHeight - pane.clientHeight, window: root.scrollHeight - root.clientHeight };
+  });
+  expect(overflow.pane).toBeGreaterThan(0);
+  expect(overflow.window).toBe(0);
+  await app.close();
+});
+
 test("the web app loads under the hub's CSP without a violation", async () => {
   const app = await launch();
   const page = await app.firstWindow();
