@@ -15,6 +15,12 @@ import { usePalette } from "./palette";
 import { cx, Dot } from "./ui";
 
 /**
+ * A pane that scrolls is also the containing block for what it holds. Without that, a visually
+ * hidden label far down a page is laid out against the window, and the window scrolls as well.
+ */
+const scrollPane = "relative overflow-y-auto";
+
+/**
  * Desktop: left sidebar, main column, optional right panel.
  * Phone: the main column only, with the bottom tabs when `tabs` is set.
  */
@@ -24,7 +30,7 @@ export function Frame({ sidebar, aside, tabs, children }: { sidebar: ReactNode; 
   if (phone) {
     return (
       <div className="flex h-dvh flex-col bg-background text-foreground">
-        <main id="main" className="flex min-w-0 flex-1 flex-col overflow-y-auto">{children}</main>
+        <main id="main" className={cx("flex min-w-0 flex-1 flex-col", scrollPane)}>{children}</main>
         {tabs && <MobileTabs />}
       </div>
     );
@@ -33,11 +39,11 @@ export function Frame({ sidebar, aside, tabs, children }: { sidebar: ReactNode; 
     <div className="flex h-dvh bg-sidebar text-foreground">
       {sidebar}
       <div className={cx("my-2 mr-2 flex min-w-0 flex-1 overflow-hidden rounded-[18px] border border-border bg-background", !sidebar && "ml-2")}>
-        <main id="main" className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <main id="main" className={cx("flex min-w-0 flex-1 flex-col", scrollPane)}>
           {children}
           {aside && !wide && <div className="flex border-t border-border">{aside}</div>}
         </main>
-        {aside && wide && <div className="flex shrink-0 overflow-y-auto">{aside}</div>}
+        {aside && wide && <div className={cx("flex shrink-0", scrollPane)}>{aside}</div>}
       </div>
     </div>
   );
@@ -76,7 +82,7 @@ export function Logo({ size = 22 }: { size?: number }) {
 
 export function SidebarShell({ children, label = "Sidebar", className }: { children: ReactNode; label?: string; className?: string }) {
   return (
-    <nav aria-label={label} className={cx("flex w-[244px] shrink-0 flex-col gap-0.5 overflow-y-auto bg-sidebar px-2 py-2.5", className)}>
+    <nav aria-label={label} className={cx("flex w-[244px] shrink-0 flex-col gap-0.5 bg-sidebar px-2 py-2.5", scrollPane, className)}>
       {children}
     </nav>
   );
