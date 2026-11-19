@@ -193,6 +193,13 @@ export interface TopicArticle {
 
 export type EntityType = string;
 
+export interface EntityCategory {
+  id: TopicId;
+  type: EntityType;
+  typeName: string;
+  count: number;
+}
+
 export interface FactSource {
   session: { id: SessionId; title: string };
   at: IsoTime;

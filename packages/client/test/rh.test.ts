@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityId, SessionId, TopicId } from "@rivethub/contracts";
+import { createClient } from "../src/compose.js";
 import { createRhClient } from "../src/rh/index.js";
 import { sessionSegment } from "../src/rh/util.js";
 import { HttpError, MalformedResponseError, RouteMissingError } from "../src/errors.js";
@@ -13,6 +14,53 @@ function rh(routes: Parameters<typeof fakeRh>[0]) {
   const fake = fakeRh(routes);
   return { client: createRhClient({ baseUrl: "https://rh.test/", fetch: fake.fetch }).methods, calls: fake.calls };
 }
+
+describe("entity category management", () => {
+  it("joins type topics to their counts and keeps empty categories", async () => {
+    const { client, calls } = rh({
+      "GET /api/entities/types": [{ type: "machine", typeName: "Machines", count: 2 }, { type: "printer", typeName: "Printers", count: 0 }],
+      "GET /api/topics?kind=type": {
+        topics: [
+          { topic: { id: "t-machine", kind: "type", slug: "machine", name: "Machine" }, sessionCount: 7 },
+          { topic: { id: "t-printer", kind: "type", slug: "printer", name: "Printer", parent: "t-machine" } },
+        ],
+      },
+    });
+    expect(await client.entityTypes!()).toEqual([
+      { id: "t-machine", type: "machine", typeName: "Machines", count: 2 },
+      { id: "t-printer", type: "printer", typeName: "Printers", count: 0 },
+    ]);
+    expect(calls).toEqual([
+      { method: "GET", path: "/api/entities/types", body: undefined },
+      { method: "GET", path: "/api/topics?kind=type", body: undefined },
+    ]);
+  });
+
+  it("creates a top-level category and a named entity inside it, then moves the entity", async () => {
+    const { client, calls } = rh({
+      "POST /api/topics": ({ body }: { body: unknown }) => ({ status: 201, body: { id: (body as { kind: string }).kind === "type" ? "t-printer" : "e/one" } }),
+      "PATCH /api/topics/e%2Fone": noContent,
+    });
+    const category = await client.createEntityCategory!("Printers");
+    const entity = await client.createEntity!("Office printer", category);
+    expect(category).toBe("t-printer");
+    expect(entity).toBe("e/one");
+    await client.moveEntity!(entity, "t-machine" as TopicId);
+    expect(calls).toEqual([
+      { method: "POST", path: "/api/topics", body: { kind: "type", name: "Printers" } },
+      { method: "POST", path: "/api/topics", body: { kind: "entity", name: "Office printer", parent: "t-printer" } },
+      { method: "PATCH", path: "/api/topics/e%2Fone", body: { parent: "t-machine" } },
+    ]);
+  });
+
+  it("does not send or simulate a write when an older hub lacks the category routes", async () => {
+    const { fetch, calls } = fakeRh({ "GET /api/entities": [], "GET /api/topics": body.topicsBody });
+    const client = createClient({ baseUrl: "https://rh.test", fetch });
+    expect(await client.entityTypes!()).toBeNull();
+    await expect(client.createEntityCategory!("Printers")).rejects.toThrow("cannot manage entity categories");
+    expect(calls.every((call) => call.method === "GET")).toBe(true);
+  });
+});
 
 describe("topics", () => {
   it("nests the flat list by parent and reads closed topics as closed", async () => {

@@ -291,6 +291,12 @@ const shared = z.discriminatedUnion("kind", [z.object({ kind: z.literal("private
 export const entitySummary = z.object({ id: z.string().min(1), title: z.string(), type: z.string(), typeName: nullish(z.string()), sessionCount: z.number() });
 export const entityList = rows(entitySummary);
 
+export const entityTypes = rows(z.object({ type: z.string(), typeName: nullish(z.string()), count: z.number() }));
+const typeTopic = topicRecord.pick({ id: true, kind: true, slug: true, name: true });
+export const entityTypeTopics = z.object({
+  topics: rows(z.union([z.object({ topic: typeTopic }).transform(({ topic }) => topic), typeTopic])),
+});
+
 export const entityArticle = entitySummary.extend({
   aliases: rows(z.string()),
   topic: nullish(z.object({ id: z.string().min(1), path: rows(z.string()) })),

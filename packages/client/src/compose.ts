@@ -94,6 +94,27 @@ export function createClient(options: ClientOptions): MemoryClient {
   const liveSession = choose("sessions", "session");
   const liveKeep = choose("sessions", "keep");
 
+  let categoriesAvailable = false;
+  async function entityTypes() {
+    const read = rh.methods.entityTypes;
+    if (!read) return null;
+    try {
+      const categories = await read();
+      categoriesAvailable = await live("entities");
+      return categoriesAvailable ? categories : null;
+    } catch (error) {
+      categoriesAvailable = false;
+      if (unreachable(error)) return null;
+      throw error;
+    }
+  }
+
+  async function requireEntityManagement() {
+    if (!categoriesAvailable && (await entityTypes()) === null) {
+      throw new Error("This hub cannot manage entity categories.");
+    }
+  }
+
   /** Only a runtime without the session catalog lands here: it can delete for good but not trash, so a UI trash is held and filtered out of live lists. */
   const trashed = new Map<SessionId, SessionSummaryRow>();
 
@@ -123,6 +144,19 @@ export function createClient(options: ClientOptions): MemoryClient {
 
     entities: choose("entities", "entities"),
     entity: choose("entities", "entity"),
+    entityTypes,
+    async createEntityCategory(name) {
+      await requireEntityManagement();
+      return rh.methods.createEntityCategory!(name);
+    },
+    async createEntity(name, categoryId) {
+      await requireEntityManagement();
+      return rh.methods.createEntity!(name, categoryId);
+    },
+    async moveEntity(id, categoryId) {
+      await requireEntityManagement();
+      return rh.methods.moveEntity!(id, categoryId);
+    },
     setFact: choose("entities", "setFact"),
 
     async sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>> {
