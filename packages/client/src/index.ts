@@ -12,5 +12,6 @@ export {
   NotFoundError,
   ReauthRequiredError,
   RouteMissingError,
+  UnreadableSummaryError,
 } from "./errors.js";
 export { splitInjected, type TurnText } from "./injected.js";

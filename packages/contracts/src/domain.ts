@@ -105,6 +105,8 @@ export interface TurnUsage {
 }
 
 export interface TranscriptTurn {
+  /** One-based position among stored messages used to write a summary. */
+  summarySourceOrdinal?: number;
   index: number;
   role: "user" | "assistant";
   at: IsoTime;
@@ -121,15 +123,39 @@ export interface TranscriptTurn {
   missing?: "before" | "after";
 }
 
-export interface SummaryNode {
+export interface LegacySummaryNode {
   level: "root" | "branch" | "leaf";
   title?: string;
   text: string;
   messageRange: [number, number];
   model?: string;
   at?: IsoTime;
-  children: SummaryNode[];
+  children: LegacySummaryNode[];
 }
+
+export interface SummaryCounts {
+  sessions?: number;
+  parts?: number;
+  sections?: number;
+}
+
+export interface TopDownSummaryNode {
+  id: string;
+  level: "session" | "part" | "section";
+  title?: string;
+  text: string;
+  at?: IsoTime;
+  summaryOrdinal?: number;
+  sourceFirst?: number;
+  sourceLast?: number;
+  rangeVerified?: boolean;
+  qualityFlags?: number;
+  childCount?: number;
+  counts?: SummaryCounts;
+  children: TopDownSummaryNode[];
+}
+
+export type SummaryNode = LegacySummaryNode | TopDownSummaryNode;
 
 export interface SessionDetail extends SessionSummaryRow {
   cwd?: string;
@@ -283,12 +309,39 @@ export interface SearchHit {
   context?: string;
 }
 
+export interface PassageSection {
+  id: string;
+  heading: string;
+  sourceFirst: number;
+  sourceLast: number;
+  rangeVerified: boolean;
+}
+
+export interface PassageSource {
+  id?: string;
+  sessionId: string;
+  agent: string;
+  channel: string;
+  role: string;
+  content: string;
+  createdAt?: IsoTime;
+  metadata?: Record<string, unknown>;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  toolResult?: string;
+  provenance?: unknown;
+}
+
 /** One place the words were found: a message or a summary inside a session. */
 export interface SearchPassage {
   owner?: string;
   id: string;
   session: { id: SessionId; title: string };
   source: "message" | "summary";
+  kind?: string;
+  passage?: { id: string; ordinal: number };
+  sections?: PassageSection[];
+  sources?: PassageSource[];
   text: string;
   at?: IsoTime;
   role?: "user" | "assistant" | "tool" | "system";

@@ -6,7 +6,7 @@ import type {
   SessionQuery,
   SessionSummaryRow,
 } from "@rivethub/contracts";
-import { NetworkError, RouteMissingError } from "./errors.js";
+import { NetworkError, RouteMissingError, UnreadableSummaryError } from "./errors.js";
 import type { AuthSeam, FetchLike } from "./http.js";
 import { createRhClient, type LiveMethods } from "./rh/index.js";
 import { toRow } from "./rh/util.js";
@@ -83,6 +83,10 @@ export function createClient(options: ClientOptions): MemoryClient {
       if (outcome.ok) {
         proven.add(capability);
         return outcome.value;
+      }
+      if (outcome.error instanceof UnreadableSummaryError) {
+        proven.add(capability);
+        throw outcome.error;
       }
       if (unreachable(outcome.error) || !(await live(capability))) return fromSample();
       throw outcome.error;

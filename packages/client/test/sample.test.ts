@@ -190,6 +190,7 @@ describe("sessions", () => {
     const client = createSampleClient();
     const tree = await client.summaryTree(retention);
     expect(tree.level).toBe("root");
+    if (tree.level !== "root") throw new Error("Expected a legacy root");
     expect(tree.children.map((branch) => [branch.level, branch.title, branch.messageRange])).toEqual([
       ["branch", "Checking headroom", [0, 21]],
       ["branch", "Changing retention", [22, 47]],

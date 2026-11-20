@@ -1,8 +1,8 @@
-import type { EntityId, SearchHit, SearchMode, SearchOptions, SearchPassage, SearchResults } from "@rivethub/contracts";
+import type { EntityId, PassageSource, SearchHit, SearchMode, SearchOptions, SearchPassage, SearchResults } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { z } from "zod";
-import { displayTitle, sessionId, topicId } from "./util.js";
+import { displayTitle, sessionId, strip, topicId } from "./util.js";
 
 const sessionTitles = z.object({ items: z.array(z.object({ id: z.string(), title: z.string() })) });
 
@@ -55,11 +55,15 @@ export function mapSearch(topics: wire.TopicSummary[], memory: ReturnType<typeof
   const passages: SearchPassage[] = [];
   for (const hit of memory.results) {
     if (hit.sessionId === undefined) continue;
-    const text = clip(hit.content);
+    const text = hit.passage ? hit.content : clip(hit.content);
     passages.push({
       id: hit.id,
+      ...(hit.kind === undefined ? {} : { kind: hit.kind }),
+      ...(hit.passage ? { passage: hit.passage } : {}),
+      ...(hit.sections?.length ? { sections: hit.sections } : {}),
+      ...(hit.sources?.length ? { sources: hit.sources.map((source) => strip<PassageSource>(source)) } : {}),
       ...(hit.owner === undefined ? {} : { owner: hit.owner }),
-      session: { id: sessionId(hit.sessionId), title: hit.title ?? text.slice(0, 60) },
+      session: { id: sessionId(hit.sessionId), title: hit.title ?? clip(hit.content).slice(0, 60) },
       source: hit.source === "summary" ? "summary" : "message",
       text,
       ...(hit.createdAt === undefined ? {} : { at: hit.createdAt }),

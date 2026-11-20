@@ -181,12 +181,25 @@ export const trashList = z.object({
   ),
 });
 
-// Tree levels determine transcript ranges; skip unknown node shapes rather than guess a range.
+const uint = z.number().int().nonnegative();
+const legacySummaryKind = z.enum(["leaf", "branch", "root"]);
+const topDownSummaryKind = z.enum(["session", "part", "section"]);
+const summaryKind = descriptive(["leaf", "branch", "root", "session", "part", "section"]);
+
+export const isLegacySummaryKind = (kind: string): kind is z.infer<typeof legacySummaryKind> => legacySummaryKind.safeParse(kind).success;
+export const isTopDownSummaryKind = (kind: string): kind is z.infer<typeof topDownSummaryKind> => topDownSummaryKind.safeParse(kind).success;
+
 export const summaryNode = z.object({
   id: z.string().min(1),
   parentId: nullish(z.string()),
   level: z.number().default(0),
-  kind: z.enum(["leaf", "branch", "root"]),
+  kind: summaryKind,
+  summaryOrdinal: nullish(uint),
+  sourceFirst: nullish(uint),
+  sourceLast: nullish(uint),
+  rangeVerified: nullish(z.boolean()),
+  qualityFlags: nullish(uint),
+  children: nullish(uint),
   content: z.string(),
   messageCount: z.number().default(0),
   earliestAt: nullish(timeSchema),
@@ -194,13 +207,58 @@ export const summaryNode = z.object({
   createdAt: nullish(timeSchema),
 });
 export type SummaryWire = z.infer<typeof summaryNode>;
-export const summaryDag = z.object({ sessionId: z.string().min(1), summaries: rows(summaryNode) });
+const summaryRows = rows(summaryNode);
+export const summaryDag = z.object({
+  sessionId: z.string().min(1),
+  summaries: z.array(z.unknown()),
+  counts: nullish(z.object({
+    leaves: nullish(uint),
+    branches: nullish(uint),
+    roots: nullish(uint),
+    sessions: nullish(uint),
+    parts: nullish(uint),
+    sections: nullish(uint),
+    embedded: nullish(uint),
+    top: nullish(uint),
+  })),
+}).transform((dag) => ({
+  ...dag,
+  rowCount: dag.summaries.length,
+  summaries: summaryRows.parse(dag.summaries),
+}));
+
+const passageSection = z.object({
+  id: z.string(),
+  heading: z.string(),
+  sourceFirst: uint,
+  sourceLast: uint,
+  rangeVerified: z.boolean(),
+});
+
+const passageSource = z.object({
+  id: nullish(z.string()),
+  sessionId: z.string(),
+  agent: z.string(),
+  channel: z.string(),
+  role: z.string(),
+  content: z.string(),
+  createdAt: nullish(timeSchema),
+  metadata: nullish(z.record(z.string(), z.unknown())),
+  toolName: nullish(z.string()),
+  toolArgs: nullish(z.record(z.string(), z.unknown())),
+  toolResult: nullish(z.string()),
+  provenance: z.unknown().optional(),
+});
 
 export const memorySearch = z.object({
   results: rows(
     z.object({
       id: z.union([z.string(), z.number()]).transform(String),
       source: z.string().optional(),
+      kind: nullish(summaryKind),
+      passage: nullish(z.object({ id: z.string(), ordinal: uint })),
+      sections: nullish(rows(passageSection)),
+      sources: nullish(rows(passageSource)),
       content: z.string().default(""),
       createdAt: nullish(timeSchema),
       sessionId: nullish(z.string()),

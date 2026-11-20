@@ -3,7 +3,7 @@ import type { EntityId, SessionId, TopicId } from "@rivethub/contracts";
 import { createClient } from "../src/compose.js";
 import { createRhClient } from "../src/rh/index.js";
 import { sessionSegment } from "../src/rh/util.js";
-import { HttpError, MalformedResponseError, RouteMissingError } from "../src/errors.js";
+import { HttpError, MalformedResponseError, NotFoundError, RouteMissingError, UnreadableSummaryError } from "../src/errors.js";
 import * as body from "./bodies.js";
 import { fakeRh, noContent } from "./fake.js";
 
@@ -201,11 +201,50 @@ describe("sessions", () => {
     expect(calls[0]!.path).toBe(`/api/harness-sessions/${seg}/tools/tool-1/output`);
   });
 
+  it("keeps readable summary rows and orders recaps and headings by their positions", async () => {
+    const path = `GET /api/memory/summaries/${encodeURIComponent(SID)}`;
+    const { client } = rh({ [path]: {
+      sessionId: SID,
+      counts: { sessions: 1, parts: 2, sections: 2 },
+      summaries: [
+        { id: "p2", parentId: "s", kind: "part", summaryOrdinal: 2, content: "Second recap" },
+        { id: "s2", parentId: "p2", kind: "section", summaryOrdinal: 1, content: "## Results", sourceFirst: 7, sourceLast: 9, rangeVerified: false },
+        { id: "broken", kind: "section", content: null },
+        { id: "s", kind: "session", content: "Overview", children: 2, qualityFlags: 0 },
+        { id: "p1", parentId: "s", kind: "part", summaryOrdinal: 1, content: "First recap" },
+        { id: "s1", parentId: "p2", kind: "section", summaryOrdinal: 0, content: "## Setup", sourceFirst: 5, sourceLast: 6, rangeVerified: true },
+      ],
+    } });
+    const tree = await client.summaryTree!(SID);
+    expect(tree).toMatchObject({
+      level: "session", text: "Overview", childCount: 2, qualityFlags: 0,
+      counts: { sessions: 1, parts: 2, sections: 2 },
+      children: [
+        { id: "p1", level: "part" },
+        { id: "p2", level: "part", children: [
+          { id: "s1", summaryOrdinal: 0, sourceFirst: 5, sourceLast: 6, rangeVerified: true },
+          { id: "s2", summaryOrdinal: 1, sourceFirst: 7, sourceLast: 9, rangeVerified: false },
+        ] },
+      ],
+    });
+  });
+
+  it("distinguishes unreadable summaries from a genuinely empty response", async () => {
+    const path = `GET /api/memory/summaries/${encodeURIComponent(SID)}`;
+    const routes = { [path]: { sessionId: SID, summaries: [{ id: "invalid", kind: "session" }] } };
+    const fake = fakeRh(routes);
+    const client = createClient({ baseUrl: "https://rh.test/", fetch: fake.fetch });
+    await expect(client.summaryTree(SID)).rejects.toBeInstanceOf(UnreadableSummaryError);
+    const { client: empty } = rh({ [path]: { sessionId: SID, summaries: [] } });
+    await expect(empty.summaryTree!(SID)).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it("rebuilds the summary tree from parent links with message ranges", async () => {
     const { client, calls } = rh({ [`GET /api/memory/summaries/${encodeURIComponent(SID)}`]: body.summariesBody });
     const tree = await client.summaryTree!(SID);
     expect(calls[0]!.path).toBe("/api/memory/summaries/claude-code%3As-1");
     expect(tree).toMatchObject({ level: "root", text: "The change stream was wired end to end.", messageRange: [0, 10] });
+    if (tree.level !== "root") throw new Error("Expected a legacy root");
     const branch = tree.children[0]!;
     expect(branch).toMatchObject({ level: "branch", messageRange: [0, 10] });
     expect(branch.children.map((leaf) => [leaf.level, leaf.text, leaf.messageRange])).toEqual([

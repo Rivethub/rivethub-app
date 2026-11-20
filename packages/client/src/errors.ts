@@ -58,3 +58,10 @@ export class NotFoundError extends ClientError {
     super(`${what} was not found`);
   }
 }
+
+export class UnreadableSummaryError extends ClientError {
+  override readonly name = "UnreadableSummaryError";
+  constructor() {
+    super("This hub sent summaries this app can’t read.");
+  }
+}
