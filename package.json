@@ -3,7 +3,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.28.5",
+  "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=22.18"
   },
@@ -19,6 +19,6 @@
     "typecheck": "pnpm -r typecheck"
   },
   "devDependencies": {
-    "typescript": "~5.9.3"
+    "typescript": "~7.0.2"
   }
 }

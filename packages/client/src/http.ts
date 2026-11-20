@@ -21,9 +21,9 @@ export interface HttpOptions {
 export type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface Http {
-  get<T>(path: string, schema: ZodType<T, any, unknown>, query?: Record<string, string | number | undefined>): Promise<T>;
+  get<T>(path: string, schema: ZodType<T>, query?: Record<string, string | number | undefined>): Promise<T>;
   send(method: Exclude<Method, "GET">, path: string, body?: unknown): Promise<void>;
-  sendFor<T>(method: Exclude<Method, "GET">, path: string, schema: ZodType<T, any, unknown>, body?: unknown): Promise<T>;
+  sendFor<T>(method: Exclude<Method, "GET">, path: string, schema: ZodType<T>, body?: unknown): Promise<T>;
   answers(path: string): Promise<boolean>;
 }
 
@@ -111,7 +111,7 @@ export function createHttp(options: HttpOptions): Http {
     throw new HttpError(response.status, path, failure.message, failure.code, failure.sessions);
   }
 
-  async function parse<T>(response: Response, path: string, schema: ZodType<T, any, unknown>): Promise<T> {
+  async function parse<T>(response: Response, path: string, schema: ZodType<T>): Promise<T> {
     let json: unknown;
     try {
       json = await response.json();
