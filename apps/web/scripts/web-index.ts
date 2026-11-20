@@ -58,12 +58,16 @@ function newestFirst(a: WebIndexEntry, b: WebIndexEntry): number {
   return 0;
 }
 
-export function buildWebIndex(releases: readonly PublishedWebRelease[], generatedAt: string): WebIndex {
+// A release whose manifest breaks the contract is left out, as `rh update` leaves it out, so one bad release cannot stop the index.
+export function buildWebIndex(releases: readonly PublishedWebRelease[], generatedAt: string, skipped?: (tag: string) => void): WebIndex {
   const channels: WebIndex["channels"] = { stable: [], beta: [], nightly: [] };
   for (const { tag, manifest, archiveUrl, manifestUrl } of releases) {
     const channel = channelForTag(tag);
     if (channel === undefined || manifest === undefined || archiveUrl === undefined || manifestUrl === undefined) continue;
-    if (!isManifest(manifest, tag.slice(TAG_PREFIX.length), channel)) throw new Error(`invalid web manifest for ${tag}`);
+    if (!isManifest(manifest, tag.slice(TAG_PREFIX.length), channel)) {
+      skipped?.(tag);
+      continue;
+    }
     channels[channel].push({ manifest, archiveUrl, manifestUrl });
   }
   for (const entries of Object.values(channels)) {
@@ -112,7 +116,8 @@ async function main(): Promise<void> {
   const dryRun = values["dry-run"] === true;
   const repo = dryRun ? publicRepo : process.env.GITHUB_REPOSITORY ?? publicRepo;
   const releases = await readPublishedReleases(repo, dryRun ? undefined : process.env.GH_TOKEN);
-  console.log(JSON.stringify(buildWebIndex(releases, new Date().toISOString()), null, 2));
+  const index = buildWebIndex(releases, new Date().toISOString(), (tag) => console.error(`web-index: left out ${tag}, its manifest breaks the contract`));
+  console.log(JSON.stringify(index, null, 2));
 }
 
 if (process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -77,4 +77,16 @@ describe("buildWebIndex", () => {
     expect(JSON.stringify(buildWebIndex(releases, later))).toBe(JSON.stringify(index).replace(GENERATED_AT, later));
     expect(JSON.stringify(buildWebIndex([...releases].reverse(), GENERATED_AT))).toBe(JSON.stringify(index));
   });
+
+  it("leaves out a release whose manifest breaks the contract and keeps the rest", () => {
+    const broken = release("0.10.3", "stable");
+    const skipped: string[] = [];
+    const index = buildWebIndex(
+      [{ ...broken, manifest: { ...broken.manifest, sha256: "not a digest" } }, release("0.10.2", "stable")],
+      GENERATED_AT,
+      (tag) => skipped.push(tag),
+    );
+    expect(index.channels.stable.map(({ manifest }) => manifest.version)).toEqual(["0.10.2"]);
+    expect(skipped).toEqual(["web-v0.10.3"]);
+  });
 });
