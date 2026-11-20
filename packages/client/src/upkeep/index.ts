@@ -12,7 +12,7 @@ export interface UpkeepClientOptions {
 }
 
 const count = z.number().default(0);
-const activity = z.object({ lastFinishedAt: timeSchema.nullish(), failing: count }).default({ failing: 0 });
+const activity = z.object({ lastFinishedAt: timeSchema.nullish(), failing: count }).prefault({ failing: 0 });
 
 const statsWire = z.object({
   conversations: count,

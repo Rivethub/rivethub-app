@@ -17,7 +17,7 @@ import { timeSchema } from "../rh/wire.js";
 
 /** The bodies rh's share routes answer with: rivethub-runtime `wire::gateway::share` (CONTRACT note 151) and `share_receive` (note 152). */
 
-const opt = <T extends z.ZodTypeAny>(schema: T) => schema.nullish().transform((value) => value ?? undefined);
+const opt = <T extends z.ZodType>(schema: T) => schema.nullish().transform((value) => value ?? undefined).optional();
 const time = timeSchema.transform((iso) => iso as IsoTime);
 
 const foundSession = z.object({

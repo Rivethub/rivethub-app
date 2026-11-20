@@ -6,7 +6,7 @@ export function descriptive<const T extends readonly [string, ...string[]]>(know
 }
 
 /** A bad row must not hide its usable neighbors. Warn without logging private payloads. */
-export function rows<T extends z.ZodTypeAny>(schema: T) {
+export function rows<T extends z.ZodType>(schema: T) {
   return z.array(z.unknown()).transform((items): z.output<T>[] => items.flatMap((item, index) => {
     const result = schema.safeParse(item);
     if (result.success) return [result.data];
