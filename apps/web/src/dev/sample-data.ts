@@ -14,7 +14,7 @@ import type {
   SessionDetail,
   SessionId,
   SubjectRef,
-  SummaryNode,
+  LegacySummaryNode,
   TagAssignment,
   TopicId,
   TopicNode,
@@ -307,6 +307,7 @@ export const sessionSeeds: SessionSeed[] = [
   { id: "s-plugin-host", title: "Plug-in host scope", harness: "codex", days: 1, at: "11:20", end: "11:45", n: 22, topic: "rh-08", gist: "Kept for 0.8, then reconsidered.", cwd: "~/rivethub-runtime" },
   { id: "s-settings-models", title: "Sketch Settings › Models", harness: "claude-code", days: 1, at: "09:05", end: "09:40", n: 28, gist: "Cards per job with a model picker.", cwd: "~/rivethub-desktop" },
   { id: "s-retention", title: "Retention to 14 days", harness: "claude-code", days: 2, at: "21:12", end: "21:40", n: 64, topic: "backups", gist: "Raised retention after checking disk headroom.", cwd: "~/homelab", kept: true, space: "household", entities: ["nas-01", "memory-db"] },
+  { id: "codex:restore-drill", title: "Rehearse a backup restore", harness: "codex", days: 2, at: "17:00", end: "17:40", n: 6, topic: "backups", gist: "Restored a test backup in a sandbox and verified the inventory." },
   { id: "s-zram", title: "Try zram on workstation", harness: "cursor", days: 3, at: "20:00", end: "20:30", n: 18, gist: "Enabled zram with zstd and measured swap use.", cwd: "~" },
   { id: "s-waybar", title: "Waybar clock format", harness: "opencode", days: 4, at: "08:15", end: "08:25", n: 9, gist: "Twenty-four hour clock with the date on hover.", cwd: "~/.config" },
   { id: "s-snapshots", title: "Lock down snapshot permissions", harness: "grok-build", days: 5, at: "18:30", end: "19:00", n: 26, topic: "backups", gist: "Snapshots read-only to the backup user.", cwd: "~/homelab", entities: ["nas-01"] },
@@ -339,8 +340,8 @@ export const sessionChanges: Record<string, { kind: Change["kind"]; subject: Sub
   "s-visibility": [{ kind: "decision", subject: { kind: "topic", id: tid("rh-08"), title: "rh 0.8 memory cut" }, text: "Connect adds hook and MCP entries only when missing." }],
 };
 
-export function retentionSummary(): SummaryNode {
-  const leaf = (a: number, b: number, text: string): SummaryNode => ({ level: "leaf", text, messageRange: [a, b], children: [] });
+export function retentionSummary(): LegacySummaryNode {
+  const leaf = (a: number, b: number, text: string): LegacySummaryNode => ({ level: "leaf", text, messageRange: [a, b], children: [] });
   return {
     level: "root",
     title: "Whole session",

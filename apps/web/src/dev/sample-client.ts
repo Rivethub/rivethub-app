@@ -1,3 +1,4 @@
+import { createSampleClient as createSharedSampleClient } from "@rivethub/client";
 import { entityTypeLabel, groupEntities } from "@rivethub/client-runtime/format";
 import type {
   Capability,
@@ -17,7 +18,7 @@ import type {
   SessionId,
   SessionSummaryRow,
   SubjectRef,
-  SummaryNode,
+  LegacySummaryNode,
   TopicArticle,
   TopicId,
   TopicNode,
@@ -48,6 +49,8 @@ function contains(node: TopicNode, id: string): boolean {
 export function createSampleClient(options: { latencyMs?: number } = {}): AppClient {
   const wait = <T>(v: T): Promise<T> => new Promise((r) => setTimeout(() => r(clone(v)), options.latencyMs ?? 0));
 
+  let sharedSample: ReturnType<typeof createSharedSampleClient> | undefined;
+  const shared = () => sharedSample ??= createSharedSampleClient();
   const tree = data.topicTree();
   const topicById = () => new Map(flatten(tree).map((n) => [n.id as string, n]));
   const pathOf = (id: string): TopicNode[] => {
@@ -429,7 +432,8 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
       const s = sessions.get(id);
       return s ? wait(s) : Promise.reject(new Error(`No session ${id}`));
     },
-    transcript(id, range) {
+    async transcript(id, range, source) {
+      if (id === "codex:restore-drill") return wait(await shared().transcript(id, range, source));
       const s = sessions.get(id);
       if (!s) return Promise.reject(new Error(`No session ${id}`));
       const turns: TranscriptTurn[] = id === "s-retention"
@@ -445,12 +449,13 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
     toolOutput() {
       return wait({ text: "", failed: false, truncated: false });
     },
-    summaryTree(id) {
+    async summaryTree(id) {
+      if (id === "codex:restore-drill") return wait(await shared().summaryTree(id));
       const s = sessions.get(id);
       if (!s) return Promise.reject(new Error(`No session ${id}`));
       if (id === "s-retention") return wait(data.retentionSummary());
       const half = Math.ceil(s.messageCount / 2);
-      const leaf = (a: number, b: number, text: string): SummaryNode => ({ level: "leaf", text, messageRange: [a, b], children: [] });
+      const leaf = (a: number, b: number, text: string): LegacySummaryNode => ({ level: "leaf", text, messageRange: [a, b], children: [] });
       return wait({
         level: "root", title: "Whole session", text: s.gist ?? s.title, messageRange: [1, s.messageCount], model: "claude-cli opus", at: s.endedAt ?? s.startedAt,
         children: [

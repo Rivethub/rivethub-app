@@ -1,6 +1,7 @@
+import { UnreadableSummaryError } from "@rivethub/client";
 import { VisibilityName } from "../components/visibility";
 import { count, dayLabel, harnessNames, hasNoMessages, longDay, localDay, originLabel, originNote, shortDate, time, toolLine } from "@rivethub/client-runtime/format";
-import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, SummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
+import type { SessionDetail, SessionId, SessionQuery, SessionSummaryRow, LegacySummaryNode, TopDownSummaryNode, TopicId, TopicNode, TranscriptTurn, Visibility } from "@rivethub/contracts";
 import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -13,12 +14,14 @@ import { OpenIn } from "../components/open-in";
 import { EditableText } from "../components/editable";
 import { FolderIcon, KeepIcon, SearchIcon, ShareIcon, TrashIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
+import { Markdown } from "../components/markdown";
 import { Modal } from "../components/modal";
 import { Frame, MainSidebar } from "../components/shell";
 import { Button, Chip, cx, ErrorNote, Eyebrow, KindTag, Loading, SampleBadge, Tags } from "../components/ui";
 import { changeKind, plural, subjectHref } from "../lib/format";
 import { markStep } from "../lib/journey";
 import { useIsPhone } from "../lib/media";
+import { summaryRangeSearch, withoutSourceMarkers } from "../lib/summary";
 
 const route = getRouteApi("/sessions/$sessionId");
 const indexRoute = getRouteApi("/sessions");
@@ -312,7 +315,7 @@ export function SessionPage() {
               </details>
               <StateNote d={d!} />
               <ArticleTabs tabs={tabs.map((t) => ({ ...t }))} active={tab} search={(id) => ({ tab: id })} phone />
-              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} phone />}
+              {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} source={range ? search.source : undefined} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} phone />}
             </div>
             <PhoneActions d={d!} onTrash={doTrash} onRestore={() => restore.mutate([d!.id])} />
           </>
@@ -330,7 +333,7 @@ export function SessionPage() {
               {near.newer ? <Link to="/sessions/$sessionId" params={{ sessionId: near.newer.id }} search={view === "all" ? {} : { view }} title={near.newer.title} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-accent hover:no-underline">‹ Newer</Link> : null}
               {near.older ? <Link to="/sessions/$sessionId" params={{ sessionId: near.older.id }} search={view === "all" ? {} : { view }} title={near.older.title} className="rounded-md border border-border px-2 py-0.5 text-foreground hover:bg-accent hover:no-underline">Older ›</Link> : null}
             </span>
-            <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined })} />
+            <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ ...search, tab: id, from: undefined, to: undefined, source: undefined })} />
             {canSend && <Link to="/share" search={{ session: d!.id }} className="ml-2 rounded-lg border border-border px-2.5 py-1 text-[12px] text-foreground hover:bg-accent hover:no-underline">Share…</Link>}
             {d!.owner ? <span className="ml-2 text-[13px] text-muted-foreground">This is {d!.owner}’s session. Only they can change it.</span> : <>
             <Button className={canSend ? "" : "ml-2"} aria-pressed={d!.kept} onClick={() => keep.mutate({ id: d!.id, keep: !d!.kept })}>{d!.kept ? "Kept" : "Keep"}</Button>
@@ -344,7 +347,7 @@ export function SessionPage() {
           <div className="flex flex-1 flex-col gap-[18px] px-8 py-6">
             <SessionHeader d={d!} />
             <StateNote d={d!} />
-            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} />}
+            {tab === "summary" ? <SummaryView id={d!.id} /> : <TranscriptView id={d!.id} range={range} source={range ? search.source : undefined} empty={hasNoMessages(d!)} {...(d!.owner ? { sender: d!.owner } : d!.origin ? { sender: d!.origin.author ?? "Sender" } : {})} />}
           </div>
         </>
       )}
@@ -425,6 +428,14 @@ function SummaryView({ id }: { id: SessionId }) {
   const [open, setOpen] = useState<Set<number>>(new Set([0]));
   if (tree.isPending) return <Loading />;
   if (tree.isError) {
+    if (tree.error instanceof UnreadableSummaryError) {
+      return (
+        <section role="alert" aria-label="Session summary" className="flex flex-col gap-1.5 rounded-xl border border-dashed border-input px-[18px] py-4">
+          <span className="font-semibold">{tree.error.message}</span>
+          <Link to="." search={{ tab: "transcript" } as never}>Read the transcript</Link>
+        </section>
+      );
+    }
     return (
       <section aria-label="Session summary" className="flex flex-col gap-1.5 rounded-xl border border-dashed border-input px-[18px] py-4">
         <span className="font-semibold">No summary yet</span>
@@ -436,6 +447,9 @@ function SummaryView({ id }: { id: SessionId }) {
     );
   }
   const root = tree.data;
+  if (!("messageRange" in root)) {
+    return <SessionSummary node={root} id={id} />;
+  }
   const leaves = root.children.reduce((n, b) => n + b.children.length, 0);
   return (
     <>
@@ -458,9 +472,54 @@ function SummaryView({ id }: { id: SessionId }) {
   );
 }
 
+function SessionSummary({ node, id }: { node: TopDownSummaryNode; id: SessionId }) {
+  const parts = node.children.filter((child) => child.level === "part");
+  const counts = node.counts;
+  const stats = counts && [
+    counts.sessions ? plural(counts.sessions, "session overview") : "",
+    counts.parts ? plural(counts.parts, "detailed recap") : "",
+    counts.sections ? plural(counts.sections, "section") : "",
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="flex flex-col gap-4">
+      <section aria-label="Session summary" className="flex flex-col gap-3 rounded-xl border border-border bg-card px-[18px] py-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-1">
+          <h2 className="m-0 font-serif text-lg font-semibold">Whole session</h2>
+          {stats && <span className="text-[12px] text-muted-foreground">{stats}</span>}
+        </div>
+        <SummarySections node={node} id={id} />
+      </section>
+      {parts.map((part, index) => (
+        <section key={part.id} className="flex flex-col gap-3 rounded-xl border border-border px-[18px] py-4">
+          <h2 className="m-0 font-serif text-lg font-semibold">Part {index + 1} of {parts.length}</h2>
+          <SummarySections node={part} id={id} />
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SummarySections({ node, id }: { node: TopDownSummaryNode; id: SessionId }) {
+  const sections = node.children.filter((child) => child.level === "section");
+  if (!sections.length) return <Markdown source={withoutSourceMarkers(node.text)} />;
+  return sections.map((section) => {
+    const text = withoutSourceMarkers(section.text).trim();
+    const [first = "", ...rest] = text.split("\n");
+    const heading = first.startsWith("## ") ? first.slice(3).trim() : undefined;
+    const range = summaryRangeSearch(section);
+    return (
+      <div key={section.id} className="flex flex-col gap-1.5 border-t border-border pt-3">
+        <h3 className="m-0 text-[15px] font-semibold">{section.title ?? (heading || "Overview")}</h3>
+        <Markdown source={heading === undefined ? text : rest.join("\n").trim()} />
+        {range && <Link to="/sessions/$sessionId" params={{ sessionId: id }} search={range} className="w-fit text-[12px]">View in transcript</Link>}
+      </div>
+    );
+  });
+}
+
 const rangeLabel = (r: [number, number]) => `${r[0]}–${r[1]}`;
 
-function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boolean; onToggle: () => void }) {
+function Branch({ node, expanded, onToggle }: { node: LegacySummaryNode; expanded: boolean; onToggle: () => void }) {
   return (
     <div className="flex flex-col gap-1.5 border-l-2 border-border pl-[18px]">
       <button type="button" aria-expanded={expanded} onClick={onToggle} className={cx("flex flex-col items-stretch gap-2 rounded-[10px] border border-border px-2.5 py-2 text-left text-foreground", expanded ? "bg-card" : "bg-transparent hover:bg-accent")}>
@@ -486,8 +545,8 @@ function Branch({ node, expanded, onToggle }: { node: SummaryNode; expanded: boo
 }
 
 /** `empty` is true only when the hub counted the messages and found none; then there is nothing to ask for. */
-function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; range: [number, number] | undefined; phone?: boolean; empty: boolean; sender?: string }) {
-  const transcript = useTranscript(id, !empty);
+function TranscriptView({ id, range, source, phone, empty, sender }: { id: SessionId; range: [number, number] | undefined; source: "memory" | undefined; phone?: boolean; empty: boolean; sender?: string }) {
+  const transcript = useTranscript(id, !empty, source);
   const first = useRef<HTMLElement>(null);
   const folded = useMemo(() => exchanges(transcript.data ?? []), [transcript.data]);
   useEffect(() => {
@@ -509,20 +568,24 @@ function TranscriptView({ id, range, phone, empty, sender }: { id: SessionId; ra
       </div>
     );
   }
-  const inRange = (t: TranscriptTurn) => !!range && t.index >= range[0] && t.index <= range[1];
-  const hit0 = (t: TranscriptTurn) => !!range && t.index === range[0];
+  const inRange = (turn: TranscriptTurn) => {
+    const position = source === "memory" ? turn.summarySourceOrdinal : turn.index;
+    return range !== undefined && position !== undefined && position >= range[0] && position <= range[1];
+  };
+  const matchingExchange = (exchange: (typeof folded)[number]) =>
+    (exchange.prompt !== undefined && inRange(exchange.prompt)) || exchange.replies.some(inRange);
+  const firstMatch = folded.find(matchingExchange);
   return (
     <div aria-label="Transcript" role="log" className={cx("mx-auto flex w-full flex-col gap-1", !phone && "max-w-[820px]")}>
       {range && (
         <p className="m-0 flex items-center gap-2 text-[13px] text-muted-foreground">
-          Showing messages {rangeLabel(range)} from the summary. <Link to="." search={{ tab: "transcript" } as never}>Clear</Link>
+          {source === "memory" && !firstMatch ? "This message range is unavailable." : `Showing messages ${rangeLabel(range)} from the summary.`} <Link to="." search={{ tab: "transcript" } as never}>Clear</Link>
         </p>
       )}
       {transcript.data[0]?.missing === "before" && <MissingNote side="before" />}
       {folded.map((exchange) => {
-        const turns = [...(exchange.prompt ? [exchange.prompt] : []), ...exchange.replies];
-        const hit = turns.some(inRange);
-        return <ExchangeView key={exchange.index} exchange={exchange} session={id} sender={sender} hit={hit} open={hit} anchor={turns.some(hit0) ? first : undefined} />;
+        const hit = matchingExchange(exchange);
+        return <ExchangeView key={exchange.index} exchange={exchange} session={id} sender={sender} hit={hit} open={hit} anchor={exchange === firstMatch ? first : undefined} />;
       })}
       {transcript.data.at(-1)?.missing === "after" && <MissingNote side="after" />}
     </div>

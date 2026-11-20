@@ -17,6 +17,7 @@ const shots = [
   ["desktop-topic", desktop, "/topics/rh-08"],
   ["desktop-entity", desktop, "/entities/nas-01"],
   ["desktop-session-summary", desktop, "/sessions/s-retention?tab=summary"],
+  ["desktop-converted-summary", desktop, "/sessions/codex%3Arestore-drill?sample&tab=summary"],
   ["desktop-settings", desktop, "/settings/connections"],
   ["desktop-account", desktop, "/settings/account"],
   ["desktop-welcome", desktop, "/welcome"],

@@ -1,6 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { SessionDetail, SessionId, SummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
-import { splitInjected } from "@rivethub/client";
+import type { SessionDetail, SessionId, LegacySummaryNode, TopicId, TopicNode, TranscriptTurn } from "@rivethub/contracts";
+import { splitInjected, UnreadableSummaryError } from "@rivethub/client";
 import { exchanges } from "@rivethub/client-runtime/exchange";
 import { harnessNames, originNote, toolLine } from "@rivethub/client-runtime/format";
 import * as Clipboard from "expo-clipboard";
@@ -273,14 +273,14 @@ function Bubble({ turn, sender }: { turn: TranscriptTurn; sender: string | undef
   );
 }
 
-function NoSummary({ onOpenTranscript }: { onOpenTranscript: () => void }) {
+function NoSummary({ onOpenTranscript, error }: { onOpenTranscript: () => void; error?: string }) {
   const { palette } = useTheme();
   return (
     <View style={{ gap: 6, borderWidth: 1, borderStyle: "dashed", borderColor: palette.input, borderRadius: 12, padding: 16 }}>
-      <Text style={{ color: palette.foreground, fontWeight: "600" }}>No summary yet</Text>
-      <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
+      <Text style={{ color: palette.foreground, fontWeight: "600" }}>{error ?? "No summary yet"}</Text>
+      {!error && <Text style={{ color: palette.muted, fontSize: 13, lineHeight: 18 }}>
         A summary is written after a session ends, by the model set for summaries. Every message is still here.
-      </Text>
+      </Text>}
       <Pressable accessibilityRole="button" onPress={onOpenTranscript} style={{ minHeight: 44, justifyContent: "center" }}>
         <Text style={{ color: palette.info }}>Read the transcript</Text>
       </Pressable>
@@ -296,23 +296,24 @@ function Summary({ id, state, onLeaf, onOpenTranscript }: { id: SessionId; state
     if (root) markStep("summary");
   }, [root]);
   if (state !== "summarized") return <NoSummary onOpenTranscript={onOpenTranscript} />;
-  if (tree.isError) return <NoSummary onOpenTranscript={onOpenTranscript} />;
+  if (tree.isError) return <NoSummary onOpenTranscript={onOpenTranscript} {...(tree.error instanceof UnreadableSummaryError ? { error: tree.error.message } : {})} />;
   if (!root) return <Loading label="Loading summary…" />;
+  const legacy = "messageRange" in root;
   return (
     <View style={{ gap: 12 }}>
       <View style={{ borderRadius: 14, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.card, padding: 14, gap: 8 }}>
-        <KindTag label="Root" color={palette.primary} />
+        {legacy && <KindTag label="Root" color={palette.primary} />}
         <Text style={{ color: palette.foreground, fontWeight: "600" }}>{root.title ?? "Whole session"}</Text>
         <RichText text={root.text} style={{ fontFamily: palette.reading, color: palette.foreground, fontSize: 16, lineHeight: 24 }} />
       </View>
-      {root.children.map((branch, index) => (
+      {legacy && root.children.map((branch, index) => (
         <Branch key={`${branch.messageRange[0]}:${index}`} node={branch} onLeaf={onLeaf} />
       ))}
     </View>
   );
 }
 
-function Branch({ node, onLeaf }: { node: SummaryNode; onLeaf: (range: [number, number]) => void }) {
+function Branch({ node, onLeaf }: { node: LegacySummaryNode; onLeaf: (range: [number, number]) => void }) {
   const { palette } = useTheme();
   const [open, setOpen] = useState(true);
   return (
