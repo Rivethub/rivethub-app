@@ -223,10 +223,10 @@ describe("httpDownload", () => {
     }],
   ]);
 
-  /** Only names registered above run. `Map#get` does not see `Object.prototype`. */
+  /** Only names registered above run. `Map#get` does not see `Object.prototype`, and the type check is the guard CodeQL recognizes. */
   function dispatch(url: string, req: IncomingMessage, res: ServerResponse) {
     const route = routes.get(url);
-    if (route) route(req, res);
+    if (typeof route === "function") route(req, res);
     else res.writeHead(404).end();
   }
 
