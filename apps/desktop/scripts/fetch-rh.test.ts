@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { access, chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { createServer as createHttpServer, type RequestListener, type Server } from "node:http";
+import { createServer as createHttpServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -209,19 +209,26 @@ describe("httpDownload", () => {
   const httpHits: string[] = [];
   const origin = (server: Server, scheme: string) => `${scheme}://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
-  const routes: Record<string, RequestListener> = {
-    "/asset": (_req, res) => res.end("payload"),
-    "/hop": (_req, res) => res.writeHead(302, { location: "/asset" }).end(),
-    "/downgrade": (_req, res) => res.writeHead(302, { location: `${origin(http, "http")}/asset` }).end(),
-    "/loop": (_req, res) => res.writeHead(302, { location: "/loop" }).end(),
+  const routes = new Map<string, RequestListener>([
+    ["/asset", (_req, res) => res.end("payload")],
+    ["/hop", (_req, res) => res.writeHead(302, { location: "/asset" }).end()],
+    ["/downgrade", (_req, res) => res.writeHead(302, { location: `${origin(http, "http")}/asset` }).end()],
+    ["/loop", (_req, res) => res.writeHead(302, { location: "/loop" }).end()],
     // Says 1000 bytes, sends 5, then stalls: only a check on Content-Length can stop it.
-    "/declared-large": (_req, res) => res.writeHead(200, { "content-length": 1000 }).write("12345"),
+    ["/declared-large", (_req, res) => res.writeHead(200, { "content-length": 1000 }).write("12345")],
     // No Content-Length, sends 12 bytes, then stalls: only a check while streaming can stop it.
-    "/streamed-large": (_req, res) => {
+    ["/streamed-large", (_req, res) => {
       res.writeHead(200).write("123456");
       setTimeout(() => res.write("789012"), 50);
-    },
-  };
+    }],
+  ]);
+
+  /** Only names registered above run. `Map#get` does not see `Object.prototype`. */
+  function dispatch(url: string, req: IncomingMessage, res: ServerResponse) {
+    const route = routes.get(url);
+    if (route) route(req, res);
+    else res.writeHead(404).end();
+  }
 
   const listen = async (server: Server) => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -235,9 +242,7 @@ describe("httpDownload", () => {
       "-addext", "subjectAltName=IP:127.0.0.1", "-keyout", keyFile, "-out", certFile]);
     https = await listen(
       createHttpsServer({ key: await readFile(keyFile), cert: await readFile(certFile) }, (req, res) => {
-        const route = routes[req.url ?? ""];
-        if (route) route(req, res);
-        else res.writeHead(404).end();
+        dispatch(req.url ?? "", req, res);
       }),
     );
     http = await listen(
@@ -297,6 +302,23 @@ await httpDownload(url, dest, maxBytes);`;
 
   it("stops reading once the body passes the limit", async () => {
     expect(await download(`${origin(https, "https")}/streamed-large`, 10)).toEqual({ error: expect.stringMatching(/over the 10-byte limit/) });
+  });
+
+  it("answers 404 when the path is an inherited object method", () => {
+    const statuses: number[] = [];
+    const res = {
+      writeHead(status: number) {
+        statuses.push(status);
+        return res;
+      },
+      end() {
+        return res;
+      },
+    } as unknown as ServerResponse;
+    for (const name of ["toString", "constructor", "hasOwnProperty", "valueOf", "__proto__"]) {
+      expect(() => dispatch(name, {} as IncomingMessage, res), name).not.toThrow();
+    }
+    expect(statuses).toEqual([404, 404, 404, 404, 404]);
   });
 });
 
