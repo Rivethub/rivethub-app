@@ -174,9 +174,18 @@ export function filingCreatesTopic(item: Pick<ReviewItem, "group" | "text">): bo
   return item.group === "filing" && item.text.trimEnd().endsWith("(new topic)");
 }
 
+/** Removes a trailing `(new topic)`, including spaces before it. A regex for that suffix is quadratic on a long run of spaces. */
+function withoutNewTopicSuffix(text: string): string {
+  const marker = "(new topic)";
+  if (!text.endsWith(marker)) return text;
+  let end = text.length - marker.length;
+  while (end > 0 && text[end - 1]!.trim() === "") end -= 1;
+  return text.slice(0, end);
+}
+
 /** The topic name a filing would create. `after` is that name; older rows only have it in the text. */
 export function filingTopicName(item: Pick<ReviewItem, "text" | "after">): string {
   const named = item.after?.trim();
   if (named) return named;
-  return item.text.trimEnd().replace(/\s*\(new topic\)\s*$/, "").replace(/^→\s*/, "").trim();
+  return withoutNewTopicSuffix(item.text.trimEnd()).replace(/^→\s*/, "").trim();
 }
