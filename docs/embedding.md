@@ -2,6 +2,8 @@
 
 This is the contract for a host that shows RivetHub's web app in its own window. The reference host is T3.1 Code, which loads the app in an Electron `<webview>` with its own partition. The types live in `packages/contracts/src/desktop.ts`.
 
+Hosts that install the bundle directly can use the [web distribution contract](web-distribution.md).
+
 ## Host bridge
 
 The preload sets `window.rivethub`. The web app reads that object once, in `readDesktopBridge` (`apps/web/src/lib/desktop.ts`). A missing object is a normal browser. An object without a function named `relogin` is also treated as no bridge.
