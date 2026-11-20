@@ -27,7 +27,7 @@ const DEBUG_XML = `<?xml version="1.0" encoding="utf-8"?>
   <domain-config cleartextTrafficPermitted="true">
     <domain includeSubdomains="false">localhost</domain>
     <domain includeSubdomains="false">127.0.0.1</domain>
-    <domain includeSubdomains="false">10.0.2.2</domain>
+    <domain includeSubdomains="false">10.0.2.2</domain> <!-- secret-scan-allow: Android Emulator host loopback alias -->
   </domain-config>
 </network-security-config>
 `;

@@ -26,7 +26,7 @@ describe("update feed in the build", () => {
     expect(APP_SPDX_LICENSE).toBe("Apache-2.0");
     expect(license).toContain("Apache License");
     expect(license).toContain("Version 2.0, January 2004");
-    expect(license).toContain("Copyright 2026 Philip Tompkins");
+    expect(license).toMatch(/^ *Copyright 2026 \S.+$/m);
     const resources = createBuildConfig({ electronVersion: "45.2.3", outputDir: "/tmp/out", version: "0.1.1" }).extraResources;
     expect(resources).toContainEqual({ from: path.join(root, "LICENSE"), to: "LICENSE" });
   });

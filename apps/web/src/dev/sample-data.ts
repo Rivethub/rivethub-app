@@ -135,7 +135,7 @@ export const topicExtras: Record<string, TopicExtra> = {
       { text: "Keep the plug-in host for 0.8.", days: 1, superseded: true, source: "s-plugin-host" },
     ],
     states: { "change-stream": "Done · 3 sessions", "model-roles": "In progress · 2 sessions" },
-    entities: ["phildesk", "memory-db", "rivethub-runtime"],
+    entities: ["workstation", "memory-db", "rivethub-runtime"],
     tags: [
       { key: "project", value: "rivethub", state: "applied" },
       { key: "kind", value: "release", state: "applied" },
@@ -161,7 +161,7 @@ export const topicExtras: Record<string, TopicExtra> = {
     aliases: ["hooks"],
     decisions: [{ text: "Hooks read the capture token from the rh config, not their own copy.", days: 0, source: "s-codex-hook" }],
     states: {},
-    entities: ["codex-hook", "phildesk"],
+    entities: ["codex-hook", "workstation"],
     tags: [{ key: "area", value: "capture", state: "applied" }],
   },
 };
@@ -181,7 +181,7 @@ export const entitySeeds: EntitySeed[] = [
   { id: "entity-worker", title: "Entity worker", type: "project", n: 1 },
   { id: "home-office", title: "Home office", type: "place", n: 1 },
   { id: "nas-01", title: "nas-01", type: "machine", n: 9 },
-  { id: "phildesk", title: "phildesk", type: "machine", n: 41 },
+  { id: "workstation", title: "workstation", type: "machine", n: 41 },
   { id: "lab-server", title: "lab-server", type: "machine", n: 6 },
   { id: "memory-db", title: "memory-db", type: "database", n: 18 },
   { id: "embed-server", title: "embed-server", type: "service", n: 5 },
@@ -248,7 +248,7 @@ export function nas01(): EntityArticle {
     ],
     connected: [
       { id: eid("memory-db"), title: "memory-db", sharedSessions: 7 },
-      { id: eid("phildesk"), title: "phildesk", sharedSessions: 3 },
+      { id: eid("workstation"), title: "workstation", sharedSessions: 3 },
       { id: eid("embed-server"), title: "embed-server", sharedSessions: 2 },
     ],
     sessions: [],
@@ -261,7 +261,7 @@ export function nas01(): EntityArticle {
 }
 
 export const entityLeads: Record<string, string> = {
-  phildesk: "Phil's desktop. Runs the local rh hub, the harnesses and most agent sessions.",
+  workstation: "Phil's desktop. Runs the local rh hub, the harnesses and most agent sessions.",
   "lab-server": "A rack box in the home lab that runs the team hub when it is on.",
   "memory-db": "The Postgres database behind the memory store, with pgvector for search.",
   "embed-server": "The local service that turns text into embeddings for search.",
@@ -273,8 +273,8 @@ export const entityLeads: Record<string, string> = {
 };
 
 export const entityFacts: Record<string, [string, string][]> = {
-  phildesk: [["Role", "Local hub and main workstation"], ["OS", "Omarchy (Arch)"], ["Status", "Online"]],
-  "memory-db": [["Engine", "Postgres 17 with pgvector"], ["Lives on", "phildesk"], ["Index", "HNSW"]],
+  Linux: [["Role", "Local hub and main workstation"], ["OS", "Omarchy (Linux)"], ["Status", "Online"]],
+  "memory-db": [["Engine", "Postgres 17 with pgvector"], ["Lives on", "workstation"], ["Index", "HNSW"]],
   "embed-server": [["Port", "8089"], ["Model", "nomic-embed"]],
   "codex-hook": [["Config", "~/.codex/config.toml"], ["State", "Failing with 401"]],
   "lab-server": [["Status", "Offline since Tue"]],
@@ -301,13 +301,13 @@ interface SessionSeed {
 export const sessionSeeds: SessionSeed[] = [
   { id: "s-change-stream", title: "Wire the memory change stream", harness: "claude-code", days: 0, at: "14:02", end: "14:50", n: 88, topic: "rh-08", gist: "Topic and capture events replace the live feed.", cwd: "~/rivethub-runtime", entities: ["rivethub-runtime", "memory-db"] },
   { id: "s-visibility", title: "Untangle session visibility", harness: "claude-code", days: 0, at: "12:30", end: "13:20", n: 52, topic: "rh-08", gist: "Visibility moves from the live registry to tenancy.", cwd: "~/rivethub-runtime", entities: ["rivethub-runtime"] },
-  { id: "s-codex-hook", title: "Why the codex hook stopped posting", harness: "codex", days: 0, at: "11:58", end: "12:20", n: 31, topic: "capture-hooks", gist: "The hook kept an old capture token after rotation.", cwd: "~/rivethub-runtime", entities: ["codex-hook", "phildesk"] },
+  { id: "s-codex-hook", title: "Why the codex hook stopped posting", harness: "codex", days: 0, at: "11:58", end: "12:20", n: 31, topic: "capture-hooks", gist: "The hook kept an old capture token after rotation.", cwd: "~/rivethub-runtime", entities: ["codex-hook", "workstation"] },
   { id: "s-pgvector", title: "pgvector index rebuild", harness: "grok-build", days: 0, at: "09:40", end: "10:15", n: 47, topic: "postgres", gist: "Moved the NAS backup to 03:00 to clear the reindex.", cwd: "~/homelab", entities: ["memory-db", "nas-01"], space: "household" },
   { id: "s-model-roles", title: "Model roles config", harness: "codex", days: 1, at: "16:10", end: "16:55", n: 40, topic: "rh-08", gist: "memory.models with a default and four roles.", cwd: "~/rivethub-runtime" },
   { id: "s-plugin-host", title: "Plug-in host scope", harness: "codex", days: 1, at: "11:20", end: "11:45", n: 22, topic: "rh-08", gist: "Kept for 0.8, then reconsidered.", cwd: "~/rivethub-runtime" },
   { id: "s-settings-models", title: "Sketch Settings › Models", harness: "claude-code", days: 1, at: "09:05", end: "09:40", n: 28, gist: "Cards per job with a model picker.", cwd: "~/rivethub-desktop" },
   { id: "s-retention", title: "Retention to 14 days", harness: "claude-code", days: 2, at: "21:12", end: "21:40", n: 64, topic: "backups", gist: "Raised retention after checking disk headroom.", cwd: "~/homelab", kept: true, space: "household", entities: ["nas-01", "memory-db"] },
-  { id: "s-zram", title: "Try zram on phildesk", harness: "cursor", days: 3, at: "20:00", end: "20:30", n: 18, gist: "Enabled zram with zstd and measured swap use.", cwd: "~" },
+  { id: "s-zram", title: "Try zram on workstation", harness: "cursor", days: 3, at: "20:00", end: "20:30", n: 18, gist: "Enabled zram with zstd and measured swap use.", cwd: "~" },
   { id: "s-waybar", title: "Waybar clock format", harness: "opencode", days: 4, at: "08:15", end: "08:25", n: 9, gist: "Twenty-four hour clock with the date on hover.", cwd: "~/.config" },
   { id: "s-snapshots", title: "Lock down snapshot permissions", harness: "grok-build", days: 5, at: "18:30", end: "19:00", n: 26, topic: "backups", gist: "Snapshots read-only to the backup user.", cwd: "~/homelab", entities: ["nas-01"] },
   { id: "s-embed-timeout", title: "Embed endpoint timeout under load", harness: "grok-build", days: 5, at: "10:04", end: "10:40", n: 35, gist: "Raised the client timeout and capped batch size.", cwd: "~/homelab", entities: ["embed-server"] },
@@ -468,7 +468,7 @@ export function reviewQueue(): ReviewItem[] {
     },
     { id: rid("r-file-settings"), group: "filing", subject: session("s-settings-models"), text: "→ Desktop app › Settings", after: "desktop-settings", evidence: [ev("s-settings-models", "Sketch Settings › Models", 1, "09:10", "Let's sketch the Models section of Settings for the desktop app.")], createdAt: at(1, "09:41") },
     { id: rid("r-file-embed"), group: "filing", subject: session("s-embed-timeout"), text: "→ Home lab › Postgres", after: "postgres", evidence: [ev("s-embed-timeout", "Embed endpoint timeout under load", 5, "10:04", "Search requests time out when the embed endpoint is under load.")], createdAt: at(5, "10:41") },
-    { id: rid("r-file-zram"), group: "filing", subject: session("s-zram"), text: "→ Omarchy setup", after: "omarchy", evidence: [ev("s-zram", "Try zram on phildesk", 3, "20:00", "Turn on zram on phildesk and see if swap use drops.")], createdAt: at(3, "20:31") },
+    { id: rid("r-file-zram"), group: "filing", subject: session("s-zram"), text: "→ Omarchy setup", after: "omarchy", evidence: [ev("s-zram", "Try zram on workstation", 3, "20:00", "Turn on zram on workstation and see if swap use drops.")], createdAt: at(3, "20:31") },
     { id: rid("r-file-waybar"), group: "filing", subject: session("s-waybar"), text: "→ Omarchy setup", after: "omarchy", evidence: [ev("s-waybar", "Waybar clock format", 4, "08:15", "Make the Waybar clock 24-hour and put the date in the tooltip.")], createdAt: at(4, "08:26") },
     { id: rid("r-tag-change"), group: "tag", subject: session("s-retention"), text: "Add kind: change", after: "kind: change", evidence: [ev("s-retention", "Retention to 14 days", 2, "21:33", "Retention is now 14 days in the backup script.")], createdAt: at(2, "21:46") },
     { id: rid("r-tag-storage"), group: "tag", subject: session("s-snapshots"), text: "Add area: storage", after: "area: storage", evidence: [ev("s-snapshots", "Lock down snapshot permissions", 5, "18:40", "Snapshots are now read-only to the backup user.")], createdAt: at(5, "19:01") },
@@ -497,7 +497,7 @@ export const modelJobs: ModelJob[] = [
 ];
 
 export const hubs: Hub[] = [
-  { id: "phildesk" as HubId, name: "phildesk", kind: "local", url: "#", online: true, detail: "Local · this machine · 1,284 sessions", current: true },
+  { id: "workstation" as HubId, name: "workstation", kind: "local", url: "#", online: true, detail: "Local · this machine · 1,284 sessions", current: true },
   { id: "household" as HubId, name: "household", kind: "team", url: "#", online: true, detail: "Team server · 3 people · 2 spaces", current: false },
   { id: "lab-server" as HubId, name: "lab-server", kind: "team", url: "#", online: false, detail: "Offline since Tue", current: false },
 ];

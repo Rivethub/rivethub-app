@@ -35,9 +35,9 @@ describe("describeMemoryRole", () => {
   });
 
   it("shows the embedder's own model and never the chat default", () => {
-    const reported = role({ role: "embedder", provider: "http://10.4.20.12:9402", model: "nemotron-embed-8b" });
-    expect(describeMemoryRole(reported, [chatDefault, reported]).modelLine).toBe("http://10.4.20.12:9402 · nemotron-embed-8b");
-    const olderHub = role({ role: "embedder", provider: "http://10.4.20.12:9402", model: "nemotron-embed-8b", inheritsDefault: true });
+    const reported = role({ role: "embedder", provider: "http://192.0.2.12:9402", model: "nemotron-embed-8b" });
+    expect(describeMemoryRole(reported, [chatDefault, reported]).modelLine).toBe("http://192.0.2.12:9402 · nemotron-embed-8b");
+    const olderHub = role({ role: "embedder", provider: "http://192.0.2.12:9402", model: "nemotron-embed-8b", inheritsDefault: true });
     expect(describeMemoryRole(olderHub, [chatDefault, olderHub]).modelLine).not.toMatch(/Default/);
   });
 

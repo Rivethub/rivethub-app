@@ -133,12 +133,12 @@ describe("Connections", () => {
       modelJobs: async () => [
         { role: "default", provider: "claude-cli", model: "opus", inheritsDefault: false, health: "healthy", detail: "inherited by summarizer, embedder", queued: 0 },
         { role: "summarizer", inheritsDefault: true, health: "healthy", detail: "9 queued", queued: 9 },
-        { role: "embedder", provider: "http://10.4.20.12:9402", model: "nemotron-embed-8b", inheritsDefault: true, health: "healthy", detail: "idle", queued: 0 },
+        { role: "embedder", provider: "http://192.0.2.12:9402", model: "nemotron-embed-8b", inheritsDefault: true, health: "healthy", detail: "idle", queued: 0 },
         { role: "wiki-writer", provider: "claude-cli", model: "opus", inheritsDefault: true, health: "unconfigured", detail: "no model is configured", queued: 0 },
       ],
     }));
     const embedder = (await screen.findByText("Embedder")).parentElement!.parentElement!;
-    expect(embedder).toHaveTextContent("http://10.4.20.12:9402");
+    expect(embedder).toHaveTextContent("http://192.0.2.12:9402");
     expect(embedder).toHaveTextContent("nemotron-embed-8b");
     expect(embedder).not.toHaveTextContent(/Default ·/);
     expect(embedder.querySelector(".border-input")).toBeNull();

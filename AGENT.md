@@ -2,6 +2,17 @@
 
 Read `README.md` first; it has the layout, the build commands and how sharing works. This file is the running state for whoever picks the work up next.
 
+## Leak checks
+
+`pnpm install` installs a pre-commit hook that scans staged changes for keys, tokens, passwords, private network addresses and denylisted names. CI runs the same two scanners over every tracked file and over the PR title and body, and redacts matches in its logs. Bypass the hook with `git commit --no-verify` only for a true published example.
+
+```sh
+node scripts/secret-scan.mjs --tracked
+node scripts/privacy-scan.mjs --tracked
+```
+
+Use `--staged` for staged changes and `--text` to scan text from stdin. Example addresses belong in the documentation ranges (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`).
+
 ## Current state (2026-11-13)
 
 Branch `redesign/memory-manager` redesigns `apps/web` (which `apps/desktop` shows) around viewing and managing memory. See "How the app is laid out" in the README for the result.
@@ -12,11 +23,11 @@ Checked for real against `rh` 0.8.3 on an empty standalone node: first launch, T
 
 Topic and entity pages render the page's full article (`components/markdown.tsx`, no HTML ever set). Checked by running the renderer over all 138 real articles on Phil's hub: every construct they use is handled (headings, bullets, bold, tables on 15 pages, a few fences and links).
 
-This targets the entity worker in `rivethub-runtime` branch `feat/entity-worker` (on phildesk at `~/work/rh-ent-port`, five commits on 0.8.2, not pushed as of this note). That worker does not change the HTTP contract. It changes what is on the pages: an article per entity rewritten from every session that touches it, a summary, a "Current facts" list, one dated history line per session, and far more entities (200 to 600 pages from a few dozen sessions in the eval runs). The list, the sidebar and the page were sized for that.
+This targets the entity worker in `rivethub-runtime` branch `feat/entity-worker`. That worker does not change the HTTP contract. It changes what is on the pages: an article per entity rewritten from every session that touches it, a summary, a "Current facts" list, one dated history line per session, and far more entities (200 to 600 pages from a few dozen sessions in the eval runs). The list, the sidebar and the page were sized for that.
 
 ## Run against Phil's real hub (2026-11-13, evening)
 
-The build was driven read-only against phildesk (rh 0.8.3 on Postgres: 142 entities, 75 topics, thousands of sessions) through an SSH tunnel. It found what sample data and an empty node could not:
+The build was driven read-only against a development node (rh 0.8.3 on Postgres: 142 entities, 75 topics, thousands of sessions) through an SSH tunnel. It found what sample data and an empty node could not:
 
 - **Load time.** Probes never read their response bodies, so each held one of the browser's six connections until its 2.5 s timeout; every call also waited for all 13 probes, and the session list probed its own route first. Now a body nobody reads is cancelled, each capability is probed on its own, a read is sent at once and its answer counts as the probe, and the session list asks the catalog directly. Time to content on that hub: Sessions 2.4 s to 0.9 s, Entities 1.4 s to 0.28 s, Topics 1.4 s to 0.2 s, Today 1.9 s to 1.5 s (`/api/today` itself takes 0.85 s there).
 - **Writes** had the same leak: an unread body held a connection for up to 30 s.

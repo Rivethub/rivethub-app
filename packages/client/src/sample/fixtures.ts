@@ -287,7 +287,7 @@ function entities(): EntityArticle[] {
     ],
     connected: [
       { id: E("memory-db"), title: "memory-db", sharedSessions: 3 },
-      { id: E("phildesk"), title: "phildesk", sharedSessions: 1 },
+      { id: E("workstation"), title: "workstation", sharedSessions: 1 },
     ],
     sessions: [],
     tags: [{ key: "topic", value: "backups", state: "applied" }],
@@ -312,7 +312,7 @@ function entities(): EntityArticle[] {
       fact("db-index", "Vector index", "HNSW, rebuilt after migration 0057", "2026-11-05T09:40", {
         sources: [src(SRC_PGVECTOR[0], SRC_PGVECTOR[1], "2026-11-05T09:40", "HNSW, rebuilt after migration 0057")],
       }),
-      fact("db-host", "Runs on", "phildesk", "2026-10-30T20:10", { pinned: true }),
+      fact("db-host", "Runs on", "workstation", "2026-10-30T20:10", { pinned: true }),
     ],
     timeline: [
       {
@@ -331,9 +331,9 @@ function entities(): EntityArticle[] {
     freshness: "sample",
   };
 
-  const phildesk: EntityArticle = {
-    id: E("phildesk"),
-    title: "phildesk",
+  const workstation: EntityArticle = {
+    id: E("workstation"),
+    title: "workstation",
     type: "machine",
     sessionCount: 0,
     aliases: ["desk", "workstation"],
@@ -402,7 +402,7 @@ function entities(): EntityArticle[] {
     freshness: "sample",
   };
 
-  return [nas, memoryDb, phildesk, embed, codexHook];
+  return [nas, memoryDb, workstation, embed, codexHook];
 }
 
 const ref = (kind: "topic" | "entity" | "session", id: string, title: string) =>
@@ -704,7 +704,7 @@ function sessions(topicRecs: TopicRec[]): SessionRec[] {
       count: 34,
       topic: "backups",
       gist: "Set up pg_dump and wiki copy to nas-01.",
-      entities: ["nas-01", "memory-db", "phildesk"],
+      entities: ["nas-01", "memory-db", "workstation"],
     }),
     make({
       id: "cursor:settings-models",
@@ -815,14 +815,14 @@ function review(): { items: ReviewItem[]; effects: Map<string, Effect> } {
     {
       id: R("rv-fact-gpu"),
       group: "fact",
-      subject: ref("entity", "phildesk", "phildesk"),
+      subject: ref("entity", "workstation", "workstation"),
       text: "GPU",
       before: "16 GB",
       after: "24 GB",
       evidence: [ev("claude-code:nightly", "Nightly backup to the NAS", "2026-10-30T19:50", "The 24 GB card has room for the embedder and the summarizer.", "24 GB")],
       createdAt: at("2026-11-03T16:00"),
     },
-    fixEffect("phildesk", "GPU", "24 GB"),
+    fixEffect("workstation", "GPU", "24 GB"),
   );
 
   add(
@@ -1001,7 +1001,7 @@ function hubs(): Hub[] {
     current,
   });
   return [
-    hub("phildesk", "phildesk", "local", "https://127.0.0.1:5174", true, "Local · this machine · 1,284 sessions", true),
+    hub("workstation", "workstation", "local", "https://127.0.0.1:5174", true, "Local · this machine · 1,284 sessions", true),
     hub("household", "household", "team", "https://household.example.test:5174", true, "Team server · 3 people · 2 spaces", false),
     hub("lab-server", "lab-server", "team", "https://lab-server.example.test:5174", false, "Offline since Tue", false),
   ];

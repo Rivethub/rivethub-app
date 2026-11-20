@@ -22,7 +22,7 @@ describe("Stats workers", () => {
       job({ role: "summarizer", provider: "gpubox", model: "thinkingcap-flash-next" }),
       job({ role: "categorizer", provider: "gpubox", model: "thinkingcap-flash-next", health: "failing", queued: 1628, outage: "the worker stopped claiming" }),
       job({ role: "wiki-writer", health: "not-running", queued: 27 }),
-      job({ role: "embedder", provider: "http://10.4.20.12:9402", model: "nemotron-embed-8b" }),
+      job({ role: "embedder", provider: "http://192.0.2.12:9402", model: "nemotron-embed-8b" }),
     ]);
     const workers = await screen.findByRole("region", { name: /Workers/ });
     const tile = (name: string) => within(workers).getByText(name).parentElement!;
@@ -31,7 +31,7 @@ describe("Stats workers", () => {
     expect(tile("Categorizer")).toHaveTextContent("Failing · 1,628 waiting · the worker stopped claiming");
     expect(tile("Wiki builder")).toHaveTextContent("No model set");
     expect(tile("Wiki builder")).toHaveTextContent("Not running · 27 waiting");
-    expect(tile("Embedder")).toHaveTextContent("http://10.4.20.12:9402 · nemotron-embed-8b");
+    expect(tile("Embedder")).toHaveTextContent("http://192.0.2.12:9402 · nemotron-embed-8b");
     expect(workers).not.toHaveTextContent(/Default ·/);
     expect(workers).not.toHaveTextContent("opus");
   });
