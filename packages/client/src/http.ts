@@ -82,8 +82,15 @@ async function release(response: Response): Promise<void> {
   }
 }
 
+/** Drops a trailing run of `/`. A regex for that run is quadratic when the slashes are not a suffix. */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47) end -= 1;
+  return end === url.length ? url : url.slice(0, end);
+}
+
 export function createHttp(options: HttpOptions): Http {
-  const base = options.baseUrl.replace(/\/+$/, "");
+  const base = withoutTrailingSlashes(options.baseUrl);
   const doFetch: FetchLike = options.fetch ?? ((input, init) => fetch(input, init));
 
   async function request(method: Method, path: string, body?: unknown, timeoutMs: number = options.timeoutMs ?? 30_000): Promise<Response> {
