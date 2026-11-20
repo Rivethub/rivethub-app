@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@rivethub/contracts": "workspace:*",
-    "zod": "3.25.76"
+    "zod": "4.6.7"
   },
   "devDependencies": {
-    "vitest": "3.2.4"
+    "vitest": "5.1.1"
   }
 }
