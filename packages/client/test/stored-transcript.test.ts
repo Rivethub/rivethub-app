@@ -36,6 +36,17 @@ describe("a session's messages", () => {
     expect(browse.get("before")).not.toBeNull();
   });
 
+  it("links to the stored positions used for summaries, skipping empty non-tool rows", async () => {
+    const path = `/api/sessions/${seg}/messages`;
+    const { fetch, calls } = fakeRh({
+      [`GET ${path}`]: { items: [{ id: "a", role: "user", content: "Start." }, { id: "b", content: "" }], total: 4, next: "more" },
+      [`GET ${path}?cursor=more`]: { items: [{ id: "c", toolName: "Read", content: "" }, { id: "d", content: "Done." }], total: 4 },
+    });
+    const turns = await createRhClient({ baseUrl: BASE, fetch }).methods.transcript!(SID, [2, 3], "memory");
+    expect(turns.map((turn) => [turn.index, turn.summarySourceOrdinal])).toEqual([[3, 2], [4, 3]]);
+    expect(calls.map((call) => call.path)).toEqual([path, path + "?cursor=more"]);
+  });
+
   it("keeps a tool's name on the part when the stored text already starts with it", async () => {
     const rh = fakeRh({
       [`GET /api/harness-sessions/${seg}/transcript`]: { sessionId: SID, turns: [] },

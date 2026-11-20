@@ -44,7 +44,11 @@ export const useEntityTypes = () => q(keys.entityTypes, (c) => c.entityTypes?.()
 export const useEntity = (id: EntityId, asOf?: IsoTime) => q(keys.entity(id, asOf), (c) => c.entity(id, asOf));
 export const useSessions = (query: SessionQuery) => q(keys.sessions(query), (c) => c.sessions(query));
 export const useSession = (id: SessionId, enabled = true) => q(keys.session(id), (c) => c.session(id), enabled);
-export const useTranscript = (id: SessionId, enabled = true) => q(keys.transcript(id), (c) => c.transcript(id), enabled);
+export const useTranscript = (id: SessionId, enabled = true, source?: "memory") => q(
+  source ? [...keys.transcript(id), source] : keys.transcript(id),
+  (c) => c.transcript(id, undefined, source),
+  enabled,
+);
 export const useToolOutput = (id: SessionId, tool: string, enabled: boolean) => q([...keys.transcript(id), "tool", tool], (c) => c.toolOutput(id, tool), enabled);
 export const useSummaryTree = (id: SessionId, enabled = true) => q(keys.summaryTree(id), (c) => c.summaryTree(id), enabled);
 export const useSearch = (text: string, options: SearchOptions = {}) => q([...keys.search(text), options], (c) => c.search(text, options));

@@ -96,7 +96,8 @@ export interface MemoryClient {
 
   sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>>;
   session(id: SessionId): Promise<SessionDetail>;
-  transcript(id: SessionId, range?: [number, number]): Promise<TranscriptTurn[]>;
+  /** Memory transcripts use stored-message positions for links from top-down summaries. */
+  transcript(id: SessionId, range?: [number, number], source?: "memory"): Promise<TranscriptTurn[]>;
   /** One tool call's output. Only the machine that ran the session has it. */
   toolOutput(id: SessionId, tool: string): Promise<ToolOutput>;
   summaryTree(id: SessionId): Promise<SummaryNode>;

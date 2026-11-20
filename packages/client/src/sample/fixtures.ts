@@ -16,7 +16,9 @@ import type {
   ReviewItemId,
   SessionDetail,
   SessionId,
+  LegacySummaryNode,
   SummaryNode,
+  TopDownSummaryNode,
   TopicId,
   TranscriptTurn,
   Visibility,
@@ -503,7 +505,7 @@ function synthTurns(
   });
 }
 
-const leaf = (range: [number, number], text: string, at_: string): SummaryNode => ({
+const leaf = (range: [number, number], text: string, at_: string): LegacySummaryNode => ({
   level: "leaf",
   text,
   messageRange: range,
@@ -512,7 +514,7 @@ const leaf = (range: [number, number], text: string, at_: string): SummaryNode =
   children: [],
 });
 
-function retentionSummary(): SummaryNode {
+function retentionSummary(): LegacySummaryNode {
   return {
     level: "root",
     title: "Retention to 14 days",
@@ -562,6 +564,26 @@ function retentionSummary(): SummaryNode {
   };
 }
 
+function restoreDrillSummary(): TopDownSummaryNode {
+  const section = (id: string, text: string, sourceFirst: number, sourceLast: number, rangeVerified = true): TopDownSummaryNode =>
+    ({ id, level: "section", text, sourceFirst, sourceLast, rangeVerified, children: [] });
+  const overview = section("restore-overview", "The team restored a test backup in an isolated sandbox, checked the data, and recorded the steps for the next drill.", 1, 6);
+  const sandbox = section("restore-sandbox", "## Isolating the restore\n\nThe backup was unpacked on a disposable volume with outbound jobs disabled.", 1, 2);
+  const checks = section("restore-checks", "## Comparing the records\n\nThe restored inventory matched the original row counts and checksums.", 3, 4);
+  const followUp = section("restore-follow-up", "## Updating the runbook\n\nAdded a checklist and scheduled the next drill.", 5, 6, false);
+  return {
+    id: "restore-drill",
+    level: "session",
+    text: overview.text,
+    counts: { sessions: 1, parts: 2, sections: 4 },
+    children: [
+      overview,
+      { id: "restore-setup", level: "part", summaryOrdinal: 1, text: sandbox.text, children: [sandbox] },
+      { id: "restore-validation", level: "part", summaryOrdinal: 2, text: `${checks.text}\n\n${followUp.text}`, children: [checks, followUp] },
+    ],
+  };
+}
+
 function sessions(topicRecs: TopicRec[]): SessionRec[] {
   const make = (seed: SessionSeed, notes?: Parameters<typeof synthTurns>[1]) => {
     const rec = seedSession(seed, topicRecs);
@@ -596,6 +618,29 @@ function sessions(topicRecs: TopicRec[]): SessionRec[] {
     },
   );
   retention.summary = retentionSummary();
+
+  const restoreDrill = make(
+    {
+      id: "codex:restore-drill",
+      title: "Rehearse a backup restore",
+      harness: "codex",
+      start: "2026-11-04T17:00",
+      end: "2026-11-04T17:40",
+      count: 6,
+      topic: "backups",
+      gist: "Restored a test backup in a sandbox and verified the inventory.",
+    },
+    {
+      0: ["user", "Can we test the restore without touching the running service?"],
+      1: ["assistant", "I restored the test backup on a disposable volume and disabled outbound jobs."],
+      2: ["user", "How did the inventory compare?"],
+      3: ["assistant", "The restored inventory matched the original row counts and checksums."],
+      4: ["user", "Record those checks for the next drill."],
+      5: ["assistant", "I added a checklist to the runbook and scheduled the next drill."],
+    },
+  );
+  restoreDrill.summary = restoreDrillSummary();
+  restoreDrill.turns = restoreDrill.turns.map((turn) => ({ ...turn, summarySourceOrdinal: turn.index + 1 }));
 
   const list: SessionRec[] = [
     make({
@@ -673,6 +718,7 @@ function sessions(topicRecs: TopicRec[]): SessionRec[] {
       ],
     }),
     retention,
+    restoreDrill,
     make({
       id: "grok-build:snapshot-perms",
       title: "Lock down snapshot permissions",

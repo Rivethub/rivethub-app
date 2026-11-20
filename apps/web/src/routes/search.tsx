@@ -9,6 +9,7 @@ import { Frame, MainSidebar } from "../components/shell";
 import { cx, SampleBadge } from "../components/ui";
 import { markStep } from "../lib/journey";
 import { useIsPhone } from "../lib/media";
+import { passageExcerpt, sectionHeading, summaryRangeSearch } from "../lib/summary";
 
 const route = getRouteApi("/search");
 
@@ -173,7 +174,7 @@ export function SearchPage() {
                 <ul className="m-0 flex list-none flex-col gap-2 p-0 pt-3">
                   {passages.map((p) => (
                     <li key={p.id}>
-                      <Link to="/sessions/$sessionId" params={{ sessionId: p.session.id }} search={p.source === "summary" ? { tab: "summary" } : { tab: "transcript" }} className="group flex flex-col gap-1.5 rounded-xl bg-card px-3.5 py-3 text-foreground hover:bg-raised hover:no-underline">
+                      <Link to="/sessions/$sessionId" params={{ sessionId: p.session.id }} search={(p.passage && summaryRangeSearch(p.sections?.[0])) || { tab: p.source === "summary" ? "summary" : "transcript" }} className="group flex flex-col gap-1.5 rounded-xl bg-card px-3.5 py-3 text-foreground hover:bg-raised hover:no-underline">
                         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
                           <span className="rounded-md bg-raised px-1.5 py-px group-hover:bg-card">{p.owner && `${p.owner}’s session · `}{p.source === "summary" ? "Summary" : p.role ? roleLabel[p.role] : "Message"}</span>
                           <span className="min-w-0 truncate font-medium text-foreground">{p.session.title}</span>
@@ -181,7 +182,10 @@ export function SearchPage() {
                           <span className="flex-1" />
                           <span className="rounded-full border border-primary px-2.5 py-px text-primary">Open session</span>
                         </span>
-                        <span className="text-[14px] leading-[1.55] text-muted-foreground"><Highlight text={p.text} query={params.match === "pattern" ? "" : query} /></span>
+                        {p.passage && !!p.sections?.length && (
+                          <span className="text-[13px] font-medium">{p.sections.map((section) => sectionHeading(section.heading)).join(" · ")}</span>
+                        )}
+                        <span className="break-words text-[14px] leading-[1.55] text-muted-foreground"><Highlight text={p.passage ? passageExcerpt(p.text, query) : p.text} query={params.match === "pattern" ? "" : query} /></span>
                       </Link>
                     </li>
                   ))}

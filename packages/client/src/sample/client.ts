@@ -417,8 +417,11 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
       return clone(sessionById(id).detail);
     },
 
-    async transcript(id, range): Promise<TranscriptTurn[]> {
+    async transcript(id, range, source): Promise<TranscriptTurn[]> {
       const turns = sessionById(id).turns;
+      if (range && source === "memory") return clone(turns.filter(({ summarySourceOrdinal }) =>
+        summarySourceOrdinal !== undefined && summarySourceOrdinal >= range[0] && summarySourceOrdinal <= range[1],
+      ));
       return clone(range ? turns.slice(range[0], range[1] + 1) : turns);
     },
 

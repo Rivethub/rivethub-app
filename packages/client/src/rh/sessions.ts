@@ -1,11 +1,13 @@
 import type {
   IsoTime,
+  LegacySummaryNode,
   Page,
   SessionDetail,
   SessionId,
   SessionQuery,
   SessionSummaryRow,
   SummaryNode,
+  TopDownSummaryNode,
   TopicId,
   ToolOutput,
   TranscriptPart,
@@ -13,7 +15,7 @@ import type {
   Visibility,
 } from "@rivethub/contracts";
 import type { Http } from "../http.js";
-import { NetworkError, NotFoundError, RouteMissingError } from "../errors.js";
+import { NetworkError, NotFoundError, RouteMissingError, UnreadableSummaryError } from "../errors.js";
 import * as wire from "./wire.js";
 import { displayTitle, harnessOf, isImportKey, sessionId, sessionSegment, strip, toRow, topicId, visibilityFromWire, visibilityToWire } from "./util.js";
 import { indexTopics, sessionRow, topicPath, type TopicIndex } from "./topics.js";
@@ -69,10 +71,11 @@ export function mapTranscript(response: ReturnType<typeof wire.transcriptRespons
 }
 
 /** Rebuilds the root/branch/leaf tree from rh's flat summary list, deriving message ranges from message counts. */
-export function mapSummaryTree(nodes: wire.SummaryWire[]): SummaryNode {
+function mapLegacyTree(nodes: (wire.SummaryWire & { kind: LegacySummaryNode["level"] })[]): LegacySummaryNode {
+  type Row = (typeof nodes)[number];
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const kids = new Map<string, wire.SummaryWire[]>();
-  const tops: wire.SummaryWire[] = [];
+  const kids = new Map<string, Row[]>();
+  const tops: Row[] = [];
   for (const node of nodes) {
     const parent = node.parentId === undefined ? undefined : byId.get(node.parentId);
     if (parent) kids.set(parent.id, [...(kids.get(parent.id) ?? []), node]);
@@ -81,12 +84,12 @@ export function mapSummaryTree(nodes: wire.SummaryWire[]): SummaryNode {
   const byTime = (a: wire.SummaryWire, b: wire.SummaryWire) => (a.earliestAt ?? "").localeCompare(b.earliestAt ?? "");
 
   let cursor = 0;
-  const build = (node: wire.SummaryWire): SummaryNode => {
+  const build = (node: Row): LegacySummaryNode => {
     const start = cursor;
     const children = (kids.get(node.id) ?? []).sort(byTime).map(build);
     if (children.length === 0) cursor += node.messageCount;
     const end = children.length === 0 ? cursor : (children.at(-1)?.messageRange[1] ?? cursor);
-    return strip<SummaryNode>({
+    return strip<LegacySummaryNode>({
       level: node.kind,
       text: node.content,
       messageRange: [start, end],
@@ -95,6 +98,7 @@ export function mapSummaryTree(nodes: wire.SummaryWire[]): SummaryNode {
     });
   };
 
+  if (tops.length === 0) throw new UnreadableSummaryError();
   const built = tops.sort(byTime).map(build);
   const only = built.length === 1 ? built[0] : undefined;
   if (only) return only;
@@ -104,6 +108,57 @@ export function mapSummaryTree(nodes: wire.SummaryWire[]): SummaryNode {
     messageRange: [built[0]?.messageRange[0] ?? 0, built.at(-1)?.messageRange[1] ?? 0],
     children: built,
   };
+}
+
+function mapTopDownTree(
+  nodes: (wire.SummaryWire & { kind: TopDownSummaryNode["level"] })[],
+  counts: ReturnType<typeof wire.summaryDag.parse>["counts"],
+): TopDownSummaryNode {
+  type Row = (typeof nodes)[number];
+  const root = nodes.find((node) => node.kind === "session");
+  const parts = nodes.filter((node) => node.kind === "part");
+  const partIds = new Set(parts.map((part) => part.id));
+  const sections = nodes.filter((node) => node.kind === "section");
+  const byParent = new Map<string | undefined, Row[]>();
+  for (const section of sections) {
+    const parent = section.parentId && partIds.has(section.parentId) ? section.parentId : root?.id;
+    const siblings = byParent.get(parent) ?? [];
+    siblings.push(section);
+    byParent.set(parent, siblings);
+  }
+  const byOrdinal = (a: Row, b: Row) => (a.summaryOrdinal ?? Infinity) - (b.summaryOrdinal ?? Infinity);
+  const mapNode = (node: Row, children: TopDownSummaryNode[]): TopDownSummaryNode => strip({
+    id: node.id,
+    level: node.kind,
+    text: node.content,
+    summaryOrdinal: node.summaryOrdinal,
+    sourceFirst: node.sourceFirst,
+    sourceLast: node.sourceLast,
+    rangeVerified: node.rangeVerified,
+    qualityFlags: node.qualityFlags,
+    childCount: node.children,
+    at: node.createdAt,
+    children,
+  });
+  const sectionsOf = (id: string | undefined) => (byParent.get(id) ?? []).sort(byOrdinal).map((section) => mapNode(section, []));
+  const children = [...sectionsOf(root?.id), ...parts.sort(byOrdinal).map((part) => mapNode(part, sectionsOf(part.id)))];
+  return {
+    ...(root ? mapNode(root, children) : { id: "session", level: "session", text: "", children }),
+    counts: {
+      sessions: counts?.sessions ?? Number(root !== undefined),
+      parts: counts?.parts ?? parts.length,
+      sections: counts?.sections ?? sections.length,
+    },
+  };
+}
+
+export function mapSummaryTree(dag: ReturnType<typeof wire.summaryDag.parse>): SummaryNode {
+  const { summaries, counts } = dag;
+  const converted = summaries.filter((node): node is typeof node & { kind: TopDownSummaryNode["level"] } => wire.isTopDownSummaryKind(node.kind));
+  const legacy = summaries.filter((node): node is typeof node & { kind: LegacySummaryNode["level"] } => wire.isLegacySummaryKind(node.kind));
+  const unsupported = summaries.length - converted.length - legacy.length;
+  if (unsupported) console.warn(`Dropped ${unsupported} hub summary rows with unsupported kinds`);
+  return converted.length > 0 ? mapTopDownTree(converted, counts) : mapLegacyTree(legacy);
 }
 
 function detail(summary: wire.HarnessSessionSummary, placement: TopicPlacement, visibility: Visibility, index: TopicIndex): SessionDetail {
@@ -202,12 +257,12 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       return detail(summary, placement.placement?.topicId, visibilityFromWire(visibility?.visibility), indexTopics(topics));
     },
 
-    async transcript(id: SessionId, range?: [number, number]): Promise<TranscriptTurn[]> {
+    async transcript(id: SessionId, range?: [number, number], source?: "memory"): Promise<TranscriptTurn[]> {
       // The harness's own file has the most detail (tool calls and results), but it exists only on the machine
       // that ran the session. Anywhere else, and for sessions that reached memory another way, read what the hub stored.
       // rh answers an empty transcript, not an error, for a session whose file is not on this machine.
       // A session received from someone else never ran in a tool here, so only memory has it.
-      const fromHarness = isImportKey(id) ? [] : await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
+      const fromHarness = source === "memory" || isImportKey(id) ? [] : await http.get(`/api/harness-sessions/${segment(id)}/transcript`, wire.transcriptResponse).then(
         (response) => mapTranscript(response, EPOCH),
         (error: unknown) => {
           if (error instanceof NetworkError) throw error;
@@ -217,7 +272,7 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
       let turns: TranscriptTurn[];
       if (Array.isArray(fromHarness) && fromHarness.length > 0) turns = fromHarness;
       else {
-        const stored = await storedTranscript(http, id);
+        const stored = await storedTranscript(http, id, source === "memory");
         turns = stored.turns;
         // Not finding a message is only "no messages" when the whole span was read.
         if (turns.length === 0 && stored.cut) throw new Error("This session's messages could not be found: memory holds too many other messages from the same hours to read through");
@@ -225,7 +280,11 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
         if (stored.cut === "older") turns[0]!.missing = "before";
         if (stored.cut === "newer") turns.at(-1)!.missing = "after";
       }
-      return range ? turns.filter((turn) => turn.index >= range[0] && turn.index <= range[1]) : turns;
+      if (!range) return turns;
+      return turns.filter((turn) => {
+        const index = source === "memory" ? turn.summarySourceOrdinal : turn.index;
+        return index !== undefined && index >= range[0] && index <= range[1];
+      });
     },
 
     async toolOutput(id: SessionId, tool: string): Promise<ToolOutput> {
@@ -235,8 +294,8 @@ export function sessionsApi(http: Http, loadTopics: () => Promise<wire.TopicSumm
 
     async summaryTree(id: SessionId): Promise<SummaryNode> {
       const dag = await http.get(`/api/memory/summaries/${encodeURIComponent(id)}`, wire.summaryDag);
-      if (dag.summaries.length === 0) throw new NotFoundError(`summaries for ${id}`);
-      return mapSummaryTree(dag.summaries);
+      if (dag.rowCount === 0) throw new NotFoundError(`summaries for ${id}`);
+      return mapSummaryTree(dag);
     },
 
     async renameSession(id: SessionId, title: string): Promise<void> {
@@ -292,12 +351,15 @@ interface StoredRow {
   toolResult?: string | undefined;
 }
 
-function storedTurns(messages: StoredRow[], imported: boolean): TranscriptTurn[] {
+function storedTurns(messages: StoredRow[], imported: boolean, inSummaryOrder = false): TranscriptTurn[] {
+  let ordinal = 0;
   return messages.map((message, i): TranscriptTurn => {
     const tool = message.role === "tool" || message.toolName !== undefined;
     const content = imported ? unquoted(message.content) : message.content;
     return {
       index: i + 1,
+      // The summarizer skips rows with neither text nor a named tool call.
+      ...(inSummaryOrder && (message.content !== "" || !!message.toolName) ? { summarySourceOrdinal: ++ordinal } : {}),
       role: message.role === "user" ? "user" : "assistant",
       at: message.createdAt ?? EPOCH,
       parts: [
@@ -323,11 +385,11 @@ function storedTurns(messages: StoredRow[], imported: boolean): TranscriptTurn[]
  * adds nothing, or the last page holds fewer rows than `total`. Pages are oldest first, so the
  * unread side is the newer one.
  */
-export async function storedTranscript(http: Http, id: SessionId): Promise<StoredTranscript> {
+export async function storedTranscript(http: Http, id: SessionId, inSummaryOrder = false): Promise<StoredTranscript> {
   const path = `/api/sessions/${encodeURIComponent(sessionSegment(id))}/messages`;
   try {
     const first = await http.get(path, wire.sessionMessagesPage);
-    return await followSessionMessages(http, id, path, first);
+    return await followSessionMessages(http, id, path, first, inSummaryOrder);
   } catch (error) {
     if (!(error instanceof RouteMissingError)) throw error;
   }
@@ -339,6 +401,7 @@ async function followSessionMessages(
   id: SessionId,
   path: string,
   first: ReturnType<typeof wire.sessionMessagesPage.parse>,
+  inSummaryOrder: boolean,
 ): Promise<StoredTranscript> {
   const imported = isImportKey(id);
   const mine: StoredRow[] = [];
@@ -367,7 +430,7 @@ async function followSessionMessages(
     cursors.add(next);
     page = await http.get(path, wire.sessionMessagesPage, { cursor: next });
   }
-  const turns = storedTurns(mine, imported);
+  const turns = storedTurns(mine, imported, inSummaryOrder);
   return cut ? { turns, cut } : { turns };
 }
 

@@ -449,6 +449,16 @@ describe("Session controls match the hub", () => {
     expect(within(title).queryByRole("button")).not.toBeInTheDocument();
   });
 
+  it("opens a converted section at its stored transcript range", async () => {
+    const { user } = renderWith("/sessions/codex%3Arestore-drill?tab=summary", () => ({}));
+    expect(await screen.findByRole("heading", { name: "Whole session" })).toBeInTheDocument();
+    expect(screen.getByText("1 session overview · 2 detailed recaps · 4 sections")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: /^Part \d of 2$/ }).map((heading) => heading.textContent)).toEqual(["Part 1 of 2", "Part 2 of 2"]);
+    const section = screen.getByRole("heading", { name: "Updating the runbook" }).parentElement!;
+    await user.click(within(section).getByRole("link", { name: "View in transcript" }));
+    expect(await screen.findByText("Showing messages 5–6 from the summary.")).toBeInTheDocument();
+  });
+
   it("keeps branch and leaf paragraphs outside their metadata rows", async () => {
     const leaf = { level: "leaf" as const, text: "Full leaf paragraph", messageRange: [1, 3] as [number, number], children: [] };
     const { user } = renderWith("/sessions/s-controls?tab=summary", () => ({

@@ -73,7 +73,7 @@ const sessions = createRoute({
 const session = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sessions/$sessionId",
-  validateSearch: (s: Raw) => clean({ tab: oneOf(s.tab, ["summary", "transcript"] as const), from: num(s.from), to: num(s.to), view: oneOf(s.view, ["all", "unfiled", "kept", "trash"] as const) }),
+  validateSearch: (s: Raw) => clean({ tab: oneOf(s.tab, ["summary", "transcript"] as const), from: num(s.from), to: num(s.to), source: oneOf(s.source, ["memory"] as const), view: oneOf(s.view, ["all", "unfiled", "kept", "trash"] as const) }),
   component: SessionPage,
 });
 const search = createRoute({ getParentRoute: () => rootRoute, path: "/search", validateSearch: (s: Raw) => clean({ q: str(s.q), when: oneOf(s.when, ["today", "yesterday", "last_7d", "last_14d"] as const), where: oneOf(s.where, ["messages", "summaries"] as const), match: oneOf(s.match, ["words", "fuzzy", "meaning", "pattern"] as const) }), component: SearchPage });

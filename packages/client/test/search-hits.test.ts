@@ -18,6 +18,17 @@ describe("search hits", () => {
 });
 
 describe("search passages", () => {
+  it("keeps the full matching passage and its locations", () => {
+    const content = "Backup checks. ".repeat(30).trim();
+    const passage = { id: "p-1", ordinal: 2 };
+    const section = { id: "s-1", heading: "Verifying the backup", sourceFirst: 11, sourceLast: 20, rangeVerified: true };
+    const source = { id: "m-1", sessionId: "codex:backup", agent: "test", channel: "codex", role: "assistant", content: "Invented source message." };
+    const memory = wire.memorySearch.parse({ results: [
+      { id: "p-1", source: "summary", kind: "part", sessionId: source.sessionId, content, passage, sections: [section], sources: [source] },
+    ] });
+    expect(mapSearch([], memory).passages).toMatchObject([{ text: content, passage, sections: [section], sources: [source] }]);
+  });
+
   it("keeps every match, in order, with where it came from", () => {
     const memory = wire.memorySearch.parse({
       results: [
