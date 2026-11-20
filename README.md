@@ -104,6 +104,8 @@ The desktop app can share sessions with someone else and receive theirs. Both st
 
 A node installs the newest published web build it can run with `rh update`. The build is a GitHub release of this repo. The tag is `web-v` plus the version, and the release holds `rivethub-web-<version>.tar.gz` and `web-manifest.json`.
 
+See the [web distribution contract](docs/web-distribution.md) for bundle verification and the channel index.
+
 The version lives in `apps/web/package.json`. The first one is 0.8.2, the same version as `apps/desktop`, because that shell already ships this UI. `rivethub.minRhVersion` in the same file is the oldest `rh` the build runs on. It is 0.8.3, the runtime this app was checked against.
 
 Cut a stable release by bumping `version`, merging to `main`, and pushing the tag `web-v` plus that version. The tag for 0.8.2 is `web-v0.8.2`. A beta keeps the package version and puts the beta number in the tag, such as `web-v0.8.2-beta.1`. The Release web workflow checks the tag against the package version, builds and tests `@rivethub/web`, and publishes the archive and the manifest. It stops if that tag already has a release. A published version is not replaced.
