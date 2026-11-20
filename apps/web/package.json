@@ -1,6 +1,6 @@
 {
   "name": "@rivethub/web",
-  "version": "0.8.2",
+  "version": "0.8.16",
   "rivethub": {
     "minRhVersion": "0.8.3"
   },

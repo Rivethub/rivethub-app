@@ -175,7 +175,7 @@ describe("packageWebRelease", () => {
 describe("readWebPackage", () => {
   it("reads the version and minimum rh this repo declares", async () => {
     const declared = await readWebPackage(fileURLToPath(new URL("../package.json", import.meta.url)));
-    expect(declared.version).toBe("0.8.2");
+    expect(declared.version).toBe("0.8.16");
     expect(declared.minRhVersion).toBe("0.8.3");
   });
 
@@ -236,7 +236,8 @@ describe("cli", () => {
 
   it("exits non-zero when the tag does not match", async () => {
     const { dist, output } = await stage();
-    const result = await exec(process.execPath, [script, "--dist", dist, "--output-dir", output, "--version", "0.8.2", "--commit", COMMIT, "--tag", "web-v9.9.9"]).then(
+    const declared = await readWebPackage(fileURLToPath(new URL("../package.json", import.meta.url)));
+    const result = await exec(process.execPath, [script, "--dist", dist, "--output-dir", output, "--version", declared.version, "--commit", COMMIT, "--tag", "web-v9.9.9"]).then(
       () => ({ code: 0, stderr: "" }),
       (error: { code?: number; stderr?: string }) => ({ code: error.code ?? 1, stderr: error.stderr ?? "" }),
     );
