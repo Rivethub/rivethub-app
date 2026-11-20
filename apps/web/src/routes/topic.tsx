@@ -214,8 +214,6 @@ function TopicOverview({ t }: { t: TopicArticle }) {
   useArticleHash(body.length > 0);
   return (
     <>
-      {body ? <Markdown source={body} /> : <p className="m-0">{t.lead}</p>}
-      {t.current && !body.includes(t.current) && <p className="m-0 text-muted-foreground">{t.current}</p>}
       <H2>Decisions</H2>
       <div className="flex flex-col gap-1 font-sans text-[14px]">
         {t.decisions.map((d) => (
@@ -267,6 +265,8 @@ function TopicOverview({ t }: { t: TopicArticle }) {
       )}
       <H2 right={t.sessions.length > 4 || t.sessionCount > 4 ? <Link to="." search={{ tab: "sessions" } as never}>All {t.sessionCount}</Link> : undefined}>Sessions</H2>
       <SessionRows sessions={t.sessions.slice(0, 4)} />
+      {body ? <Markdown source={body} /> : <p className="m-0">{t.lead}</p>}
+      {t.current && !body.includes(t.current) && <p className="m-0 text-muted-foreground">{t.current}</p>}
     </>
   );
 }

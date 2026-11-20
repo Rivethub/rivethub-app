@@ -12,8 +12,8 @@ function Svg({ size = 16, children, strokeWidth = 2, ...rest }: P) {
 
 export const SearchIcon = (p: P) => <Svg {...p}><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></Svg>;
 export const GearIcon = (p: P) => (
-  <Svg {...p} fill="currentColor" stroke="none">
-    <path fillRule="evenodd" d="M9.4 4.6 8.7 1.2h6.6l-.7 3.4 2.2.9 2.6-2.6 4.2 4.2-2.6 2.6.9 2.2 3.4-.7v6.6l-3.4-.7-.9 2.2 2.6 2.6-4.2 4.2-2.6-2.6-2.2.9.7 3.4H8.7l.7-3.4-2.2-.9-2.6 2.6-4.2-4.2 2.6-2.6-.9-2.2-3.4.7V9.9l3.4.7.9-2.2-2.6-2.6 4.2-4.2 2.6 2.6 2.2-.9zM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6z" />
+  <Svg {...p} fill="currentColor" strokeWidth={1}>
+    <path fillRule="evenodd" d="M9.32 4.89L9.48 1.7L14.52 1.7L14.68 4.89L16.82 6.12L19.66 4.67L22.18 9.03L19.5 10.76L19.5 13.24L22.18 14.97L19.66 19.33L16.82 17.88L14.68 19.11L14.52 22.3L9.48 22.3L9.32 19.11L7.18 17.88L4.34 19.33L1.82 14.97L4.5 13.24L4.5 10.76L1.82 9.03L4.34 4.67L7.18 6.12ZM16 12A4 4 0 1 0 8 12A4 4 0 1 0 16 12Z" />
   </Svg>
 );
 export const TodayIcon = (p: P) => <Svg strokeWidth={1.8} {...p}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></Svg>;

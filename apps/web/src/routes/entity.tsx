@@ -1,9 +1,12 @@
 import { dayLabel, entityTypeLabel, groupEntities, localDay, parseDay, shortDate, time } from "@rivethub/client-runtime/format";
-import type { ChangeKind, EntityArticle, EntityId, EntitySummary, EntityType, Fact, IsoTime } from "@rivethub/contracts";
-import { getRouteApi, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useChanges, useEntities, useEntity, useReviewQueue, useSetFact } from "../client/queries";
+import type { ChangeKind, EntityArticle, EntityCategory, EntityId, EntitySummary, Fact, IsoTime } from "@rivethub/contracts";
+import { getRouteApi, Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useClient } from "../client/context";
+import { useChanges, useEntities, useEntity, useEntityTypes, useReviewQueue, useSetFact } from "../client/queries";
 import { ArticleBar, ArticleBody, ArticleTabs, Crumbs, H2, MobileBack, SessionRows, type Tab } from "../components/article";
+import { EntityDropTarget, useEntityDrag, useEntityDragItem } from "../components/entity-drag";
+import { ChangeEntityCategory, NewEntityActions } from "../components/entity-management";
 import { PinIcon } from "../components/icons";
 import { LibraryPhone } from "../components/library";
 import { articleBody, Markdown, useArticleHash } from "../components/markdown";
@@ -30,30 +33,60 @@ function nearby(items: EntitySummary[], id: string): EntitySummary[] {
   return items.slice(start, start + SIDEBAR_SHOWN);
 }
 
-function EntityKinds({ selected }: { selected?: EntitySummary }) {
-  const list = useEntities().data ?? [];
+function entityGroups(list: EntitySummary[], categories: EntityCategory[] | null | undefined) {
+  const groups = new Map(groupEntities(list).map((group) => [group.type, { ...group, count: group.items.length, category: undefined as EntityCategory | undefined }]));
+  for (const category of categories ?? []) {
+    groups.set(category.type, {
+      type: category.type,
+      label: entityTypeLabel(category),
+      items: groups.get(category.type)?.items ?? [],
+      count: category.count,
+      category,
+    });
+  }
+  return [...groups.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label) || a.type.localeCompare(b.type));
+}
+
+function EntityRow({ entity, draggable, selected, className, children }: {
+  entity: EntitySummary;
+  draggable: boolean;
+  selected?: boolean;
+  className: string;
+  children: ReactNode;
+}) {
+  const dragProps = useEntityDragItem(entity, draggable, className);
+  return (
+    <Link to="/entities/$entityId" params={{ entityId: entity.id }} aria-current={selected ? "page" : undefined} {...dragProps}>
+      {children}
+    </Link>
+  );
+}
+
+function EntityKinds({ groups, draggable, selected }: { groups: ReturnType<typeof entityGroups>; draggable: boolean; selected?: EntitySummary }) {
   return (
     <>
-      {groupEntities(list).map((g) => (
+      {groups.map((g) => (
         <div key={g.type} className="flex flex-col">
-          <Link to="/entities" hash={g.type} className="flex justify-between rounded-lg px-2.5 py-[5px] text-foreground hover:bg-accent hover:no-underline">
-            <span>{g.label}</span>
-            <span className="text-[12px] text-muted-foreground">{g.items.length}</span>
-          </Link>
+          <EntityDropTarget type={g.type} category={g.category}>
+            <Link to="/entities" hash={g.type} hashScrollIntoView={false} activeOptions={{ exact: true, includeHash: true }} aria-label={`${g.label} ${g.count}`} className="flex justify-between rounded-lg px-2.5 py-[5px] text-foreground hover:bg-accent hover:no-underline">
+              <span>{g.label}</span>
+              <span className="text-[12px] text-muted-foreground">{g.count}</span>
+            </Link>
+          </EntityDropTarget>
           {selected?.type === g.type &&
             nearby(g.items, selected.id).map((e) => (
-              <Link
+              <EntityRow
                 key={e.id}
-                to="/entities/$entityId"
-                params={{ entityId: e.id }}
-                aria-current={e.id === selected.id ? "page" : undefined}
+                entity={e}
+                selected={e.id === selected.id}
+                draggable={draggable}
                 className={cx("truncate rounded-lg py-[5px] pr-2.5 pl-[22px] text-[13px] text-foreground hover:no-underline", e.id === selected.id ? "bg-selected" : "hover:bg-accent")}
               >
                 {e.title}
-              </Link>
+              </EntityRow>
             ))}
           {selected?.type === g.type && g.items.length > SIDEBAR_SHOWN && (
-            <Link to="/entities" hash={g.type} className="py-[5px] pr-2.5 pl-[22px] text-[12px]">All {g.items.length} {g.label}</Link>
+            <Link to="/entities" hash={g.type} hashScrollIntoView={false} className="py-[5px] pr-2.5 pl-[22px] text-[12px]">All {g.items.length} {g.label}</Link>
           )}
         </div>
       ))}
@@ -65,22 +98,32 @@ type EntitySort = "name" | "sessions";
 
 export function EntitiesIndex() {
   const phone = useIsPhone();
+  const client = useClient();
+  const drag = useEntityDrag();
+  const navigate = useNavigate();
+  const hash = useLocation({ select: (location) => location.hash });
   const list = useEntities();
+  const categories = useEntityTypes().data;
   const [text, setText] = useState("");
-  const [only, setOnly] = useState<EntityType | "">("");
   const [sort, setSort] = useState<EntitySort>("name");
   const all = list.data ?? [];
-  const types = groupEntities(all);
+  const types = entityGroups(all, categories);
+  const only = types.some((group) => group.type === hash) ? hash : "";
+  const setOnly = (type: string) => void navigate({ to: "/entities", hash: type, hashScrollIntoView: false });
+  const draggable = !phone && !!client.moveEntity && !!categories?.length;
   const needle = text.trim().toLowerCase();
   const shown = all
     .filter((e) => (!only || e.type === only) && (!needle || e.title.toLowerCase().includes(needle)))
     .sort((x, y) => (sort === "sessions" ? y.sessionCount - x.sessionCount : 0) || x.title.localeCompare(y.title, undefined, { sensitivity: "base" }));
-  const groups = types.map((g) => ({ ...g, items: shown.filter((e) => e.type === g.type) })).filter((g) => g.items.length > 0);
+  const groups = types
+    .map((g) => ({ ...g, items: shown.filter((e) => e.type === g.type) }))
+    .filter((g) => drag.dragging || ((!only || only === g.type) && (!needle || g.items.length > 0)));
   const chip = (on: boolean) => cx("rounded-full border px-2.5 text-[12px]", phone ? "min-h-9 px-3" : "py-1", on ? "border-transparent bg-selected text-foreground" : "border-border bg-transparent text-muted-foreground hover:text-foreground");
 
-  const controls = all.length > 0 && (
+  const actions = <NewEntityActions categories={categories} selected={only} />;
+  const controls = types.length > 0 && (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2">
+      {all.length > 0 && <div className="flex flex-wrap items-center gap-2">
         <label className={cx("flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 text-muted-foreground", phone ? "min-h-11" : "py-1.5")}>
           <SearchIcon size={14} />
           <span className="sr-only">Filter entities</span>
@@ -93,12 +136,12 @@ export function EntitiesIndex() {
             <option value="sessions">Most sessions</option>
           </select>
         </label>
-      </div>
+      </div>}
       <div role="group" aria-label="Type" className="flex flex-wrap gap-1.5">
         <button type="button" aria-pressed={only === ""} onClick={() => setOnly("")} className={chip(only === "")}>All {all.length.toLocaleString("en-US")}</button>
         {types.map((g) => (
           <button key={g.type} type="button" aria-pressed={only === g.type} onClick={() => setOnly(only === g.type ? "" : g.type)} className={chip(only === g.type)}>
-            {g.label} {g.items.length}
+            {g.label} {g.count}
           </button>
         ))}
       </div>
@@ -106,31 +149,34 @@ export function EntitiesIndex() {
   );
 
   const rows = groups.map((g) => (
-    <section key={g.type} id={g.type} aria-label={g.label} className="flex flex-col">
+    <EntityDropTarget key={g.type} as="section" type={g.type} category={g.category} label={g.label} className="flex flex-col">
       <h2 className="m-0 px-2 pt-4 pb-1 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">{g.label} <span className="font-normal">{g.items.length}</span></h2>
       {g.items.map((e) => (
-        <Link key={e.id} to="/entities/$entityId" params={{ entityId: e.id }} className="flex min-h-12 items-center gap-2.5 border-b border-border px-3 text-foreground hover:bg-accent hover:no-underline md:min-h-10">
+        <EntityRow key={e.id} entity={e} draggable={draggable} className="flex min-h-12 items-center gap-2.5 border-b border-border px-3 text-foreground hover:bg-accent hover:no-underline md:min-h-10">
           <span className="min-w-0 flex-1 truncate">{e.title}</span>
           {e.sessionCount > 0 && <span className="text-[12px] text-muted-foreground">{plural(e.sessionCount, "session")}</span>}
           <span className="text-muted-foreground">›</span>
-        </Link>
+        </EntityRow>
       ))}
-    </section>
+    </EntityDropTarget>
   ));
-  const body = list.isPending ? <Loading /> : list.isError ? <ErrorNote error={list.error} /> : all.length === 0 ? <EmptyLibrary kind="entities" /> : shown.length === 0 ? (
+  const body = list.isPending ? <Loading /> : list.isError ? <ErrorNote error={list.error} /> : types.length === 0 ? <EmptyLibrary kind="entities" /> : !drag.dragging && needle && shown.length === 0 ? (
     <p className="m-0 px-2 py-6 text-muted-foreground">No entity matches. <button type="button" className="border-0 bg-transparent p-0 text-info hover:underline" onClick={() => { setText(""); setOnly(""); }}>Clear the filter</button></p>
   ) : rows;
   return (
-    <Frame sidebar={<MainSidebar><EntityKinds /></MainSidebar>} tabs>
+    <Frame sidebar={<MainSidebar><EntityKinds groups={types} draggable={draggable} /></MainSidebar>} tabs>
       {phone ? (
         <LibraryPhone kind="entities">
-          <div className="px-2 pt-1">{controls}</div>
+          <div className="flex flex-col gap-2 px-2 pt-1">{actions}{controls}</div>
           {body}
         </LibraryPhone>
       ) : (
         <div className="flex justify-center px-7 py-8">
           <div className="flex max-w-[820px] flex-1 flex-col gap-3">
-            <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Entities <SampleBadge capability="entities" /></h1>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h1 className="m-0 flex items-center gap-2 font-serif text-[34px] font-semibold">Entities <SampleBadge capability="entities" /></h1>
+              {actions}
+            </div>
             <p className="m-0 text-muted-foreground">The entities your sessions touch. Each has a page with what is currently true about it.</p>
             {controls}
             <div className="flex flex-col">{body}</div>
@@ -162,7 +208,10 @@ export function EntityPage() {
   const { entityId } = route.useParams();
   const { tab = "overview", asOf: asOfParam, addFact } = route.useSearch();
   const navigate = useNavigate();
+  const client = useClient();
   const phone = useIsPhone();
+  const categories = useEntityTypes().data;
+  const list = useEntities().data ?? [];
   const asOf = asOfParam && asOfParam !== "pick" ? (asOfParam as IsoTime) : undefined;
   const now = useEntity(entityId as EntityId);
   const at = useEntity(entityId as EntityId, asOf);
@@ -177,18 +226,20 @@ export function EntityPage() {
     { id: "history", label: "History", count: e?.timeline.length ?? 0 },
   ];
   const fallback = now.isPending ? <Loading /> : now.isError ? <ErrorNote error={now.error} /> : null;
-  const state = e && <StatePanel e={e} steps={steps} asOf={asOf} onAsOf={setAsOf} focusSlider={asOfParam === "pick"} startAdding={addFact === 1} />;
+  const categoryControl = !asOf && e && <ChangeEntityCategory key={e.id} entity={e} categories={categories} />;
+  const state = e && <StatePanel e={e} steps={steps} asOf={asOf} onAsOf={setAsOf} focusSlider={asOfParam === "pick"} startAdding={addFact === 1} categoryControl={categoryControl} />;
 
   if (phone) {
     return (
       <Frame sidebar={null}>
-        <MobileBack to="/entities" label={e ? entityTypeLabel(e) : "Entities"}>
+        <MobileBack to={e ? `/entities#${e.type}` : "/entities"} label={e ? entityTypeLabel(e) : "Entities"}>
           {e && <AsOfSheetButton steps={steps} asOf={asOf} onAsOf={setAsOf} />}
           {e && <PinButton subject={{ kind: "entity", id: e.id, title: e.title }} className="size-11" />}
         </MobileBack>
         {fallback ?? (
           <div className="flex flex-col gap-3.5 px-4 pb-6">
             <EntityTitle e={e!} phone />
+            {categoryControl}
             <ArticleTabs tabs={tabs} active={tab} search={(id) => ({ tab: id })} phone />
             {tab === "overview" ? (
               <>
@@ -207,7 +258,7 @@ export function EntityPage() {
   }
 
   return (
-    <Frame sidebar={<MainSidebar><EntityKinds {...(e ? { selected: e } : {})} /></MainSidebar>}>
+    <Frame sidebar={<MainSidebar><EntityKinds groups={entityGroups(list, categories)} draggable={!!client.moveEntity && !!categories?.length} {...(e ? { selected: e } : {})} /></MainSidebar>}>
       {fallback ?? (
         <>
           <ArticleBar crumbs={<Crumbs items={[{ label: entityTypeLabel(e!), to: `/entities#${e!.type}` }, { label: e!.title }]} />}>
@@ -359,7 +410,7 @@ interface Draft {
   pinned: boolean;
 }
 
-function StatePanel({ e, steps, asOf, onAsOf, focusSlider, startAdding }: { e: EntityArticle; steps: IsoTime[]; asOf: IsoTime | undefined; onAsOf: (v: IsoTime | undefined) => void; focusSlider: boolean; startAdding: boolean }) {
+function StatePanel({ e, steps, asOf, onAsOf, focusSlider, startAdding, categoryControl }: { e: EntityArticle; steps: IsoTime[]; asOf: IsoTime | undefined; onAsOf: (v: IsoTime | undefined) => void; focusSlider: boolean; startAdding: boolean; categoryControl: ReactNode }) {
   const setFact = useSetFact();
   const conflictFor = useConflictLink(e);
   const [draft, setDraft] = useState<Draft | null>(startAdding ? { key: "", value: "", pinned: false } : null);
@@ -403,6 +454,7 @@ function StatePanel({ e, steps, asOf, onAsOf, focusSlider, startAdding }: { e: E
           />
           <span className="w-12 text-right text-[12px] font-semibold">{index === steps.length ? "Now" : shortDate(steps[index]!)}</span>
         </div>
+        {categoryControl}
       </div>
       {e.facts.map((f) =>
         draft?.id === f.id ? (

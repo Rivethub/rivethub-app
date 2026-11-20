@@ -11,9 +11,9 @@ function show(path: string, change: (c: AppClient) => Partial<AppClient>) {
   const c = createSampleClient();
   render(<App client={{ ...c, ...change(c) } as AppClient} history={createMemoryHistory({ initialEntries: [path] })} />);
 }
-it("derives type chips, groups, counts and order from hub data", async () => {
+it("derives type chips, groups, counts and order when the hub only supplies entities", async () => {
   const user = userEvent.setup();
-  show("/entities", () => ({ entities: async () => [
+  show("/entities", () => ({ entityTypes: async () => null, entities: async () => [
     { id: "s1" as EntityId, title: "Voyager", type: "spacecraft", sessionCount: 1 },
     { id: "s2" as EntityId, title: "Pioneer", type: "spacecraft", sessionCount: 1 },
     { id: "n1" as EntityId, title: "Notebook", type: "field-notes", sessionCount: 1 },

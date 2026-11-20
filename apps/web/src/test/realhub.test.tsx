@@ -70,6 +70,17 @@ describe("Settings icon", () => {
     expect(path?.getAttribute("fill-rule")).toBe("evenodd");
     expect(path?.getAttribute("d")?.match(/M/g)?.length).toBe(2);
   });
+
+  it("keeps the whole gear inside its 24-unit box, so no tooth is cut off", async () => {
+    renderWith("/", () => ({}));
+    const link = await screen.findByRole("link", { name: "Settings" });
+    const d = link.querySelector("svg path")?.getAttribute("d") ?? "";
+    expect(d).toMatch(/^[MLAZ\d. ]+$/);
+    const points = [...d.matchAll(/[ML]([\d.]+) ([\d.]+)/g)].flatMap((m) => [Number(m[1]), Number(m[2])]);
+    expect(points.length).toBeGreaterThan(20);
+    expect(Math.min(...points)).toBeGreaterThanOrEqual(1);
+    expect(Math.max(...points)).toBeLessThanOrEqual(23);
+  });
 });
 
 describe("Hub footer", () => {

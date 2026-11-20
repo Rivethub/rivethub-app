@@ -239,7 +239,7 @@ export function MoveTopicButton({ id, name, owner, quiet }: { id: TopicId; name:
         }}
         className={cx(
           "shrink-0 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground",
-          quiet && "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100",
+          quiet && "sr-only focus-visible:not-sr-only [@media(hover:none)]:not-sr-only",
         )}
       >
         Move to…

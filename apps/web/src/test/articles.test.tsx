@@ -118,6 +118,16 @@ describe("Pages show their article", () => {
     expect(screen.getAllByText(/The release that turns the RivetHub runtime into a memory product/)).toHaveLength(1);
   });
 
+  it("a topic page leads with its decisions and sessions, and the article follows", async () => {
+    renderAt("/topics/rh-08");
+    const article = await screen.findByRole("heading", { level: 3, name: "What stays" });
+    const main = screen.getByRole("main");
+    for (const name of ["Decisions", "Sessions"]) {
+      const section = within(main).getByRole("heading", { level: 2, name: new RegExp(`^${name}`) });
+      expect(section.compareDocumentPosition(article) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
   it("scrolls a topic opened at a heading hash to that heading", async () => {
     const scrolled: Element[] = [];
     const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(function (this: Element) {

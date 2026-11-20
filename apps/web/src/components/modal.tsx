@@ -22,7 +22,7 @@ export function Modal({
   const panel = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
-    const first = panel.current?.querySelector<HTMLElement>("[autofocus], input, button, a[href], [tabindex]:not([tabindex='-1'])");
+    const first = panel.current?.querySelector<HTMLElement>("[autofocus], input, select, button, a[href], [tabindex]:not([tabindex='-1'])");
     (first ?? panel.current)?.focus();
     return () => opener?.focus?.();
   }, []);

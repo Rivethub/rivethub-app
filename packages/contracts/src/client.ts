@@ -2,6 +2,7 @@ import type {
   Account,
   Change,
   EntityArticle,
+  EntityCategory,
   EntityId,
   EntitySummary,
   EntityType,
@@ -86,6 +87,11 @@ export interface MemoryClient {
 
   entities(type?: EntityType): Promise<EntitySummary[]>;
   entity(id: EntityId, asOf?: IsoTime): Promise<EntityArticle>;
+  /** Includes empty categories. Null means this hub's category routes are unavailable. */
+  entityTypes?(): Promise<EntityCategory[] | null>;
+  createEntityCategory?(name: string): Promise<TopicId>;
+  createEntity?(name: string, categoryId: TopicId): Promise<EntityId>;
+  moveEntity?(id: EntityId, categoryId: TopicId): Promise<void>;
   setFact(entity: EntityId, fact: { id?: FactId; key: string; value: string; pinned: boolean }): Promise<void>;
 
   sessions(query: SessionQuery): Promise<Page<SessionSummaryRow>>;

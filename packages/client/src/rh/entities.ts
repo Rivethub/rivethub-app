@@ -1,4 +1,4 @@
-import type { EntityArticle, EntityId, EntitySummary, EntityType, FactId, IsoTime } from "@rivethub/contracts";
+import type { EntityArticle, EntityCategory, EntityId, EntitySummary, EntityType, FactId, IsoTime, TopicId } from "@rivethub/contracts";
 import type { Http } from "../http.js";
 import * as wire from "./wire.js";
 import { mapRow } from "./catalog.js";
@@ -44,6 +44,33 @@ export function entitiesApi(http: Http) {
     async entities(type?: EntityType): Promise<EntitySummary[]> {
       const list = await http.get("/api/entities", wire.entityList, { type });
       return list.map((entity) => strip<EntitySummary>({ ...entity, id: entity.id as EntityId }));
+    },
+
+    async entityTypes(): Promise<EntityCategory[]> {
+      const [types, { topics }] = await Promise.all([
+        http.get("/api/entities/types", wire.entityTypes),
+        http.get("/api/topics", wire.entityTypeTopics, { kind: "type" }),
+      ]);
+      const byType = new Map(types.map((type) => [type.type, type]));
+      return topics.flatMap((topic) => {
+        if (topic.kind !== "type" || !topic.slug) return [];
+        const stats = byType.get(topic.slug);
+        return [{ id: topicId(topic.id), type: topic.slug, typeName: stats?.typeName || topic.name, count: stats?.count ?? 0 }];
+      });
+    },
+
+    async createEntityCategory(name: string): Promise<TopicId> {
+      const created = await http.sendFor("POST", "/api/topics", wire.createdTopic, { kind: "type", name });
+      return topicId(created.id);
+    },
+
+    async createEntity(name: string, categoryId: TopicId): Promise<EntityId> {
+      const created = await http.sendFor("POST", "/api/topics", wire.createdTopic, { kind: "entity", name, parent: categoryId });
+      return created.id as EntityId;
+    },
+
+    async moveEntity(id: EntityId, categoryId: TopicId): Promise<void> {
+      await http.send("PATCH", `/api/topics/${encodeURIComponent(id)}`, { parent: categoryId });
     },
 
     async entity(id: EntityId, asOf?: IsoTime): Promise<EntityArticle> {

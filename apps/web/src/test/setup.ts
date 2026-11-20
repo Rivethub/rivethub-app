@@ -1,10 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
+import { reloadPins } from "../lib/pins";
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  reloadPins();
   document.documentElement.dataset.theme = "everforest";
 });
 
