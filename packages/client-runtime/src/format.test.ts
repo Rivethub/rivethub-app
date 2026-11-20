@@ -44,6 +44,21 @@ describe("format", () => {
     expect(filingCreatesTopic({ group: "fact", text: "note (new topic)" })).toBe(false);
     expect(filingTopicName(filing("→ Printers (new topic)", "Printers"))).toBe("Printers");
     expect(filingTopicName(filing("→ Home lab › Printers (new topic)"))).toBe("Home lab › Printers");
+    expect(filingTopicName(filing("→ Printers   (new topic)"))).toBe("Printers");
+    expect(filingTopicName(filing("name (new topic) more"))).toBe("name (new topic) more");
+    expect(filingTopicName(filing("→   (new topic)"))).toBe("");
+    expect(filingTopicName(filing("→ Foo (new topic) (new topic)"))).toBe("Foo (new topic)");
+    expect(filingTopicName(filing("→ Foo\n(new topic)"))).toBe("Foo");
+    expect(filingTopicName(filing("→ Foo \u00a0(new topic)  "))).toBe("Foo");
+    expect(filingTopicName(filing("(new topic)"))).toBe("");
+    expect(filingTopicName(filing("   "))).toBe("");
+  });
+
+  it("reads a long filing that is not a new topic within a tight bound", () => {
+    const text = `${" ".repeat(40_000)}x`;
+    const started = performance.now();
+    expect(filingTopicName({ text })).toBe("x");
+    expect(performance.now() - started).toBeLessThan(200);
   });
 
   it("names a review item's main button", () => {

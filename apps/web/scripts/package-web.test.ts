@@ -56,7 +56,6 @@ describe("packageWebRelease", () => {
       asset: "rivethub-web-0.8.2.tar.gz",
       sha256: result.manifest.sha256,
     });
-    expect(Object.keys(result.manifest)).toEqual(["schemaVersion", "version", "commit", "channel", "minRhVersion", "asset", "sha256"]);
     expect(archived.readUInt32LE(4)).toBe(0);
 
     const listed = (await exec("tar", ["-tzf", result.archivePath])).stdout.trim().split("\n");
@@ -66,6 +65,21 @@ describe("packageWebRelease", () => {
     expect(names.every((member) => member.mtime === 0 && member.uid === 0 && member.gid === 0)).toBe(true);
     expect(names.find((member) => member.name === "index.html")?.mode).toBe(0o644);
     expect(names.find((member) => member.name === "assets/")?.mode).toBe(0o755);
+  });
+
+  it.each([
+    ["stable", "0.8.16"],
+    ["beta", "0.8.16-beta.10"],
+    ["nightly", "0.8.16-nightly.20261120.28"],
+  ] as const)("preserves the %s asset names and manifest keys in docs/web-distribution.md", async (channel, version) => {
+    const { dist, output } = await stage();
+    const result = await packageWebRelease(request(dist, output, version, channel));
+    const archive = `rivethub-web-${version}.tar.gz`;
+    expect(path.basename(result.archivePath)).toBe(archive);
+    expect(path.basename(result.manifestPath)).toBe("web-manifest.json");
+    const manifest = JSON.parse(await readFile(result.manifestPath, "utf8"));
+    expect(Object.keys(manifest).sort()).toEqual(["asset", "channel", "commit", "minRhVersion", "schemaVersion", "sha256", "version"]);
+    expect(manifest).toMatchObject({ schemaVersion: 1, asset: archive });
   });
 
   it("stamps the published version and commit into index.html and version.json", async () => {
@@ -175,7 +189,7 @@ describe("packageWebRelease", () => {
 describe("readWebPackage", () => {
   it("reads the version and minimum rh this repo declares", async () => {
     const declared = await readWebPackage(fileURLToPath(new URL("../package.json", import.meta.url)));
-    expect(declared.version).toBe("0.8.2");
+    expect(declared.version).toBe("0.8.16");
     expect(declared.minRhVersion).toBe("0.8.3");
   });
 
@@ -236,7 +250,8 @@ describe("cli", () => {
 
   it("exits non-zero when the tag does not match", async () => {
     const { dist, output } = await stage();
-    const result = await exec(process.execPath, [script, "--dist", dist, "--output-dir", output, "--version", "0.8.2", "--commit", COMMIT, "--tag", "web-v9.9.9"]).then(
+    const declared = await readWebPackage(fileURLToPath(new URL("../package.json", import.meta.url)));
+    const result = await exec(process.execPath, [script, "--dist", dist, "--output-dir", output, "--version", declared.version, "--commit", COMMIT, "--tag", "web-v9.9.9"]).then(
       () => ({ code: 0, stderr: "" }),
       (error: { code?: number; stderr?: string }) => ({ code: error.code ?? 1, stderr: error.stderr ?? "" }),
     );

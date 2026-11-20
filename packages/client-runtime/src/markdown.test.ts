@@ -87,6 +87,73 @@ describe("articleBody", () => {
   });
 });
 
+describe("parseInline", () => {
+  it("keeps the markers memory pages already use", () => {
+    expect(parseInline("plain")).toEqual([{ kind: "text", text: "plain" }]);
+    expect(parseInline("`code`")).toEqual([{ kind: "code", text: "code" }]);
+    expect(parseInline("``code``")).toEqual([{ kind: "code", text: "code" }]);
+    expect(parseInline("```code```")).toEqual([{ kind: "code", text: "code" }]);
+    expect(parseInline("```code``")).toEqual([{ kind: "text", text: "`" }, { kind: "code", text: "code" }]);
+    expect(parseInline("`code")).toEqual([{ kind: "text", text: "`code" }]);
+    expect(parseInline("a `code` b")).toEqual([{ kind: "text", text: "a " }, { kind: "code", text: "code" }, { kind: "text", text: " b" }]);
+    expect(parseInline("`[link](url)`")).toEqual([{ kind: "code", text: "[link](url)" }]);
+    expect(parseInline("[text](https://example.com/a)")).toEqual([{ kind: "link", href: "https://example.com/a", children: [{ kind: "text", text: "text" }] }]);
+    expect(parseInline("[**b**](url)")).toEqual([{ kind: "link", href: "url", children: [{ kind: "strong", children: [{ kind: "text", text: "b" }] }] }]);
+    expect(parseInline("[no](space here)")).toEqual([{ kind: "text", text: "[no](space here)" }]);
+    expect(parseInline("**bold** and __also__")).toEqual([
+      { kind: "strong", children: [{ kind: "text", text: "bold" }] },
+      { kind: "text", text: " and " },
+      { kind: "strong", children: [{ kind: "text", text: "also" }] },
+    ]);
+    expect(parseInline("*em* and _em_")).toEqual([
+      { kind: "em", children: [{ kind: "text", text: "em" }] },
+      { kind: "text", text: " and " },
+      { kind: "em", children: [{ kind: "text", text: "em" }] },
+    ]);
+    expect(parseInline("***bold***")).toEqual([{ kind: "text", text: "*" }, { kind: "strong", children: [{ kind: "text", text: "bold" }] }, { kind: "text", text: "*" }]);
+    expect(parseInline("snake_case stays")).toEqual([{ kind: "text", text: "snake_case stays" }]);
+    expect(parseInline("a_b_c")).toEqual([{ kind: "text", text: "a_b_c" }]);
+    expect(parseInline("x__bold__")).toEqual([{ kind: "text", text: "x" }, { kind: "strong", children: [{ kind: "text", text: "bold" }] }]);
+    expect(parseInline("___em___")).toEqual([{ kind: "text", text: "_" }, { kind: "strong", children: [{ kind: "text", text: "em" }] }, { kind: "text", text: "_" }]);
+    expect(parseInline("(_foo_)")).toEqual([{ kind: "text", text: "(" }, { kind: "em", children: [{ kind: "text", text: "foo" }] }, { kind: "text", text: ")" }]);
+    expect(parseInline("_foo_ bar")).toEqual([{ kind: "em", children: [{ kind: "text", text: "foo" }] }, { kind: "text", text: " bar" }]);
+    expect(parseInline("/_foo_")).toEqual([{ kind: "text", text: "/_foo_" }]);
+    expect(parseInline("_foo_/bar")).toEqual([{ kind: "text", text: "_foo_/bar" }]);
+    expect(parseInline("* foo*")).toEqual([{ kind: "text", text: "* foo*" }]);
+    expect(parseInline("[a](http://x.com)_bar_")).toEqual([
+      { kind: "link", href: "http://x.com", children: [{ kind: "text", text: "a" }] },
+      { kind: "em", children: [{ kind: "text", text: "bar" }] },
+    ]);
+    expect(parseInline("mix `c` **b** _e_ [l](h)")).toEqual([
+      { kind: "text", text: "mix " },
+      { kind: "code", text: "c" },
+      { kind: "text", text: " " },
+      { kind: "strong", children: [{ kind: "text", text: "b" }] },
+      { kind: "text", text: " " },
+      { kind: "em", children: [{ kind: "text", text: "e" }] },
+      { kind: "text", text: " " },
+      { kind: "link", href: "h", children: [{ kind: "text", text: "l" }] },
+    ]);
+  });
+
+  it("parses a long run of backticks within a tight bound", () => {
+    const ticks = "`".repeat(40_000);
+    const started = performance.now();
+    const parsed = parseInline(ticks);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(parsed).toEqual([{ kind: "text", text: ticks }]);
+  });
+
+  it("parses a long unmatched link within a tight bound", () => {
+    const slash = "\\";
+    const text = `[${slash}${slash}](` + "[!](!".repeat(20_000);
+    const started = performance.now();
+    const parsed = parseInline(text);
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(parsed).toEqual([{ kind: "text", text }]);
+  });
+});
+
 describe("factLabel", () => {
   it("reads the worker's attribute names as labels and leaves a person's wording alone", () => {
     expect(factLabel("ip")).toBe("IP");

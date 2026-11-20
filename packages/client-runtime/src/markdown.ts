@@ -117,24 +117,138 @@ export function parseMarkdown(source: string): Block[] {
   return blocks;
 }
 
-// Inline: code first (nothing inside it is markup), then links, bold, emphasis.
-const INLINE = /(`+)([^`]+?)\1|\[([^\]]+)\]\(([^)\s]+)\)|\*\*([^*]+?)\*\*|__([^_]+?)__|\*([^*\s][^*]*?)\*|(?<![\w/])_([^_\s][^_]*?)_(?![\w/])/;
+// Inline markers, in the order a combined expression would try them.
+// A scan, because that expression backtracks on a long run of one character.
+const isSpace = (char: string) => char.trim() === "";
+const isWord = (char: string) => {
+  const code = char.charCodeAt(0);
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "_";
+};
+
+interface Span {
+  start: number;
+  end: number;
+  node: Exclude<Inline, { kind: "text" }>;
+}
+
+function scanCode(text: string, i: number): { skipTo: number } | { start: number; end: number; text: string } {
+  let runEnd = i;
+  while (runEnd < text.length && text[runEnd] === "`") runEnd += 1;
+  const open = runEnd - i;
+  let contentEnd = runEnd;
+  while (contentEnd < text.length && text[contentEnd] !== "`") contentEnd += 1;
+  if (contentEnd === runEnd) return { skipTo: runEnd };
+  let closeEnd = contentEnd;
+  while (closeEnd < text.length && text[closeEnd] === "`") closeEnd += 1;
+  const close = closeEnd - contentEnd;
+  if (close === 0) return { skipTo: runEnd };
+  const taken = Math.min(open, close);
+  return { start: runEnd - taken, end: contentEnd + taken, text: text.slice(runEnd, contentEnd) };
+}
+
+function scanLink(text: string, i: number): { dead?: boolean; skipTo?: number; start?: number; end?: number; label?: string; href?: string } {
+  const bracket = text.indexOf("]", i + 1);
+  if (bracket < 0) return { dead: true };
+  if (bracket === i + 1 || text[bracket + 1] !== "(") return { skipTo: bracket + 1 };
+  let cursor = bracket + 2;
+  const hrefStart = cursor;
+  while (cursor < text.length && text[cursor] !== ")" && !isSpace(text[cursor]!)) cursor += 1;
+  if (cursor === hrefStart || text[cursor] !== ")") return cursor >= text.length ? { dead: true } : { skipTo: bracket + 1 };
+  return { start: i, end: cursor + 1, label: text.slice(i + 1, bracket), href: text.slice(hrefStart, cursor) };
+}
+
+function scanStars(text: string, i: number): { skipTo: number } | { start: number; end: number; kind: "strong" | "em"; text: string } {
+  if (text[i + 1] === "*") {
+    const contentStart = i + 2;
+    if (contentStart < text.length && text[contentStart] !== "*") {
+      let cursor = contentStart;
+      while (cursor < text.length && text[cursor] !== "*") cursor += 1;
+      if (text[cursor] === "*" && text[cursor + 1] === "*" && cursor > contentStart) {
+        return { start: i, end: cursor + 2, kind: "strong", text: text.slice(contentStart, cursor) };
+      }
+    }
+  }
+  const contentStart = i + 1;
+  if (contentStart >= text.length || text[contentStart] === "*" || isSpace(text[contentStart]!)) return { skipTo: i + 1 };
+  let cursor = contentStart + 1;
+  while (cursor < text.length && text[cursor] !== "*") cursor += 1;
+  if (cursor >= text.length) return { skipTo: i + 1 };
+  return { start: i, end: cursor + 1, kind: "em", text: text.slice(contentStart, cursor) };
+}
+
+function scanUnder(text: string, i: number, from: number): { skipTo: number } | { start: number; end: number; kind: "strong" | "em"; text: string } {
+  if (text[i + 1] === "_") {
+    const contentStart = i + 2;
+    if (contentStart < text.length && text[contentStart] !== "_") {
+      let cursor = contentStart;
+      while (cursor < text.length && text[cursor] !== "_") cursor += 1;
+      if (text[cursor] === "_" && text[cursor + 1] === "_" && cursor > contentStart) {
+        return { start: i, end: cursor + 2, kind: "strong", text: text.slice(contentStart, cursor) };
+      }
+    }
+  }
+  if (i > from && (text[i - 1] === "/" || isWord(text[i - 1]!))) return { skipTo: i + 1 };
+  const contentStart = i + 1;
+  if (contentStart >= text.length || text[contentStart] === "_" || isSpace(text[contentStart]!)) return { skipTo: i + 1 };
+  let cursor = contentStart + 1;
+  while (cursor < text.length && text[cursor] !== "_") cursor += 1;
+  if (cursor >= text.length) return { skipTo: i + 1 };
+  const after = text[cursor + 1];
+  if (after !== undefined && (after === "/" || isWord(after))) return { skipTo: i + 1 };
+  return { start: i, end: cursor + 1, kind: "em", text: text.slice(contentStart, cursor) };
+}
+
+function findInline(text: string, from: number): Span | undefined {
+  let i = from;
+  let linkDead = false;
+  let nextLinkAt = from;
+  while (i < text.length) {
+    const char = text[i];
+    if (char === "`") {
+      const found = scanCode(text, i);
+      if ("text" in found && found.start >= i) return { start: found.start, end: found.end, node: { kind: "code", text: found.text } };
+      i = "skipTo" in found && found.skipTo > i ? found.skipTo : i + 1;
+      continue;
+    }
+    if (char === "[" && !linkDead && i >= nextLinkAt) {
+      const found = scanLink(text, i);
+      if (found.label !== undefined && found.href !== undefined && found.start !== undefined && found.end !== undefined) {
+        return { start: found.start, end: found.end, node: { kind: "link", href: found.href, children: parseInline(found.label) } };
+      }
+      if (found.dead) linkDead = true;
+      if (found.skipTo !== undefined && found.skipTo > i) nextLinkAt = found.skipTo;
+      i += 1;
+      continue;
+    }
+    if (char === "*") {
+      const found = scanStars(text, i);
+      if ("kind" in found) return { start: found.start, end: found.end, node: { kind: found.kind, children: parseInline(found.text) } };
+      i = found.skipTo > i ? found.skipTo : i + 1;
+      continue;
+    }
+    if (char === "_") {
+      const found = scanUnder(text, i, from);
+      if ("kind" in found) return { start: found.start, end: found.end, node: { kind: found.kind, children: parseInline(found.text) } };
+      i = found.skipTo > i ? found.skipTo : i + 1;
+      continue;
+    }
+    i += 1;
+  }
+  return undefined;
+}
 
 export function parseInline(text: string): Inline[] {
   const out: Inline[] = [];
-  let rest = text;
-  while (rest) {
-    const m = INLINE.exec(rest);
-    if (!m) {
-      out.push({ kind: "text", text: rest });
+  let i = 0;
+  while (i < text.length) {
+    const found = findInline(text, i);
+    if (!found) {
+      out.push({ kind: "text", text: text.slice(i) });
       break;
     }
-    if (m.index > 0) out.push({ kind: "text", text: rest.slice(0, m.index) });
-    if (m[2] !== undefined) out.push({ kind: "code", text: m[2] });
-    else if (m[3] !== undefined) out.push({ kind: "link", href: m[4]!, children: parseInline(m[3]) });
-    else if (m[5] !== undefined || m[6] !== undefined) out.push({ kind: "strong", children: parseInline((m[5] ?? m[6])!) });
-    else out.push({ kind: "em", children: parseInline((m[7] ?? m[8])!) });
-    rest = rest.slice(m.index + m[0].length);
+    if (found.start > i) out.push({ kind: "text", text: text.slice(i, found.start) });
+    out.push(found.node);
+    i = found.end;
   }
   return out;
 }
