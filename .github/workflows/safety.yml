@@ -24,6 +24,8 @@ jobs:
         run: git clone --quiet --depth=1 --branch main https://github.com/Rivethub/rivethub-app.git "$RUNNER_TEMP/rivethub-safety"
       - name: Self-test and scan files and PR metadata
         shell: bash
+        env:
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         run: |
           policy="$RUNNER_TEMP/rivethub-safety/scripts"
           if [[ "$GITHUB_REPOSITORY" == "Rivethub/rivethub-app" ]]; then policy="$PWD/scripts"; fi
@@ -31,7 +33,8 @@ jobs:
           status=0
           for scanner in secret privacy; do
             node "$policy/$scanner-scan.mjs" --tracked || status=1
-            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            # Dependabot fills its PR body with third-party release notes, which trip the name denylist.
+            if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "$PR_AUTHOR" != "dependabot[bot]" ]]; then
               # Putting PR prose in the step environment would echo it in the Actions log.
               node -e 'const {title, body} = require(process.env.GITHUB_EVENT_PATH).pull_request;
                 process.stdout.write(title + "\n" + (body ?? "") + "\n")' |

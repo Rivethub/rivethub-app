@@ -5,6 +5,16 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Expo decides the versions under apps/mobile. Update those with `npx expo install --fix`.
+    exclude-paths:
+      - "apps/mobile/**"
+    ignore:
+      # The repo and its workflows run Node 22.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      # apps/web has a test that uses compiler APIs TypeScript 7 no longer exposes.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
