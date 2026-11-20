@@ -72,14 +72,35 @@ There is no `/api/version` route. The gateway serves `version.json` as a static 
 
 ## Deep links
 
-These two paths are the contract. A rename has to break `apps/web/src/test/deep-links.test.tsx`.
+A host may open these paths. They are the stable contract. A contract path is never removed or repurposed. A rename keeps the old path as a redirect to the new one.
 
-| URL | Route id |
+`apps/web/src/test/route-contract.test.tsx` loads the real route tree. The failure names this document when a path below disappears or stops opening its page, or when a listed search parameter is no longer kept.
+
+| Path | Search parameters |
 | --- | --- |
-| `/sessions/<id>` | `/sessions/$sessionId` |
-| `/topics/<id>` | `/topics/$topicId` |
+| `/` | `embed` |
+| `/search` | `q`, `when`, `where`, `match`, `embed` |
+| `/sessions` | `embed` |
+| `/sessions/<id>` | `embed` |
+| `/topics` | `embed` |
+| `/topics/<id>` | `embed` |
+| `/entities` | `embed` |
+| `/entities/<id>` | `embed` |
 
-The gateway serves both as the public shell, with no session. The client does not send the browser to `/login` on its own.
+`embed` is accepted on every path in the table when its value is `1`. Navigation keeps it.
+
+On `/search` the other parameters are:
+
+- `q`, the query text. A non-empty value is kept.
+- `when` is `today`, `yesterday`, `last_7d`, or `last_14d`.
+- `where` is `messages` or `summaries`.
+- `match` is `words`, `fuzzy`, `meaning`, or `pattern`.
+
+A value outside those lists is dropped. Any other query key is not part of the contract and may change.
+
+These paths are internal. A host should not link to them, because they may change from release to release: `/review`, `/settings`, `/settings/<section>`, `/library`, `/share`, `/receive`, `/shared`, `/stats`, `/guide`, and `/welcome`.
+
+The gateway serves the contract paths as the public shell, with no session. The client does not send the browser to `/login` on its own.
 
 When the hub answers a request with 401, the app stores the current path in `sessionStorage` under `rivethub.returnTo`. A signed-in visitor never stores one. The login page replaces the document with `/`. The root route then redirects to the stored path, including `?embed=1` when that query was present. The stored value is accepted only as a same-origin path. A protocol-relative URL, a `..` segment, or a URL with a scheme is dropped.
 
