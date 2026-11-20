@@ -3,6 +3,7 @@
   "compilerOptions": {
     "types": ["node"],
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023"]
   },
   "include": ["scripts/**/*.ts"]

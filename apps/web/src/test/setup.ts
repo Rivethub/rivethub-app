@@ -6,6 +6,8 @@ import { reloadPins } from "../lib/pins";
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
+  delete (window as { rivethub?: unknown }).rivethub;
   reloadPins();
   document.documentElement.dataset.theme = "everforest";
 });

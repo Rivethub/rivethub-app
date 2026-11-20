@@ -5,6 +5,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useAccount, useHarnesses, useHubs, useLibraryCounts, useMe, useMemoryStats, useModelJobs, usePins, useReviewQueue } from "../client/queries";
 import { harnessAction } from "../lib/connections";
+import { useEmbedded } from "../lib/embed-state";
 import { subjectHref } from "../lib/format";
 import { useIsPhone, useIsWide } from "../lib/media";
 import { useTheme, THEMES } from "../theme";
@@ -27,18 +28,19 @@ const scrollPane = "relative overflow-y-auto";
 export function Frame({ sidebar, aside, tabs, children }: { sidebar: ReactNode; aside?: ReactNode; tabs?: boolean; children: ReactNode }) {
   const phone = useIsPhone();
   const wide = useIsWide();
+  const embedded = useEmbedded();
   if (phone) {
     return (
-      <div className="flex h-dvh flex-col bg-background text-foreground">
+      <div data-embedded={embedded ? "true" : "false"} className="flex h-dvh flex-col bg-background text-foreground">
         <main id="main" className={cx("flex min-w-0 flex-1 flex-col", scrollPane)}>{children}</main>
         {tabs && <MobileTabs />}
       </div>
     );
   }
   return (
-    <div className="flex h-dvh bg-sidebar text-foreground">
+    <div data-embedded={embedded ? "true" : "false"} className={cx("flex h-dvh text-foreground", embedded ? "bg-background" : "bg-sidebar")}>
       {sidebar}
-      <div className={cx("my-2 mr-2 flex min-w-0 flex-1 overflow-hidden rounded-[18px] border border-border bg-background", !sidebar && "ml-2")}>
+      <div className={cx("flex min-w-0 flex-1 overflow-hidden bg-background", embedded ? "" : cx("my-2 mr-2 rounded-[18px] border border-border", !sidebar && "ml-2"))}>
         <main id="main" className={cx("flex min-w-0 flex-1 flex-col", scrollPane)}>
           {children}
           {aside && !wide && <div className="flex border-t border-border">{aside}</div>}
@@ -121,12 +123,15 @@ export function MainSidebar({ children }: { children?: ReactNode }) {
   const row = (to: string) => cx(navRow, at(to) && "bg-selected");
   const current = (to: string) => (at(to) ? ("page" as const) : undefined);
   const sharing = at("/shared") || at("/share") || at("/receive");
+  const embedded = useEmbedded();
   return (
     <SidebarShell>
-      <Link to="/" className="flex items-center gap-2 px-2 pt-1 pb-2.5 text-foreground hover:no-underline">
-        <Logo />
-        <span aria-hidden="true" className="font-bold" style={{ fontFamily: "Inter, sans-serif" }}>rivet<span className="text-primary">hub</span></span>
-      </Link>
+      {!embedded && (
+        <Link to="/" className="flex items-center gap-2 px-2 pt-1 pb-2.5 text-foreground hover:no-underline">
+          <Logo />
+          <span aria-hidden="true" className="font-bold" style={{ fontFamily: "Inter, sans-serif" }}>rivet<span className="text-primary">hub</span></span>
+        </Link>
+      )}
       <button type="button" onClick={palette.open} className="mb-2 flex items-center gap-2 rounded-full border border-border bg-card px-3 py-[7px] text-left text-muted-foreground hover:text-foreground">
         <SearchIcon size={14} />
         <span className="flex-1">Search or jump to…</span>

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAccount, useCapabilities, useHarnesses, useUpdateAccount } from "../client/queries";
 import { Logo } from "../components/shell";
 import { Button, cx, ErrorNote, SampleBadge } from "../components/ui";
+import { isMemoryItemPath } from "../lib/return-to";
 import { useDeviceSignIn } from "../lib/signin";
 import { Connections } from "./settings";
 
@@ -36,6 +37,8 @@ export function FirstRunGate() {
   const harnesses = useHarnesses().data;
   const path = useRouterState({ select: (s) => s.location.pathname });
   if (caps?.account !== "live" || path === "/welcome" || welcomed() || !harnesses) return null;
+  // A host opened a specific memory item. Setup can wait until the person visits Today.
+  if (isMemoryItemPath(path)) return null;
   if (harnesses.some((h) => h.capture.state === "receiving" || h.capture.state === "stale")) return null;
   return <Navigate to="/welcome" replace />;
 }

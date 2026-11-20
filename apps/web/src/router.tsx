@@ -1,5 +1,7 @@
-import { createRootRoute, createRoute, createRouter, Outlet, redirect, type RouterHistory } from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter, Outlet, redirect, retainSearchParams, type RouterHistory } from "@tanstack/react-router";
 import { PaletteProvider } from "./components/palette";
+import { EmbedState } from "./lib/embed-state";
+import { takeReturn } from "./lib/return-to";
 import { EntitiesIndex, EntityPage } from "./routes/entity";
 import { GuidePage } from "./routes/guide";
 import { ReceivePage } from "./routes/receive";
@@ -30,11 +32,19 @@ export const SETTINGS_SECTIONS = ["connections", "account", "sharing", "keys", "
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 const rootRoute = createRootRoute({
+  validateSearch: (s: Raw) => clean({ embed: s.embed === "1" || s.embed === 1 ? (1 as const) : undefined }),
+  search: { middlewares: [retainSearchParams(["embed"])] },
+  beforeLoad: ({ location }) => {
+    const back = takeReturn(location.pathname, location.searchStr);
+    if (back) throw redirect({ href: back });
+  },
   component: () => (
-    <PaletteProvider>
-      <FirstRunGate />
-      <Outlet />
-    </PaletteProvider>
+    <EmbedState>
+      <PaletteProvider>
+        <FirstRunGate />
+        <Outlet />
+      </PaletteProvider>
+    </EmbedState>
   ),
 });
 
