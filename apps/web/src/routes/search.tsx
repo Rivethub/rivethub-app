@@ -9,7 +9,7 @@ import { Frame, MainSidebar } from "../components/shell";
 import { cx, SampleBadge } from "../components/ui";
 import { markStep } from "../lib/journey";
 import { useIsPhone } from "../lib/media";
-import { summaryRangeSearch, withoutSourceMarkers } from "../lib/summary";
+import { passageExcerpt, sectionHeading, summaryRangeSearch } from "../lib/summary";
 
 const route = getRouteApi("/search");
 
@@ -183,9 +183,9 @@ export function SearchPage() {
                           <span className="rounded-full border border-primary px-2.5 py-px text-primary">Open session</span>
                         </span>
                         {p.passage && !!p.sections?.length && (
-                          <span className="text-[13px] font-medium">{p.sections.map((section) => section.heading).join(" · ")}</span>
+                          <span className="text-[13px] font-medium">{p.sections.map((section) => sectionHeading(section.heading)).join(" · ")}</span>
                         )}
-                        <span className={cx("break-words text-[14px] leading-[1.55] text-muted-foreground", p.passage && "whitespace-pre-wrap")}><Highlight text={p.passage ? withoutSourceMarkers(p.text) : p.text} query={params.match === "pattern" ? "" : query} /></span>
+                        <span className="break-words text-[14px] leading-[1.55] text-muted-foreground"><Highlight text={p.passage ? passageExcerpt(p.text, query) : p.text} query={params.match === "pattern" ? "" : query} /></span>
                       </Link>
                     </li>
                   ))}
