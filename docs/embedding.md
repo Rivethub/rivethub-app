@@ -140,20 +140,29 @@ xvfb-run -a -s '-screen 0 1920x1080x24' \
   env -u ELECTRON_RUN_AS_NODE \
   EMBED_HUB_ORIGIN=http://127.0.0.1:5298 \
   EMBED_LOGIN_URL="$(cat /tmp/rh-login-url)" \
-  EMBED_CERT="$HOME/.rivethub/tls/holder.cert.pem" \
+  EMBED_CERT=/absolute/path/to/the/served/certificate.pem \
   EMBED_REPORT=/tmp/rh-embed-report.json \
   electron apps/desktop/e2e/embed-frame.mjs
 env -i HOME="$HOME" PATH="$PATH" rh stop
 ```
 
-Omit `EMBED_CERT` when the origin is HTTP. The report JSON has the header values, the cookie name and `SameSite`, the API status with and without the cookie, and the iframe console line. It has no code and no cookie value.
+Omit `EMBED_CERT` when the origin is HTTP. On `rh` 0.8.16 and later, `rh tls fingerprint --json` prints the certificate path as `cert`. The report JSON has the header values, the cookie name and `SameSite`, the API status with and without the cookie, and the iframe console line. It has no code and no cookie value.
 
 `SameSite=strict` was enough for this partition because the webview's document is on the hub origin. The iframe never got a document, so it never held the session.
 
-## What the runtime still has to change
+## What the runtime provides from 0.8.16
 
-Two runtime behaviors still bound what a host can do. Both are in the gateway, not in this repo.
+`rh` 0.8.16 answers a host in JSON, so a host no longer reads prose or scrapes the login URL. The runtime README section "Run rh inside another application" is the reference for the fields and exit codes.
 
-The login page always finishes with `location.replace("/")` in `crates/gateway/src/routes/login.js` line 23. The web app repairs that when the same tab loaded a memory URL first. A host that opens `/login` in a new webview, or that cannot keep `sessionStorage`, still loses the path. The login script should return to a same-origin `next` path, or read `sessionStorage["rivethub.returnTo"]` before it replaces the document.
+| Need | Command |
+| --- | --- |
+| Is the node running, where, and can it serve this build | `rh status --json` |
+| A one-time login URL and code | `rh open --json`. It exits 12 when the node runs and has no web app. |
+| The certificate to pin | `rh tls fingerprint --json`. It fails on a node that serves plain HTTP. |
+| Install a build the host already downloaded and verified | `rh update --web-only --from <archive> --sha256 <hex>` |
 
-`crates/gateway/src/auth.rs` function `harden` sets `frame-ancestors 'none'` at line 409 and `X-Frame-Options: DENY` at line 413, on the whole router, including the shell and `version.json`. An Electron `<webview>` does not need that changed. A host that frames the app in an `<iframe>` does. Until those two headers allow the host's origin, an iframe will not load the app, and it will not receive the session cookie.
+To sign in and land on a memory item, build the login URL as `<origin>/login?next=<path>#code=<code>`, with the path percent-encoded. The login page follows `next` only when it is a path on the same origin. On `rh` before 0.8.16 the login page always lands on `/`, and the web app restores the path only when the same tab loaded it first.
+
+## What the runtime does not allow
+
+The gateway sends `frame-ancestors 'none'` and `X-Frame-Options: DENY` on every response, including the shell and `version.json`. That is deliberate: it stops another site from framing a signed-in hub. An Electron `<webview>` is a top-level guest and is not affected. A host that frames the app in an `<iframe>` will not load it and will not receive the session cookie.

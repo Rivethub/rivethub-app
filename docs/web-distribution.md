@@ -56,3 +56,13 @@ The index has its own integer `schemaVersion` of `1`, a `generatedAt` timestamp 
 Each array contains up to 10 builds, newest first. Build versions sort by numeric base version, then by numeric beta number for beta builds or by UTC date and numeric run number for nightlies. A channel with no builds has an empty array.
 
 Take the first entry on the desired channel whose `manifest.minRhVersion` is less than or equal to the installed `rh` version under SemVer precedence. If no entry matches, the index offers no compatible build on that channel. Pin the selected `manifest.version` and `manifest.sha256`, download `archiveUrl`, and verify the digest before installing.
+
+## Install a verified build
+
+`rh` 0.8.16 and later installs an archive the host already holds, with no network request.
+
+```sh
+rh update --web-only --from rivethub-web-0.8.16.tar.gz --sha256 <the pinned digest>
+```
+
+`rh` reads `web-manifest.json` from beside the archive, or from the path given with `--manifest`. It refuses the install when the digest differs from the manifest or the archive, or when the build's `minRhVersion` is above the installed `rh`. `rh status --json` then reports the build under `web`.
