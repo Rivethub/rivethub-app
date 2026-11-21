@@ -17,6 +17,7 @@ const ROLE_NAME: Record<ModelRole, string> = {
   summarizer: "Summarizer",
   categorizer: "Categorizer",
   "wiki-writer": "Wiki writer",
+  "entity-builder": "Entity builder",
   embedder: "Embedder",
 };
 
@@ -122,13 +123,14 @@ function HarnessRow({ harness }: { harness: HarnessStatus }) {
 function JobRow({ job }: { job: ModelJob }) {
   const { palette } = useTheme();
   const color = job.health === "healthy" ? palette.success : job.health === "slow" ? palette.warning : palette.error;
-  const label = job.health === "healthy" ? "OK" : job.health === "slow" ? "Slow" : "Failing";
+  const label = job.health === "healthy" ? "OK" : job.health === "slow" ? "Slow" : job.health === "not-running" ? "Not running" : "Failing";
   const model = job.model ?? job.provider ?? "Unset";
-  const source = job.inheritsDefault && job.role !== "default" ? `${model} (default)` : model;
+  const named = job.inheritsDefault && job.role !== "default" ? `${model} (default)` : model;
+  const source = job.reportedBy ? `${named} on ${job.reportedBy}` : named;
   return (
     <View style={{ minHeight: 52, flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: palette.border }}>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: palette.foreground }}>{ROLE_NAME[job.role]}</Text>
+        <Text style={{ color: palette.foreground }}>{ROLE_NAME[job.role] ?? job.role}</Text>
         <Text style={{ color: palette.muted, fontSize: 12 }}>{source}</Text>
         {job.role !== "default" && job.detail ? <Text style={{ color: job.health === "healthy" ? palette.muted : color, fontSize: 12 }}>{job.detail}</Text> : null}
       </View>

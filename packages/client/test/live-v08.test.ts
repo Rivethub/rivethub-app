@@ -219,7 +219,9 @@ describe("createClient against a v0.8 hub", () => {
     expect([caps.entities, caps.harnesses, caps.models, caps.sessions]).toEqual(["live", "live", "live", "live"]);
     expect((await client.entities()).map((e) => e.id)).toEqual(["nas-01", "rh"]);
     expect((await client.harnesses()).map((h) => h.id)).toEqual(["claude-code", "codex"]);
-    expect((await client.modelJobs()).map((j) => j.role)).toEqual(["default", "summarizer", "wiki-writer"]);
+    const jobs = await client.modelJobs();
+    expect(jobs.map((j) => j.role)).toEqual(["default", "summarizer", "wiki-writer"]);
+    expect(jobs[1]).toMatchObject({ outage: "unreachable", reportedBy: "datahub" });
     expect((await client.sessions({})).items[0]!.childCount).toBe(2);
     expect(fake.calls.some((call) => call.path.startsWith("/api/topics/filing"))).toBe(false);
   });

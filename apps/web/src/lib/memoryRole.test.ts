@@ -17,6 +17,12 @@ describe("describeMemoryRole", () => {
     expect(memoryRoleStatus(reading)).toBe("Running · 0 waiting");
   });
 
+  it("names the node a worker reports from, and the entity builder", () => {
+    const job = role({ role: "entity-builder", provider: "http://192.0.2.7:8003/v1", model: "thinkingcap-flash-next", reportedBy: "datahub" });
+    expect(describeMemoryRole(job, [job])).toMatchObject({ name: "Entity builder", modelLine: "http://192.0.2.7:8003/v1 · thinkingcap-flash-next", reportedBy: "datahub" });
+    expect(describeMemoryRole(role({ role: "summarizer", provider: "claude-cli", model: "opus" }), [])).not.toHaveProperty("reportedBy");
+  });
+
   it("shows an outage and the jobs waiting on a worker that is failing", () => {
     const job = role({ role: "categorizer", provider: "gpubox", model: "thinkingcap-flash-next", health: "failing", queued: 1628, outage: "the worker stopped claiming" });
     const reading = describeMemoryRole(job, [job]);
