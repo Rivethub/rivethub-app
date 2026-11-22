@@ -1,5 +1,7 @@
 import { keys, memoryWideKeys } from "@rivethub/client-runtime/query-keys";
 import type {
+  BuilderPause,
+  BuilderRole,
   Capability,
   EntityId,
   EntityType,
@@ -22,6 +24,8 @@ import { useSyncExternalStore } from "react";
 import { withFreshLogin } from "./auth";
 import { markStep } from "../lib/journey";
 import { useClient, type AppClient } from "./context";
+
+const BUILDER_PAUSES = ["upkeep", "builders"] as const;
 
 function q<T>(key: QueryKey, fn: (c: AppClient) => Promise<T>, enabled = true, live = false) {
   const client = useClient();
@@ -67,6 +71,10 @@ export const useLastCrashReport = () => q(keys.crash, (c) => (c.lastCrashReport 
 /** `null` when the client has no upkeep reads, so the Stats screen can say so. */
 export const useMemoryStats = () => q(["upkeep", "stats"], (c) => (c.upkeep ? c.upkeep.stats() : Promise.resolve(null)));
 export const useFlagged = () => q(["upkeep", "flagged"], (c) => (c.upkeep ? c.upkeep.flagged() : Promise.resolve([])));
+
+/** `null` when this hub has no pause routes or the caller is not its owner, so the section is left out. */
+export const useBuilderPauses = () =>
+  q(BUILDER_PAUSES, (c) => (c.upkeep ? c.upkeep.builderPauses() : Promise.resolve(null)), true, true);
 
 export function useIsSample(cap: Capability): boolean {
   return useCapabilities().data?.[cap] === "sample";
@@ -233,6 +241,20 @@ export const useSetPinned = () =>
   );
 export const useRetryFlagged = () => useWrite((c, id: string) => (c.upkeep ? c.upkeep.retry(id) : Promise.resolve()), () => [["upkeep"]]);
 export const useDismissFlagged = () => useWrite((c, id: string) => (c.upkeep ? c.upkeep.dismiss(id) : Promise.resolve()), () => [["upkeep"]]);
+
+/** The hub's answer replaces that builder's row, so the switch shows what the hub holds without a refetch. */
+export function useSetBuilderPaused() {
+  const client = useClient();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (a: { role: BuilderRole; paused: boolean }) => {
+      if (!client.upkeep) throw new Error("This hub does not report its builders to the app.");
+      return client.upkeep.setBuilderPaused(a.role, a.paused);
+    },
+    onSuccess: (entry) =>
+      qc.setQueryData<BuilderPause[] | null>(BUILDER_PAUSES, (rows) => rows?.map((row) => (row.role === entry.role ? entry : row)) ?? rows),
+  });
+}
 
 export const useMe = () => q(["me"], (c) => c.me());
 export const useTagOperations = () => q(["tag-operations"], (c) => c.tagOperations ? c.tagOperations() : Promise.resolve([]));
