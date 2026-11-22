@@ -6,6 +6,7 @@ import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
 import { MobileBack } from "../components/article";
+import { BuilderPauses } from "../components/builder-pauses";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
@@ -388,6 +389,7 @@ export function Connections({ phone }: { phone: boolean }) {
           </div>
         )}
       </section>
+      <BuilderPauses phone={phone} />
       {connecting && <ConnectDialog harness={connecting.h} part={connecting.part} onClose={() => setConnecting(null)} />}
     </>
   );

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { createRhClient } from "../src/rh/index.js";
 import { createUpkeepClient } from "../src/upkeep/index.js";
-import { fakeRh, noContent } from "./fake.js";
+import { HttpError } from "../src/errors.js";
+import { fakeRh, noContent, type Call } from "./fake.js";
 
 const BASE = "http://127.0.0.1:5174";
 
@@ -61,5 +62,64 @@ describe("upkeep", () => {
     await client.retry(group!.id);
     await client.dismiss(group!.id);
     expect(rh.calls.slice(-2).map((c) => `${c.method} ${c.path}`)).toEqual(["POST /api/memory/flagged/41/retry", "POST /api/memory/flagged/41/dismiss"]);
+  });
+});
+
+describe("builder pauses", () => {
+  const PAUSED_AT = 1_795_881_600_000;
+  const roles = [
+    { role: "categorizer", paused: false, queued: 0 },
+    { role: "wiki-builder", paused: false, queued: 12 },
+    { role: "entity-builder", paused: true, pausedAt: PAUSED_AT, pausedBy: "owner", queued: 4210 },
+  ];
+
+  it("reads each builder, with when it was paused", async () => {
+    const rh = fakeRh({ "GET /api/memory/workers/pauses": { roles } });
+    const got = await createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch }).builderPauses();
+    expect(got).toEqual([
+      { role: "categorizer", paused: false, queued: 0 },
+      { role: "wiki-builder", paused: false, queued: 12 },
+      { role: "entity-builder", paused: true, pausedAt: new Date(PAUSED_AT).toISOString(), pausedBy: "owner", queued: 4210 },
+    ]);
+  });
+
+  it("skips a role it does not know and keeps the rest", async () => {
+    const rh = fakeRh({ "GET /api/memory/workers/pauses": { roles: [{ role: "summarizer", paused: false, queued: 1 }, roles[1]] } });
+    const got = await createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch }).builderPauses();
+    expect(got?.map((r) => r.role)).toEqual(["wiki-builder"]);
+  });
+
+  it.each([
+    ["has no route", { status: 404, body: { error: "not found" } }],
+    ["refuses the method", { status: 405, body: { error: "method not allowed" } }],
+    ["is not on Postgres", { status: 503, body: { error: "pausing workers needs a Postgres hub" } }],
+    ["says the caller is not the owner", { status: 403, body: { error: "owner only" } }],
+  ])("returns null when the hub %s", async (_name, reply) => {
+    const rh = fakeRh({ "GET /api/memory/workers/pauses": reply });
+    expect(await createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch }).builderPauses()).toBeNull();
+  });
+
+  it("does not hide a server error", async () => {
+    const rh = fakeRh({ "GET /api/memory/workers/pauses": { status: 500, body: { error: "boom" } } });
+    await expect(createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch }).builderPauses()).rejects.toBeInstanceOf(HttpError);
+  });
+
+  it("pauses and resumes one builder and returns the hub's entry", async () => {
+    const rh = fakeRh({
+      "PUT /api/memory/workers/entity-builder/pause": (call: Call) =>
+        (call.body as { paused: boolean }).paused ? roles[2] : { role: "entity-builder", paused: false, queued: 4210 },
+    });
+    const client = createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch });
+    expect(await client.setBuilderPaused("entity-builder", true)).toMatchObject({ role: "entity-builder", paused: true, pausedAt: new Date(PAUSED_AT).toISOString() });
+    expect(await client.setBuilderPaused("entity-builder", false)).toEqual({ role: "entity-builder", paused: false, queued: 4210 });
+    expect(rh.calls.map((c) => `${c.method} ${c.path} ${JSON.stringify(c.body)}`)).toEqual([
+      'PUT /api/memory/workers/entity-builder/pause {"paused":true}',
+      'PUT /api/memory/workers/entity-builder/pause {"paused":false}',
+    ]);
+  });
+
+  it("raises a refused change so the screen can say so", async () => {
+    const rh = fakeRh({ "PUT /api/memory/workers/categorizer/pause": { status: 403, body: { error: "owner only" } } });
+    await expect(createUpkeepClient({ baseUrl: BASE, fetch: rh.fetch }).setBuilderPaused("categorizer", true)).rejects.toMatchObject({ status: 403 });
   });
 });

@@ -1,6 +1,7 @@
 import { createSampleClient as createSharedSampleClient } from "@rivethub/client";
 import { entityTypeLabel, groupEntities } from "@rivethub/client-runtime/format";
 import type {
+  BuilderPause,
   Capability,
   Change,
   CrashReport,
@@ -587,7 +588,21 @@ export function createSampleClient(options: { latencyMs?: number } = {}): AppCli
         flagged = flagged.filter((g) => g.id !== id);
         return wait(undefined);
       };
+      let builders: BuilderPause[] = [
+        { role: "categorizer", paused: false, queued: 0 },
+        { role: "wiki-builder", paused: false, queued: 12 },
+        { role: "entity-builder", paused: true, pausedAt: data.at(0, "09:30"), pausedBy: "owner", queued: 4210 },
+      ];
       return {
+        builderPauses: () => wait(builders),
+        async setBuilderPaused(role, paused) {
+          const before = builders.find((b) => b.role === role)!;
+          const next: BuilderPause = paused
+            ? { ...before, paused: true, pausedAt: before.pausedAt ?? (new Date().toISOString() as IsoTime), pausedBy: "owner" }
+            : { role, paused: false, queued: before.queued };
+          builders = builders.map((b) => (b.role === role ? next : b));
+          return wait(next);
+        },
         stats: () =>
           wait({
             sessions: 1284,
