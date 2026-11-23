@@ -189,7 +189,7 @@ describe("packageWebRelease", () => {
 describe("readWebPackage", () => {
   it("reads the version and minimum rh this repo declares", async () => {
     const declared = await readWebPackage(fileURLToPath(new URL("../package.json", import.meta.url)));
-    expect(declared.version).toBe("0.8.16");
+    expect(declared.version).toBe("0.8.17");
     expect(declared.minRhVersion).toBe("0.8.3");
   });
 
