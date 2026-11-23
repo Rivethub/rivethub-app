@@ -99,7 +99,7 @@ describe("Settings server", () => {
     }));
     const node = await screen.findByRole("region", { name: "This node" });
     expect(within(node).getByText("workstation")).toBeInTheDocument();
-    expect(within(node).getByText("Spaces on this node: household")).toBeInTheDocument();
+    expect(within(node).getByText("Spaces on this node: This device")).toBeInTheDocument();
     const team = screen.getByRole("region", { name: "Team servers" });
     expect(within(team).getByText("A team server connection sends and receives shared sessions. It does not switch this window.")).toBeInTheDocument();
     expect(within(team).getByText("192.0.2.14:5174")).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("Settings server", () => {
   it("says a team server is added in the desktop app when this page cannot share", async () => {
     renderAt("/settings/server");
     expect(await screen.findByText("Adding a team server is in the RivetHub desktop app.")).toBeInTheDocument();
-    expect(screen.getByText("Spaces on this node: household")).toBeInTheDocument();
+    expect(screen.getByText("Spaces on this node: This device")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add a team server" })).not.toBeInTheDocument();
   });
 });

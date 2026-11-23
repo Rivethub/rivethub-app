@@ -551,7 +551,7 @@ export function createSampleClient(options: SampleClientOptions = {}): MemoryCli
     },
 
     async me(): Promise<Me> {
-      return { user: "you", spaces: [{ id: "household", kind: "household", name: "Household" }], settings: { defaultVisibility: "private", chosen: true } };
+      return { user: "you", spaces: [{ id: "household", kind: "household", name: "This device" }], settings: { defaultVisibility: "private", chosen: true } };
     },
 
     async updateAccount(patch) {

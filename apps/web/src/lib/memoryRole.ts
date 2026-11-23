@@ -17,6 +17,7 @@ const ROLE_NAME: Record<string, string> = {
   summarizer: "Summarizer",
   categorizer: "Categorizer",
   "wiki-writer": "Wiki writer",
+  "entity-builder": "Entity builder",
   embedder: "Embedder",
 };
 
@@ -30,6 +31,8 @@ export interface MemoryRoleReading {
   /** A Today clause. Empty when this role is not a problem. */
   problem: string;
   outage?: string;
+  /** The nodes whose workers report this role. */
+  reportedBy?: string;
 }
 
 const NO_MODEL = "No model set";
@@ -75,6 +78,7 @@ export function describeMemoryRole(job: ModelJob, roles: readonly ModelJob[]): M
   const name = roleName(job.role);
   const modelLine = modelLineOf(job, roles);
   const outage = job.outage?.trim() || undefined;
+  const reportedBy = job.reportedBy?.trim() || undefined;
   return {
     role: job.role,
     name,
@@ -83,6 +87,7 @@ export function describeMemoryRole(job: ModelJob, roles: readonly ModelJob[]): M
     waiting: job.queued,
     problem: problemOf(job, name, job.queued),
     ...(outage ? { outage } : {}),
+    ...(reportedBy ? { reportedBy } : {}),
   };
 }
 

@@ -401,6 +401,8 @@ export interface ModelJob {
   lastRan?: IsoTime;
   /** Why a worker that had been running has stopped claiming jobs. */
   outage?: string;
+  /** The nodes whose workers report this role. Absent when the hub shows its own configuration. */
+  reportedBy?: string;
 }
 
 export interface Hub {

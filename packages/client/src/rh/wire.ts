@@ -433,6 +433,7 @@ export const modelJobList = rows(
     queued: z.number(),
     lastRan: nullish(timeSchema),
     outage: nullish(z.string()),
+    reportedBy: nullish(z.string()),
   }),
 );
 

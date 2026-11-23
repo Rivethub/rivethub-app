@@ -58,6 +58,7 @@ The build was driven read-only against a development node (rh 0.8.3 on Postgres:
 
 - Read membership spaces from the hub through the shared client; never invent space names or infer membership from sessions.
 - Offer no control without a live route; never send a live write to sample data.
+- **Background builders** (Settings, Connections) switch the categorizer, wiki builder and entity builder through `GET /api/memory/workers/pauses` and `PUT /api/memory/workers/{role}/pause` (rh 0.8.17, owner only). `UpkeepClient.builderPauses()` returns null on 404, 405, 503 (a SQLite hub) and 403 (not the owner), and the section is then left out. A non-owner cannot even read the state, so there is nothing to show read-only. A worker older than 0.8.17 ignores a pause. The phone app has no switch yet.
 
 - Descriptive wire values are open; preserve raw labels with a plain UI fallback, and drop unusable list rows with a warning. Keep action/security discriminants strict.
 - `owner` is present only for a teammate’s session; retain it through mapping, attribute prompts to them, and hide owner-only controls.

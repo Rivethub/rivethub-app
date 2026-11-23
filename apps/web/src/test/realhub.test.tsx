@@ -86,7 +86,7 @@ describe("Settings icon", () => {
 describe("Hub footer", () => {
   it("names the space beside the local hub", async () => {
     renderWith("/", () => ({}));
-    expect(await screen.findByText("household · Local hub · 4 tools")).toBeInTheDocument();
+    expect(await screen.findByText("This device · Local hub · 4 tools")).toBeInTheDocument();
   });
 });
 
@@ -409,12 +409,12 @@ describe("Session controls match the hub", () => {
     const picker = await screen.findByRole("combobox", { name: "Shared with" });
     expect(within(picker).getAllByRole("option").map((o) => o.textContent)).toEqual(["Private", "Engineering", "Research"]);
     expect(picker).toHaveValue("space:space-1");
-    expect(within(picker).queryByText("household")).not.toBeInTheDocument();
+    expect(within(picker).queryByText("This device")).not.toBeInTheDocument();
   });
 
-  it("offers household only if the hub returns it", async () => {
-    renderWith("/sessions/s-controls", () => ({ session: async () => detail, me: async () => ({ ...membership, spaces: [{ id: "h", kind: "household", name: "household" }] }) }));
-    expect(await screen.findByRole("option", { name: "household" })).toHaveValue("space:h");
+  it("offers the default space only if the hub returns it", async () => {
+    renderWith("/sessions/s-controls", () => ({ session: async () => detail, me: async () => ({ ...membership, spaces: [{ id: "h", kind: "household", name: "This device" }] }) }));
+    expect(await screen.findByRole("option", { name: "This device" })).toHaveValue("space:h");
   });
 
   it("explains private sessions without a dropdown when there are no spaces", async () => {
@@ -494,7 +494,7 @@ it("allows an explicitly supported rename and keeps the hub's refusal reason", a
 it("uses hub membership names in Sharing settings", async () => {
   renderWith("/settings/sharing", () => ({ me: async () => ({ user: "phil", spaces: [{ id: "opaque-id", kind: "team", name: "Engineering" }], settings: { defaultVisibility: "private", chosen: true } }) }));
   expect(await screen.findByText("Engineering")).toBeInTheDocument();
-  expect(screen.queryByText("household")).not.toBeInTheDocument();
+  expect(screen.queryByText("This device")).not.toBeInTheDocument();
 });
 
 it("groups Shared sessions under membership names, including spaces with no sessions", async () => {
@@ -505,6 +505,6 @@ it("groups Shared sessions under membership names, including spaces with no sess
   expect(await screen.findByText("Engineering")).toBeInTheDocument();
   expect(screen.getByText("Research")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Shared work/ })).toBeInTheDocument();
-  expect(screen.queryByText("household")).not.toBeInTheDocument();
+  expect(screen.queryByText("This device")).not.toBeInTheDocument();
   expect(screen.queryByText("opaque-id")).not.toBeInTheDocument();
 });

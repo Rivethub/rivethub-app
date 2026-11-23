@@ -187,6 +187,6 @@ export const connectOutcomeBody = { diff: "--- a/config.toml\n+++ b/config.toml\
 /** crates/wire/src/gateway/memory_models.rs: ModelJob[]. */
 export const modelJobsBody = [
   { role: "default", provider: "big", model: "big-model", inheritsDefault: false, health: "healthy", detail: "inherited by categorizer, wiki-writer", queued: 0 },
-  { role: "summarizer", inheritsDefault: false, health: "failing", detail: "2 queued", queued: 2 },
+  { role: "summarizer", inheritsDefault: false, health: "failing", detail: "2 queued", queued: 2, outage: "unreachable", reportedBy: "datahub" },
   { role: "wiki-writer", inheritsDefault: true, health: "slow", detail: "", queued: 0 },
 ];

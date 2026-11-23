@@ -13,8 +13,8 @@ describe("currentHubSummary", () => {
   it("counts receiving harnesses on a local hub and shows a team hub's detail", () => {
     expect(currentHubSummary([hub({ current: true })], 2).meta).toBe("Local hub · 2 tools");
     expect(currentHubSummary([hub({ current: true })], undefined).meta).toBe("Local hub");
-    expect(currentHubSummary([hub({ current: true })], 4, ["household"]).meta).toBe("household · Local hub · 4 tools");
-    expect(currentHubSummary([hub({ current: true })], 4, ["household", "lab"]).meta).toBe("household, lab · Local hub · 4 tools");
+    expect(currentHubSummary([hub({ current: true })], 4, ["This device"]).meta).toBe("This device · Local hub · 4 tools");
+    expect(currentHubSummary([hub({ current: true })], 4, ["This device", "lab"]).meta).toBe("This device, lab · Local hub · 4 tools");
     expect(currentHubSummary([hub({ current: true, kind: "team", detail: "team.example" })], 2)).toEqual({ name: "desk", meta: "team.example", online: true });
   });
 });

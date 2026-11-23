@@ -6,6 +6,7 @@ import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
 import { MobileBack } from "../components/article";
+import { BuilderPauses } from "../components/builder-pauses";
 import { Modal } from "../components/modal";
 import { Frame, HubList } from "../components/shell";
 import { Button, cx, Dot, ErrorNote, Loading, SampleBadge } from "../components/ui";
@@ -352,7 +353,11 @@ export function Connections({ phone }: { phone: boolean }) {
         <div className="flex items-baseline gap-2.5">
           <h2 id="jobs-h" className={cx("m-0 flex-1 font-semibold", phone ? "text-[12px] text-muted-foreground" : "text-[15px]")}>{phone ? "WHO DOES THE WORK" : "Who does the work"}</h2>
         </div>
-        <p className="m-0 text-[12px] text-muted-foreground">Set in the hub's configuration, under <code className="font-mono">memory.models</code>. This screen cannot change them.</p>
+        {readings.some((reading) => reading.reportedBy) || js.some((job) => job.health === "not-running") ? (
+          <p className="m-0 text-[12px] text-muted-foreground">Reported by the workers that do each job. Each worker's own configuration sets its model. This screen cannot change them.</p>
+        ) : (
+          <p className="m-0 text-[12px] text-muted-foreground">Set in the hub's configuration, under <code className="font-mono">memory.models</code>. This screen cannot change them.</p>
+        )}
         {js.every(unset) && (
           <p className="m-0 max-w-[70ch] rounded-xl border border-dashed border-input p-4 text-[13px] leading-[1.55] text-muted-foreground">
             <span className="font-semibold text-foreground">No model is set.</span> Capture, the session list and word search work without one. Summaries, topics, entities and the wiki need a chat model, and search by meaning needs an embedding model; both can run on this machine. Set them under <code className="rounded bg-code px-1 py-px font-mono text-[12px]">memory.models</code> in <code className="rounded bg-code px-1 py-px font-mono text-[12px]">~/.rivethub/config.yaml</code>, then restart <code className="rounded bg-code px-1 py-px font-mono text-[12px]">rh</code>.
@@ -365,6 +370,7 @@ export function Connections({ phone }: { phone: boolean }) {
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span>{reading.name}</span>
                   <span className="break-words text-[12px] text-muted-foreground">{reading.modelLine}</span>
+                  {reading.reportedBy && <span className="break-words text-[12px] text-muted-foreground">on {reading.reportedBy}</span>}
                   <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
                 </span>
               </div>
@@ -376,12 +382,14 @@ export function Connections({ phone }: { phone: boolean }) {
               <div key={reading.role} className="flex flex-col gap-1.5 rounded-[10px] border bg-card p-3" style={{ borderColor: reading.state === "Running" || reading.state === "No model set" ? "var(--border)" : "color-mix(in srgb, var(--warning) 45%, transparent)" }}>
                 <span className="flex items-center justify-between"><span className="font-semibold">{reading.name}</span><Dot color={stateColor(reading.state)} size={7} /></span>
                 <span className="break-words text-[13px]">{reading.modelLine}</span>
+                {reading.reportedBy && <span className="break-words text-[12px] text-muted-foreground">on {reading.reportedBy}</span>}
                 <span className="text-[12px]" style={{ color: stateColor(reading.state) }}>{memoryRoleStatus(reading)}</span>
               </div>
             ))}
           </div>
         )}
       </section>
+      <BuilderPauses phone={phone} />
       {connecting && <ConnectDialog harness={connecting.h} part={connecting.part} onClose={() => setConnecting(null)} />}
     </>
   );
