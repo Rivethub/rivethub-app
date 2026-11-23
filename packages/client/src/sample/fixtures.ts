@@ -1048,7 +1048,7 @@ function hubs(): Hub[] {
   });
   return [
     hub("workstation", "workstation", "local", "https://127.0.0.1:5174", true, "Local · this machine · 1,284 sessions", true),
-    hub("household", "household", "team", "https://household.example.test:5174", true, "Team server · 3 people · 2 spaces", false),
+    hub("studio", "studio", "team", "https://studio.example.test:5174", true, "Team server · 3 people · 2 spaces", false),
     hub("lab-server", "lab-server", "team", "https://lab-server.example.test:5174", false, "Offline since Tue", false),
   ];
 }

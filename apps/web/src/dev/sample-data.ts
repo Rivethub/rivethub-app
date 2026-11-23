@@ -499,7 +499,7 @@ export const modelJobs: ModelJob[] = [
 
 export const hubs: Hub[] = [
   { id: "workstation" as HubId, name: "workstation", kind: "local", url: "#", online: true, detail: "Local · this machine · 1,284 sessions", current: true },
-  { id: "household" as HubId, name: "household", kind: "team", url: "#", online: true, detail: "Team server · 3 people · 2 spaces", current: false },
+  { id: "studio" as HubId, name: "studio", kind: "team", url: "#", online: true, detail: "Team server · 3 people · 2 spaces", current: false },
   { id: "lab-server" as HubId, name: "lab-server", kind: "team", url: "#", online: false, detail: "Offline since Tue", current: false },
 ];
 
