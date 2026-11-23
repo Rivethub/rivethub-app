@@ -33,7 +33,7 @@ describe("the sample world", () => {
     expect(jobs.find((job) => job.role === "categorizer")).toMatchObject({ health: "slow", queued: 12 });
     expect((await client.hubs()).map((hub) => [hub.name, hub.kind, hub.online])).toEqual([
       ["workstation", "local", true],
-      ["household", "team", true],
+      ["studio", "team", true],
       ["lab-server", "team", false],
     ]);
   });
