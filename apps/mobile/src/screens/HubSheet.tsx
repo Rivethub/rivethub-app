@@ -16,16 +16,72 @@ const ROWS: { section: SettingsSection; label: string; hint: string }[] = [
 
 export function HubSheet() {
   const { palette } = useTheme();
-  const { hubs, current, pairError, setOpen, selectHub } = useHub();
+  const { hubs, current, pairError, pendingPair, confirmPendingPair, cancelPendingPair, setOpen, selectHub } = useHub();
 
   const openSettings = (section: SettingsSection) => {
     setOpen(false);
     if (navigationRef.isReady()) navigationRef.navigate("Settings", { section });
   };
 
+  const replacesExisting = pendingPair ? hubs.some((hub) => hub.url === pendingPair.url) : false;
+
   return (
     <Sheet title="Hub" onClose={() => setOpen(false)}>
       {pairError ? <Text style={{ color: palette.error, fontSize: 13 }}>{pairError}</Text> : null}
+      {pendingPair ? (
+        <View
+          style={{
+            borderWidth: 1,
+            borderColor: palette.border,
+            borderRadius: 12,
+            padding: 12,
+            gap: 8,
+            backgroundColor: palette.card,
+          }}
+        >
+          <Text style={{ color: palette.foreground, fontSize: 15, fontWeight: "600" }}>
+            {replacesExisting ? `Replace connection to ${pendingPair.name}?` : `Connect to ${pendingPair.name}?`}
+          </Text>
+          <Text style={{ color: palette.muted, fontSize: 13 }}>{pendingPair.url}</Text>
+          <Text style={{ color: palette.muted, fontSize: 12 }}>
+            {pendingPair.token
+              ? "This pairing link includes an access token and will make this your active hub."
+              : "This will add the hub and make it active."}
+          </Text>
+          <View style={{ flexDirection: "row", gap: 10, paddingTop: 4 }}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => void confirmPendingPair()}
+              style={{
+                flex: 1,
+                minHeight: 40,
+                borderRadius: 8,
+                backgroundColor: palette.primary,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 12,
+              }}
+            >
+              <Text style={{ color: palette.primaryForeground, fontSize: 14, fontWeight: "600" }}>Connect</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={cancelPendingPair}
+              style={{
+                minHeight: 40,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: palette.border,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: 14,
+              }}
+            >
+              <Text style={{ color: palette.foreground, fontSize: 14 }}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
       {hubs.map((hub) => {
         const selected = hub.id === current?.id;
         return (

@@ -25,7 +25,7 @@ function readNodeUrl(): URL | null {
 function run(nodeUrl: URL): void {
   const origin = nodeUrl.origin;
   let mainWindow: BrowserWindow | null = null;
-  const rh = process.env["RIVETHUB_RH"] ?? (app.isPackaged ? bundledResources(process.resourcesPath).rh : "rh");
+  const rh = app.isPackaged ? bundledResources(process.resourcesPath).rh : (process.env["RIVETHUB_RH"] ?? "rh");
   // Only called once the app is ready, which `net` needs.
   const mintCode = () => mintLoginCode(origin, { rh, fetch: (input, init) => net.fetch(input as string, init) });
 

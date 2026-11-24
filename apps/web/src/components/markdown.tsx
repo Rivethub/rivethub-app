@@ -32,7 +32,7 @@ function renderInline(nodes: Inline[], key = ""): ReactNode[] {
             </a>
           );
         }
-        if (node.href.startsWith("/")) return <a key={k} href={node.href}>{label}</a>;
+        if (/^\/(?![/\\])/.test(node.href)) return <a key={k} href={node.href}>{label}</a>;
         return <Fragment key={k}>{label}</Fragment>;
       }
       case "strong":

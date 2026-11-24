@@ -10,7 +10,8 @@ import { NO_HUB_NOTICE, Notices } from "../data/notices";
 import type { RequestTrack } from "../data/hubFetch";
 import { loadSeed, type Seed } from "../data/seed";
 import { useTheme } from "../theme/Theme";
-import { parsePairLink, normalizeHubUrl } from "./pair";
+import { normalizeHubUrl, type PairPayload } from "./pair";
+import { resolvePairDeepLink } from "./pendingPair";
 import { togglePin } from "./pins";
 import { hubIdFor, loadHubState, saveHubState, upsertHub, type HubRecord } from "./records";
 import { secureKv } from "./secureKv";
@@ -27,8 +28,11 @@ interface HubApi {
   pins: SubjectRef[];
   open: boolean;
   pairError: string | null;
+  pendingPair: PairPayload | null;
   setOpen: (open: boolean) => void;
   addHub: (input: { url: string; name: string; token?: string }) => Promise<void>;
+  confirmPendingPair: () => Promise<void>;
+  cancelPendingPair: () => void;
   selectHub: (id: string) => Promise<void>;
   removeHub: (id: string) => Promise<void>;
   togglePin: (ref: SubjectRef) => void;
@@ -54,6 +58,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [pairError, setPairError] = useState<string | null>(null);
+  const [pendingPair, setPendingPair] = useState<PairPayload | null>(null);
   const [pins, setPins] = useState<SubjectRef[]>([]);
   const hubsRef = useRef(hubs);
   const currentRef = useRef(currentId);
@@ -149,24 +154,33 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const cancelPendingPair = useCallback(() => {
+    setPendingPair(null);
+    setPairError(null);
+  }, []);
+
+  const confirmPendingPair = useCallback(async () => {
+    if (!pendingPair) return;
+    try {
+      await addHub(pendingPair);
+      setPendingPair(null);
+    } catch (error: unknown) {
+      setPairError(error instanceof Error ? error.message : "Could not save that hub.");
+    }
+  }, [addHub, pendingPair]);
+
   useEffect(() => {
     const apply = (url: string | null) => {
-      if (!url?.startsWith("rivethub:")) return;
-      const parsed = parsePairLink(url);
-      if (!parsed) {
-        setPairError("That pairing link is not valid.");
-        setOpen(true);
-        return;
-      }
-      void addHub(parsed).catch((error: unknown) => {
-        setPairError(error instanceof Error ? error.message : "Could not save that hub.");
-        setOpen(true);
-      });
+      const outcome = resolvePairDeepLink(url);
+      if (!outcome) return;
+      setPairError(outcome.pairError);
+      setPendingPair(outcome.pendingPair);
+      setOpen(outcome.open);
     };
     const subscription = Linking.addEventListener("url", ({ url }) => apply(url));
     void Linking.getInitialURL().then((url) => apply(url));
     return () => subscription.remove();
-  }, [addHub]);
+  }, []);
 
   const api = useMemo<HubApi | null>(() => {
     if (!seed) return null;
@@ -179,13 +193,16 @@ export function HubProvider({ children }: { children: ReactNode }) {
       pins,
       open,
       pairError,
+      pendingPair,
       setOpen,
       addHub,
+      confirmPendingPair,
+      cancelPendingPair,
       selectHub,
       removeHub,
       togglePin: onTogglePin,
     };
-  }, [ready, hubs, current, client, seed, pins, open, pairError, addHub, selectHub, removeHub, onTogglePin]);
+  }, [ready, hubs, current, client, seed, pins, open, pairError, pendingPair, addHub, confirmPendingPair, cancelPendingPair, selectHub, removeHub, onTogglePin]);
 
   if (!api) return <View style={{ flex: 1, backgroundColor: palette.background }} />;
   return <HubContext.Provider value={api}>{children}</HubContext.Provider>;
