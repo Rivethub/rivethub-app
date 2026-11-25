@@ -507,7 +507,7 @@ function AccountSettings() {
           <Row label="Version" hint="rh and this app update together"><span className="text-[13px]">{a.version}</span></Row>
           <Row label="Get updates from" hint="Switch to GitHub releases any time">
             <select aria-label="Get updates from" value={a.updateSource} onChange={(e) => set({ updateSource: e.target.value as Account["updateSource"] })} className={selectCls}>
-              <option value="rivethub-cloud">RivetHub server</option>
+              {(!a.cloudDisabled || a.updateSource === "rivethub-cloud") && <option value="rivethub-cloud" disabled={a.cloudDisabled === true}>{a.cloudDisabled ? "RivetHub server (turned off on this hub)" : "RivetHub server"}</option>}
               <option value="github">GitHub releases</option>
             </select>
           </Row>

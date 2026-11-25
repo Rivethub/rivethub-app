@@ -604,6 +604,27 @@ describe("Share destinations and ready bundles", () => {
     expect(screen.queryByRole("button", { name: "Sign in with your RivetHub account" })).not.toBeInTheDocument();
   });
 
+  it("starts onboarding on GitHub updates with no cloud sign-in when cloud is off", async () => {
+    const signIn = vi.fn();
+    const update = vi.fn(async () => {});
+    const { user } = renderAt("/welcome", undefined, { account: signedOutCloudOff, signIn, updateAccount: update } as Partial<AppClient>);
+    expect(await screen.findByRole("radio", { name: /From GitHub, no account/ })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: /From the RivetHub server/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled());
+    expect(screen.queryByRole("radio", { name: /From the RivetHub server/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ updateSource: "github" })));
+    expect(signIn).not.toHaveBeenCalled();
+  });
+
+  it("offers no RivetHub Cloud update source in Account Settings when cloud is off", async () => {
+    const githubOff = async () => ({ ...(await signedOutCloudOff()), updateSource: "github" as const });
+    renderAt("/settings/account", undefined, { account: githubOff });
+    const source = await screen.findByRole("combobox", { name: "Get updates from" });
+    expect(within(source).queryByRole("option", { name: /RivetHub server/ })).not.toBeInTheDocument();
+    expect(within(source).getByRole("option", { name: "GitHub releases" })).toBeInTheDocument();
+  });
+
   it("describes sending to a team server on Shared when cloud is off", async () => {
     renderAt("/shared", fakeShare(), { account: signedOutCloudOff });
     expect(await screen.findByText(/For a team server you are connected to/)).toBeInTheDocument();
