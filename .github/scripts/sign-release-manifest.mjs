@@ -3,6 +3,8 @@ import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const PKCS8_ED25519_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
+/** The keys the desktop app trusts. A signature by any other key would be refused by every client. */
+const KEYRING_FILE = new URL("../../apps/desktop/src/updates/release-keys.json", import.meta.url);
 
 function loadSigningKey(raw) {
   const trimmed = raw.trim();
@@ -32,13 +34,24 @@ if (!rawKey.trim()) {
 
 const keyId = (process.env["RELEASE_SIGNING_KEY_ID"] ?? "2026-main").trim() || "2026-main";
 const privateKey = loadSigningKey(rawKey);
-const publicKey = createPublicKey(privateKey);
+if (privateKey.asymmetricKeyType !== "ed25519") {
+  throw new Error(`RELEASE_SIGNING_KEY must be an Ed25519 key (got ${privateKey.asymmetricKeyType}).`);
+}
+const pinned = JSON.parse(readFileSync(KEYRING_FILE, "utf8")).find((key) => key.id === keyId);
+if (!pinned) {
+  throw new Error(`Key id '${keyId}' is not in apps/desktop/src/updates/release-keys.json.`);
+}
+const publicKey = createPublicKey(pinned.publicKeyPem);
+const spki = (key) => key.export({ type: "spki", format: "der" });
+if (!spki(createPublicKey(privateKey)).equals(spki(publicKey))) {
+  throw new Error(`RELEASE_SIGNING_KEY is not the private half of pinned key '${keyId}'.`);
+}
 
 for (const file of files) {
   const payload = readFileSync(file);
   const sig = sign(null, payload, privateKey);
   if (!verify(null, payload, publicKey, sig)) {
-    throw new Error(`Self-verification failed after signing ${file}`);
+    throw new Error(`Verification against pinned key '${keyId}' failed after signing ${file}`);
   }
   writeFileSync(`${file}.sig`, `v1:${keyId}:${sig.toString("base64")}\n`);
   console.log(`Signed ${file}.sig (key ${keyId})`);
