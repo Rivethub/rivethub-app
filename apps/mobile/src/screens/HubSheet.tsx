@@ -25,10 +25,10 @@ export function HubSheet() {
 
   const replacesExisting = pendingPair ? hubs.some((hub) => hub.url === pendingPair.url) : false;
 
-  return (
-    <Sheet title="Hub" onClose={() => setOpen(false)}>
-      {pairError ? <Text style={{ color: palette.error, fontSize: 13 }}>{pairError}</Text> : null}
-      {pendingPair ? (
+  if (pendingPair) {
+    return (
+      <Sheet title="Hub" onClose={() => setOpen(false)}>
+        {pairError ? <Text style={{ color: palette.error, fontSize: 13 }}>{pairError}</Text> : null}
         <View
           style={{
             borderWidth: 1,
@@ -81,7 +81,13 @@ export function HubSheet() {
             </Pressable>
           </View>
         </View>
-      ) : null}
+      </Sheet>
+    );
+  }
+
+  return (
+    <Sheet title="Hub" onClose={() => setOpen(false)}>
+      {pairError ? <Text style={{ color: palette.error, fontSize: 13 }}>{pairError}</Text> : null}
       {hubs.map((hub) => {
         const selected = hub.id === current?.id;
         return (
