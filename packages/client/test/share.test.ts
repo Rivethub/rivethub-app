@@ -156,12 +156,40 @@ describe("share client", () => {
       {
         "POST /api/share/drafts/d-1/push": { status: 401, body: { error: "signed out of acme", reason: "signed_out" } },
         "POST /api/share/drafts/d-1/send": { status: 502, body: { error: "lacks the memory:import scope", reason: "drop_box", upstream_status: 403 } },
+        "POST /api/share/servers/login/poll": { status: 401, body: { error: "the sign-in expired", reason: "login_expired" } },
       },
       { headers: () => ({}), onUnauthorized },
     );
     await expect(share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ status: 401, code: "signed_out" });
     await expect(share.send("d-1", { server: "https://drop.example.org", signed: true, confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ code: "drop_box", upstreamStatus: 403 });
+    await expect(share.pollLogin("l-1")).rejects.toMatchObject({ status: 401, code: "login_expired" });
     expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("still calls onUnauthorized for a coded 401 that is not a share destination refusal", async () => {
+    const onUnauthorized = vi.fn();
+    const { share } = client(
+      {
+        "GET /api/share/servers": { status: 401, body: { error: "invalid token", code: "invalid_token" } },
+        "POST /api/share/drafts/d-1/push": { status: 401, body: { error: "invalid token", code: "invalid_token" } },
+      },
+      { headers: () => ({}), onUnauthorized },
+    );
+    await expect(share.servers()).rejects.toMatchObject({ status: 401, code: "invalid_token" });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    await expect(share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ code: "invalid_token" });
+    expect(onUnauthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it("calls onUnauthorized when signed_out comes from outside the share routes", async () => {
+    const onUnauthorized = vi.fn();
+    const rh = createRhClient({
+      baseUrl: "http://127.0.0.1:5174",
+      auth: { headers: () => ({}), onUnauthorized },
+      fetch: async () => new Response(JSON.stringify({ error: "signed out", code: "signed_out" }), { status: 401, headers: { "content-type": "application/json" } }),
+    });
+    await expect(rh.methods.topicTree!()).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).toHaveBeenCalledOnce();
   });
 
   it("lists ready bundles and drops a row it cannot read", async () => {

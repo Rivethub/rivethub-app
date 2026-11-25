@@ -7,7 +7,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface AuthSeam {
   /** Headers every request carries, such as `X-RH-CSRF`. Read on each request. */
   headers(): Record<string, string>;
-  /** Called on a plain 401. A 401 that asks for a fresh sign-in (`ReauthRequiredError`) or names a reason does not call it. */
+  /** Called on a 401. A 401 that asks for a fresh sign-in (`ReauthRequiredError`) or is a share server refusing this rh's login there does not call it. */
   onUnauthorized?(): void;
 }
 
@@ -43,6 +43,15 @@ function query(params: Record<string, string | number | undefined> | undefined):
 }
 
 const REAUTH_REQUIRED = "reauth_required";
+
+/**
+ * A share route's 401 that blames the destination server, not this window's session. The runtime also codes
+ * a rejected local caller credential (`invalid_token`) on these routes, so a code alone does not tell them apart.
+ */
+function refusesDestination(path: string, failure: Failure): boolean {
+  if (!path.startsWith("/api/share/")) return false;
+  return failure.code === "signed_out" || failure.code === "login_expired" || (failure.code === "drop_box" && failure.upstreamStatus !== undefined);
+}
 
 interface Failure {
   message: string;
@@ -115,8 +124,7 @@ export function createHttp(options: HttpOptions): Http {
     }
     if (response.status === 401) {
       if (failure.message === REAUTH_REQUIRED) throw new ReauthRequiredError(path);
-      // A 401 with a reason is a remote server refusing this rh's login there, not this window's session ending.
-      if (failure.code === undefined) options.auth?.onUnauthorized?.();
+      if (!refusesDestination(path, failure)) options.auth?.onUnauthorized?.();
     }
     throw new HttpError(response.status, path, failure.message, failure.code, failure.sessions, failure.upstreamStatus);
   }
