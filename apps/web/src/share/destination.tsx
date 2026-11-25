@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { withFreshLogin } from "../client/auth";
 import { useShareClient } from "../client/context";
+import { useAccount } from "../client/queries";
 import { Button, cx, Loading } from "../components/ui";
 import { describeFailure, type Failure } from "./failure";
 import { Card, FailureNote, field } from "./ui";
@@ -11,34 +12,48 @@ import { hostOf, sameServer } from "./format";
 export const SERVERS_KEY = ["share", "servers"] as const;
 
 export function shareServerTitle(server: ShareServer): string {
+  if (server.hub !== undefined) return server.hub;
   return server.kind === "cloud" ? "rivethub.cloud" : hostOf(server.origin);
 }
 
 export function shareServerStatus(server: ShareServer): string {
-  const kind = server.kind === "cloud" ? "RivetHub Cloud drop box" : "Team server";
+  const kind = server.hub !== undefined ? `Team hub at ${hostOf(server.origin)}` : server.kind === "cloud" ? "RivetHub Cloud drop box" : "Team server";
   const who = server.signedIn ? `signed in${server.user ? ` as ${server.user}` : ""}` : "signed out";
   return `${kind} · ${who}${server.default ? " · default" : ""}`;
 }
 
-/** Step 4: where the sealed bundle goes. A server is usable once you are signed in to it. */
-export function Destination({ server, signed, onServer, onSigned, onContinue, onBack }: { server: string | undefined; signed: boolean; onServer: (origin: string) => void; onSigned: (signed: boolean) => void; onContinue: () => void; onBack: () => void }) {
+/**
+ * The share servers this person can use. When this hub's policy turns RivetHub Cloud off, either in the
+ * servers reply or on the account, no cloud server is offered, and so no cloud sign-in either.
+ */
+export function useShareServers() {
+  const share = useShareClient();
+  const account = useAccount();
+  const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share!.servers(), enabled: share !== null, retry: false });
+  const cloudDisabled = servers.data?.cloudDisabled === true || account.data?.cloudDisabled === true;
+  const destinations = servers.data?.servers.filter((s) => !(cloudDisabled && s.kind === "cloud"));
+  return { servers, cloudDisabled, destinations };
+}
+
+/** Step 4: where the sealed bundle goes. A server is usable once you are signed in to it. A team hub takes the sessions directly; any other server gives a share code. */
+export function Destination({ server, signed, onServer, onSigned, onContinue, onBack }: { server: ShareServer | undefined; signed: boolean; onServer: (server: ShareServer) => void; onSigned: (signed: boolean) => void; onContinue: () => void; onBack: () => void }) {
   const share = useShareClient()!;
   const client = useQueryClient();
-  const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share.servers(), retry: false });
+  const { servers, destinations } = useShareServers();
   const key = useQuery({ queryKey: ["share", "key"], queryFn: () => share.key(), retry: false });
   const [failure, setFailure] = useState<Failure | null>(null);
   const [signingIn, setSigningIn] = useState<ShareServer | null>(null);
   const refresh = () => client.invalidateQueries({ queryKey: SERVERS_KEY });
   const selectSignedIn = (origin: string) =>
-    client.fetchQuery({ queryKey: SERVERS_KEY, queryFn: () => share.servers(), staleTime: 0 }).then(
-      (fresh) => onServer(fresh.servers.find((s) => sameServer(s.origin, origin))?.origin ?? origin),
-      fail,
-    );
-  const usable = servers.data?.servers.find((s) => s.signedIn && s.default);
+    client.fetchQuery({ queryKey: SERVERS_KEY, queryFn: () => share.servers(), staleTime: 0 }).then((fresh) => {
+      const found = fresh.servers.find((s) => sameServer(s.origin, origin));
+      if (found) onServer(found);
+    }, fail);
+  const usable = destinations?.find((s) => s.signedIn && s.default);
   useEffect(() => {
-    if (server === undefined && usable) onServer(usable.origin);
+    if (server === undefined && usable) onServer(usable);
   }, [server, usable, onServer]);
-  const chosen = servers.data?.servers.find((s) => s.origin === server);
+  const chosen = destinations?.find((s) => s.origin === server?.origin);
   const fail = (error: unknown) => setFailure(describeFailure(error, "send"));
   return (
     <div className="flex flex-col gap-4">
@@ -46,14 +61,14 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
       <Card title="Where should it go?">
         {servers.isPending && <Loading label="Loading servers" />}
         {servers.isError && <FailureNote failure={describeFailure(servers.error, "send")} />}
-        {servers.data && servers.data.servers.length === 0 && <p className="m-0 text-muted-foreground">No share servers are set up. Add a team server below.</p>}
-        {servers.data && servers.data.servers.length > 0 && (
+        {destinations && destinations.length === 0 && <p className="m-0 text-muted-foreground">No share servers are set up. Add a team server below.</p>}
+        {destinations && destinations.length > 0 && (
           <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
             <legend className="sr-only">Share server</legend>
-            {servers.data.servers.map((s) => (
-              <div key={s.origin} className={cx("flex flex-wrap items-center gap-3 rounded-lg border p-3", server === s.origin ? "border-primary" : "border-border")}>
+            {destinations.map((s) => (
+              <div key={s.origin} className={cx("flex flex-wrap items-center gap-3 rounded-lg border p-3", server?.origin === s.origin ? "border-primary" : "border-border")}>
                 <label className={cx("flex min-w-0 flex-1 items-center gap-3", s.signedIn ? "cursor-pointer" : "opacity-80")}>
-                  <input type="radio" name="share-server" disabled={!s.signedIn} checked={server === s.origin} onChange={() => onServer(s.origin)} className="accent-primary" />
+                  <input type="radio" name="share-server" disabled={!s.signedIn} checked={server?.origin === s.origin} onChange={() => onServer(s)} className="accent-primary" />
                   <span className="flex min-w-0 flex-col">
                     <span className="font-medium">{shareServerTitle(s)}</span>
                     <span className="text-[12px] text-muted-foreground">{shareServerStatus(s)}</span>
@@ -87,21 +102,23 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
         />
       </Card>
 
-      <Card title="Signing">
-        <label className="flex items-start gap-2.5">
-          <input type="checkbox" checked={signed} onChange={(e) => onSigned(e.target.checked)} className="mt-1 accent-primary" />
-          <span className="flex flex-col">
-            <span>Sign this bundle with this machine's key</span>
-            <span className="text-[12px] text-muted-foreground">
-              {key.data ? <>The receiver sees who sent it and can check <span className="font-mono">{key.data.fingerprint}</span>.</> : "The receiver sees who sent it and can check the key."} Unsigned bundles arrive as unverified.
+      {chosen?.hub === undefined && (
+        <Card title="Signing">
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" checked={signed} onChange={(e) => onSigned(e.target.checked)} className="mt-1 accent-primary" />
+            <span className="flex flex-col">
+              <span>Sign this bundle with this machine's key</span>
+              <span className="text-[12px] text-muted-foreground">
+                {key.data ? <>The receiver sees who sent it and can check <span className="font-mono">{key.data.fingerprint}</span>.</> : "The receiver sees who sent it and can check the key."} Unsigned bundles arrive as unverified.
+              </span>
             </span>
-          </span>
-        </label>
-      </Card>
+          </label>
+        </Card>
+      )}
 
       <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5">
         <Button variant="ghost" size="md" onClick={onBack}>Back</Button>
-        <span className="flex-1 text-[13px] text-muted-foreground">{chosen ? `Sending to ${hostOf(chosen.origin)}.` : "Choose a server you are signed in to."}</span>
+        <span className="flex-1 text-[13px] text-muted-foreground">{!chosen ? "Choose a server you are signed in to." : chosen.hub !== undefined ? `Adding the sessions to ${chosen.hub}.` : `Sending to ${hostOf(chosen.origin)}.`}</span>
         <Button variant="primary" size="md" disabled={!chosen?.signedIn} onClick={onContinue}>Continue</Button>
       </div>
     </div>

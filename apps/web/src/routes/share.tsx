@@ -10,14 +10,16 @@ import { Choose, type ShareSeed } from "../share/choose";
 import { Confirm } from "../share/confirm";
 import { Decide } from "../share/decide";
 import { Destination } from "../share/destination";
-import { Done } from "../share/done";
+import { Done, Pushed } from "../share/done";
 import { describeFailure } from "../share/failure";
 import { Review } from "../share/review";
-import { chosenSessions, confirmCounts, initialSend, sendReducer, type SendStep } from "../share/sendModel";
+import { chosenSessions, confirmCounts, initialSend, sendReducer, type Delivery, type SendStep } from "../share/sendModel";
+import { Connected, ReadyBundles } from "../share/start";
 import { Card, FailureNote, ShareScreen } from "../share/ui";
 
-const STEPS = ["Choose", "Decide", "Review flags", "Destination", "Confirm", "Share code"] as const;
-const AT: Record<SendStep, number> = { choose: 0, decide: 1, sanitizing: 1, review: 2, destination: 3, confirm: 4, sending: 4, shared: 5 };
+const LEAD = "Send a ready bundle or pick sessions, check what the scrubber flagged, and send it to a server you are connected to.";
+const STEPS = ["Choose", "Decide", "Review flags", "Destination", "Confirm", "Sent"] as const;
+const AT: Record<SendStep, number> = { choose: 0, opening: 0, decide: 1, sanitizing: 1, review: 2, destination: 3, confirm: 4, sending: 4, shared: 5 };
 
 /** Only the draft's id survives a reload or a closed window, so the person can pick the draft back up. rh keeps the draft; its text never reaches storage. */
 const DRAFT_KEY = "rivethub.share.draft";
@@ -64,6 +66,7 @@ export function SharePage() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [resumable, setResumable] = useState<DraftReport | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
   const failed = (error: unknown) => dispatch({ type: "fail", failure: describeFailure(error, "send") });
 
   useEffect(() => {
@@ -79,7 +82,7 @@ export function SharePage() {
     };
   }, [share]);
 
-  if (!share) return <ShareScreen title="Share sessions" lead="Pick sessions, decide what happens to each, and get a one-time code to send privately."><span /></ShareScreen>;
+  if (!share) return <ShareScreen title="Share sessions" lead={LEAD}><span /></ShareScreen>;
 
   const discard = (id: string) => {
     storeDraft(null);
@@ -87,13 +90,24 @@ export function SharePage() {
     void share.discard(id).catch(() => {});
   };
 
+  const drafted = (report: DraftReport) => {
+    storeDraft(report.draft);
+    setResumable(null);
+    dispatch({ type: "drafted", report });
+  };
+
   const sanitize = () => {
     dispatch({ type: "sanitize" });
-    share.createDraft(chosenSessions(state.rows), { decide: state.decide }).then((report) => {
-      storeDraft(report.draft);
-      setResumable(null);
-      dispatch({ type: "drafted", report });
-    }, failed);
+    share.createDraft(chosenSessions(state.rows), { decide: state.decide }).then(drafted, failed);
+  };
+
+  const openBundle = (name: string) => {
+    dispatch({ type: "open-bundle" });
+    setOpening(name);
+    share
+      .draftFromBundle(name)
+      .then(drafted, failed)
+      .finally(() => setOpening(null));
   };
 
   const apply = (marks: Parameters<typeof share.mark>[1]) => {
@@ -112,15 +126,20 @@ export function SharePage() {
     const { report, server } = state;
     if (!report || server === undefined) return;
     dispatch({ type: "sending" });
-    share.send(report.draft, { server, signed: state.signed, confirm: confirmCounts(report) }).then((sent) => {
+    const confirm = confirmCounts(report);
+    const delivery: Promise<Delivery> =
+      server.hub !== undefined
+        ? share.push(report.draft, { hub: server.hub, confirm }).then((pushed) => ({ kind: "pushed", pushed }))
+        : share.send(report.draft, { server: server.origin, signed: state.signed, confirm }).then((sent) => ({ kind: "code", sent }));
+    delivery.then((delivered) => {
       storeDraft(null);
       markStep("share");
-      dispatch({ type: "sent", sent });
+      dispatch({ type: "delivered", delivery: delivered });
     }, failed);
   };
 
   return (
-    <ShareScreen title="Share sessions" lead="Pick sessions, decide what happens to each, and get a one-time code to send privately." steps={STEPS} current={AT[state.step]}>
+    <ShareScreen title="Share sessions" lead={LEAD} steps={STEPS} current={AT[state.step]}>
       {state.failure && <FailureNote failure={state.failure} onDismiss={() => dispatch({ type: "dismiss" })} />}
       {notice && state.step === "review" && <p role="status" className="m-0 text-[13px] text-muted-foreground">{notice}</p>}
 
@@ -134,6 +153,12 @@ export function SharePage() {
             <Button variant="ghost" onClick={() => discard(resumable.draft)}>Discard it</Button>
           </div>
         </Card>
+      )}
+      {(state.step === "choose" || state.step === "opening") && (
+        <>
+          <Connected />
+          <ReadyBundles opening={opening} onSend={openBundle} />
+        </>
       )}
       {state.step === "choose" && seeding && <Loading label="Finding that session" />}
       {state.step === "choose" && !seeding && <Choose picked={state.picked} onToggle={(session) => dispatch({ type: "toggle", session })} onContinue={() => dispatch({ type: "to-decide" })} {...(seed ? { seed } : {})} />}
@@ -154,12 +179,13 @@ export function SharePage() {
         />
       )}
       {state.step === "destination" && (
-        <Destination server={state.server} signed={state.signed} onServer={(origin) => dispatch({ type: "server", origin })} onSigned={(signed) => dispatch({ type: "signed", signed })} onContinue={() => dispatch({ type: "to-confirm" })} onBack={() => dispatch({ type: "back" })} />
+        <Destination server={state.server} signed={state.signed} onServer={(server) => dispatch({ type: "server", server })} onSigned={(signed) => dispatch({ type: "signed", signed })} onContinue={() => dispatch({ type: "to-confirm" })} onBack={() => dispatch({ type: "back" })} />
       )}
       {(state.step === "confirm" || state.step === "sending") && state.report && state.server !== undefined && (
         <Confirm report={state.report} server={state.server} signed={state.signed} busy={state.step === "sending"} onSend={send} onBack={() => dispatch({ type: "back" })} />
       )}
-      {state.step === "shared" && state.sent && <Done sent={state.sent} onDone={() => dispatch({ type: "reset" })} />}
+      {state.step === "shared" && state.delivered?.kind === "code" && <Done sent={state.delivered.sent} onDone={() => dispatch({ type: "reset" })} />}
+      {state.step === "shared" && state.delivered?.kind === "pushed" && <Pushed pushed={state.delivered.pushed} onDone={() => dispatch({ type: "reset" })} />}
     </ShareScreen>
   );
 }

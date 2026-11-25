@@ -1,4 +1,4 @@
-import type { ChosenSession, DraftReport, FlagChoice, FlagMark, ShareableSession, SharedBundle } from "@rivethub/contracts";
+import type { ChosenSession, DraftReport, FlagChoice, FlagMark, PushedBundle, ShareableSession, SharedBundle, ShareServer } from "@rivethub/contracts";
 import type { Failure } from "./failure";
 
 /** What the sender decided for one session. Deny keeps the row but never reaches rh. */
@@ -13,10 +13,14 @@ export interface Row {
   choice: RowChoice;
 }
 
-export type SendStep = "choose" | "decide" | "sanitizing" | "review" | "destination" | "confirm" | "sending" | "shared";
+/** `opening` turns a ready bundle into a draft; it skips deciding, because the bundle was sanitized when it was exported. */
+export type SendStep = "choose" | "opening" | "decide" | "sanitizing" | "review" | "destination" | "confirm" | "sending" | "shared";
+
+/** What the sender got back: a share code to pass on, or sessions already in a team hub. */
+export type Delivery = { kind: "code"; sent: SharedBundle } | { kind: "pushed"; pushed: PushedBundle };
 
 /**
- * The whole send flow. `report` holds flagged text and `sent` holds the share
+ * The whole send flow. `report` holds flagged text and `delivered` can hold the share
  * code, so this state lives in the screen's memory only and unmounting the
  * screen is what drops them.
  */
@@ -27,9 +31,9 @@ export interface SendState {
   /** Ask the decision model to flag what it finds suspicious. On unless rh has none configured. */
   decide: boolean;
   report?: DraftReport | undefined;
-  server?: string | undefined;
+  server?: ShareServer | undefined;
   signed: boolean;
-  sent?: SharedBundle | undefined;
+  delivered?: Delivery | undefined;
   failure?: Failure | undefined;
 }
 
@@ -41,15 +45,16 @@ export type SendAction =
   | { type: "decide"; id: string; choice: RowChoice }
   | { type: "decide-model"; on: boolean }
   | { type: "sanitize" }
+  | { type: "open-bundle" }
   | { type: "drafted"; report: DraftReport }
   | { type: "resumed"; report: DraftReport }
   | { type: "report"; report: DraftReport }
   | { type: "to-destination" }
-  | { type: "server"; origin: string }
+  | { type: "server"; server: ShareServer }
   | { type: "signed"; signed: boolean }
   | { type: "to-confirm" }
   | { type: "sending" }
-  | { type: "sent"; sent: SharedBundle }
+  | { type: "delivered"; delivery: Delivery }
   | { type: "fail"; failure: Failure }
   | { type: "dismiss" }
   | { type: "back" }
@@ -74,6 +79,8 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
       return { ...state, decide: action.on };
     case "sanitize":
       return canSanitize(state.rows) ? { ...state, step: "sanitizing", failure: undefined } : state;
+    case "open-bundle":
+      return state.step === "choose" ? { ...state, step: "opening", rows: [], failure: undefined } : state;
     case "drafted":
     case "resumed":
       return { ...state, report: action.report, step: action.type === "resumed" || action.report.flags.length > 0 ? "review" : "destination", failure: undefined };
@@ -82,17 +89,17 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
     case "to-destination":
       return openFlags(state.report) === 0 ? { ...state, step: "destination", failure: undefined } : state;
     case "server":
-      return { ...state, server: action.origin };
+      return { ...state, server: action.server };
     case "signed":
       return { ...state, signed: action.signed };
     case "to-confirm":
       return state.server === undefined ? state : { ...state, step: "confirm", failure: undefined };
     case "sending":
       return { ...state, step: "sending", failure: undefined };
-    case "sent":
-      return { ...state, step: "shared", sent: action.sent, report: undefined, failure: undefined };
+    case "delivered":
+      return { ...state, step: "shared", delivered: action.delivery, report: undefined, failure: undefined };
     case "fail":
-      return { ...state, step: recoverStep(state.step, action.failure), failure: action.failure, decide: action.failure.code === "decide_unconfigured" ? false : state.decide };
+      return { ...state, step: recoverStep(state, action.failure), failure: action.failure, decide: action.failure.code === "decide_unconfigured" ? false : state.decide };
     case "dismiss":
       return { ...state, failure: undefined };
     case "reset":
@@ -104,12 +111,12 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
   }
 }
 
-/** A failure returns to the step that can fix it. */
-function recoverStep(step: SendStep, failure: Failure): SendStep {
-  if (failure.backTo !== undefined) return failure.backTo;
-  if (step === "sanitizing") return "decide";
-  if (step === "sending") return "confirm";
-  return step;
+const RECOVER: Partial<Record<SendStep, SendStep>> = { sanitizing: "decide", opening: "choose", sending: "confirm" };
+
+/** A failure returns to the step that can fix it. A draft opened from a bundle has no rows to decide, so it goes back to choosing. */
+function recoverStep(state: SendState, failure: Failure): SendStep {
+  const to = failure.backTo ?? RECOVER[state.step] ?? state.step;
+  return to === "decide" && state.rows.length === 0 ? "choose" : to;
 }
 
 export const isDecided = (row: Row) => row.choice.kind !== "undecided";

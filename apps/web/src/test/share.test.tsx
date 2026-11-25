@@ -1,5 +1,5 @@
 import { ReauthRequiredError } from "@rivethub/client";
-import type { DraftReport, ImportResult, IsoTime, ReceiveReport, RivetHubDesktop, ShareClient, ShareableSession } from "@rivethub/contracts";
+import type { DraftReport, ImportResult, IsoTime, ReadyBundle, ReceiveReport, RivetHubDesktop, ShareClient, ShareableSession, ShareServer } from "@rivethub/contracts";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -233,6 +233,109 @@ describe("Share", () => {
     expect(screen.queryByRole("link", { name: "Share" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Receive" })).not.toBeInTheDocument();
     expect(user).toBeDefined();
+  });
+});
+
+describe("Share destinations and ready bundles", () => {
+  const studio: ShareServer = { origin: "https://192.0.2.20:5174", kind: "team", hub: "studio", user: "phil", signedIn: true, default: false };
+  const drop: ShareServer = { origin: "https://198.51.100.7", kind: "team", user: "phil", signedIn: true, default: false };
+  const cloud: ShareServer = { origin: "https://rivethub.cloud", kind: "cloud", signedIn: false, default: false };
+  const ready: ReadyBundle = { name: "retention-nov", sessions: 2, bytes: 18432, openFlags: 2, createdAt: at("2026-11-20T09:30:00Z"), sanitized: true };
+  const clean = (): DraftReport => ({ ...flagged(), flags: [] });
+  const serving = (servers: ShareServer[], cloudDisabled = false) => vi.fn(async () => ({ tokenStore: "file" as const, cloudDisabled, servers }));
+
+  it("lists each connected server by its hub name with the hub's online state, and other hubs not set up for sharing", async () => {
+    renderAt("/share", fakeShare({ servers: serving([studio, drop]) }));
+    const connected = await screen.findByRole("region", { name: "Connected" });
+    const hub = await within(connected).findByRole("listitem", { name: "studio" });
+    expect(hub).toHaveTextContent("Team hub at 192.0.2.20:5174 · signed in as phil");
+    expect(hub).toHaveTextContent("Online");
+    expect(within(connected).getByRole("listitem", { name: "198.51.100.7" })).toHaveTextContent("Team server · signed in as phil");
+    const other = within(connected).getByRole("listitem", { name: "lab-server" });
+    expect(other).toHaveTextContent("not set up for sharing");
+    expect(other).toHaveTextContent("Offline");
+    expect(within(connected).getByRole("button", { name: "Add a team server" })).toBeInTheDocument();
+  });
+
+  it("sends a ready bundle to a team hub after its flags are confirmed, and shows what the hub took in", async () => {
+    const share = fakeShare({
+      servers: serving([studio, drop]),
+      bundles: vi.fn(async () => [ready]),
+      draftFromBundle: vi.fn(async () => flagged("keep")),
+      push: vi.fn(async () => ({ hub: "studio", user: "phil", sessions: 2, inserted: 41, skipped: 3 })),
+    });
+    const { user } = renderAt("/share", share);
+    const bundle = await screen.findByRole("listitem", { name: "retention-nov" });
+    expect(bundle).toHaveTextContent("2 sessions · 18 KB · Nov 20");
+    expect(bundle).toHaveTextContent("2 flags need your decision before it can leave.");
+    await user.click(within(bundle).getByRole("button", { name: "Send retention-nov" }));
+    await waitFor(() => expect(share.draftFromBundle).toHaveBeenCalledWith("retention-nov"));
+
+    expect(await screen.findByText("Best effort: read the flags yourself.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(await screen.findByRole("radio", { name: /studio/ }));
+    expect(screen.queryByRole("region", { name: "Signing" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("studio (192.0.2.20:5174)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+
+    await waitFor(() => expect(share.push).toHaveBeenCalledWith("d-1", { hub: "studio", confirm: { sessions: 2, keptFlags: 2 } }));
+    expect(share.send).not.toHaveBeenCalled();
+    const result = await screen.findByRole("region", { name: "Added to studio" });
+    const counts = within(result).getByLabelText("Push result");
+    expect(within(counts).getByText("Sessions").nextSibling).toHaveTextContent("2");
+    expect(within(counts).getByText("Inserted").nextSibling).toHaveTextContent("41");
+    expect(within(counts).getByText("Skipped").nextSibling).toHaveTextContent("3");
+    expect(screen.queryByRole("status", { name: "Share code" })).not.toBeInTheDocument();
+  });
+
+  it("sends a ready bundle to a drop server and shows the share code", async () => {
+    const share = fakeShare({
+      servers: serving([studio, { ...drop, default: true }]),
+      bundles: vi.fn(async () => [{ ...ready, openFlags: 0 }]),
+      draftFromBundle: vi.fn(async () => clean()),
+    });
+    const { user } = renderAt("/share", share);
+    await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
+    expect(await screen.findByRole("radio", { name: /198\.51\.100\.7/ })).toBeChecked();
+    expect(screen.getByRole("region", { name: "Signing" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Works once, and expires after 7 days.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Share" }));
+    await waitFor(() => expect(share.send).toHaveBeenCalledWith("d-1", { server: "https://198.51.100.7", signed: true, confirm: { sessions: 2, keptFlags: 0 } }));
+    expect(share.push).not.toHaveBeenCalled();
+    expect(await screen.findByRole("status", { name: "Share code" })).toHaveTextContent(CODE);
+  });
+
+  it("goes back to choosing when a bundle can't be opened", async () => {
+    const share = fakeShare({ bundles: vi.fn(async () => [ready]), draftFromBundle: vi.fn(async () => Promise.reject(new Error("bundle is damaged"))) });
+    const { user } = renderAt("/share", share);
+    await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("bundle is damaged");
+    expect(screen.getByRole("searchbox", { name: /Find sessions to share/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send retention-nov" })).toBeEnabled();
+  });
+
+  it("offers no cloud server or cloud sign-in when cloud is off, and keeps team servers working", async () => {
+    const share = fakeShare({ servers: serving([cloud, studio], true), bundles: vi.fn(async () => [ready]), draftFromBundle: vi.fn(async () => clean()) });
+    const { user } = renderAt("/share", share);
+    const connected = await screen.findByRole("region", { name: "Connected" });
+    expect(await within(connected).findByRole("listitem", { name: "studio" })).toBeInTheDocument();
+    expect(within(connected).queryByText(/rivethub\.cloud|RivetHub Cloud/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Send retention-nov" }));
+    expect(await screen.findByRole("radio", { name: /studio/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /rivethub\.cloud/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sign in to rivethub\.cloud/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a team server" })).toBeInTheDocument();
+  });
+
+  it("shows the cloud server and its sign-in when cloud is on", async () => {
+    const share = fakeShare({ servers: serving([cloud, studio]), bundles: vi.fn(async () => [ready]), draftFromBundle: vi.fn(async () => clean()) });
+    const { user } = renderAt("/share", share);
+    await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
+    expect(await screen.findByRole("radio", { name: /rivethub\.cloud/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in to rivethub.cloud" })).toBeInTheDocument();
   });
 });
 
