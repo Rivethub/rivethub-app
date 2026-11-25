@@ -1,4 +1,4 @@
-import type { ShareLoginStep, ShareServer } from "@rivethub/contracts";
+import type { ShareLoginStep, ShareServer, ShareServers } from "@rivethub/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { withFreshLogin } from "../client/auth";
@@ -12,14 +12,44 @@ import { hostOf, sameServer } from "./format";
 export const SERVERS_KEY = ["share", "servers"] as const;
 
 export function shareServerTitle(server: ShareServer): string {
-  if (server.hub !== undefined) return server.hub;
-  return server.kind === "cloud" ? "rivethub.cloud" : hostOf(server.origin);
+  return server.delivery === "push" ? server.hub : hostOf(server.origin);
+}
+
+/** What sending to this server does, in the words the Confirm step repeats. */
+export function deliveryLabel(server: ShareServer): string {
+  return server.delivery === "push" ? `Push into ${server.hub} as ${server.user ?? "your login there"}` : "Upload and get a share code";
 }
 
 export function shareServerStatus(server: ShareServer): string {
-  const kind = server.hub !== undefined ? `Team hub at ${hostOf(server.origin)}` : server.kind === "cloud" ? "RivetHub Cloud drop box" : "Team server";
-  const who = server.signedIn ? `signed in${server.user ? ` as ${server.user}` : ""}` : "signed out";
-  return `${kind} · ${who}${server.default ? " · default" : ""}`;
+  const what = server.delivery === "push" ? `Hub at ${hostOf(server.origin)} · pushes sessions into it` : `${server.kind === "cloud" ? "RivetHub Cloud drop box" : "Share server"} · gives a share code`;
+  const who =
+    server.delivery === "push" && server.needsReauth
+      ? `sign in again to push to ${server.hub}`
+      : server.signedIn
+        ? `signed in${server.user ? ` as ${server.user}` : ""}`
+        : "signed out";
+  return `${what} · ${who}${server.default ? " · default" : ""}`;
+}
+
+/** A server takes a draft once its login there is live and can do what its delivery needs. */
+export const usable = (server: ShareServer) => server.signedIn && !server.needsReauth;
+
+/** Same server, reached the same way: what the sender confirmed is still what will happen. */
+export const sameDestination = (a: ShareServer, b: ShareServer) =>
+  sameServer(a.origin, b.origin) && a.delivery === b.delivery && (a.delivery !== "push" || (b.delivery === "push" && a.hub === b.hub)) && a.user === b.user;
+
+/** `pending` until both the servers reply and the account have said whether this hub turns RivetHub Cloud off. */
+export type CloudPolicy = "pending" | "on" | "off";
+
+export function cloudPolicy(servers: ShareServers | undefined, account: { isPending: boolean; data?: { cloudDisabled?: boolean } | undefined }): CloudPolicy {
+  if (servers?.cloudDisabled === true || account.data?.cloudDisabled === true) return "off";
+  // An account that failed to load says nothing more than the servers reply already did.
+  return servers === undefined || account.isPending ? "pending" : "on";
+}
+
+/** A RivetHub Cloud drop box is offered only once the policy has resolved to on. */
+export function listedServers(servers: ShareServers, cloud: CloudPolicy): ShareServer[] {
+  return servers.servers.filter((s) => cloud === "on" || !(s.kind === "cloud" && s.delivery === "code"));
 }
 
 /**
@@ -30,30 +60,33 @@ export function useShareServers() {
   const share = useShareClient();
   const account = useAccount();
   const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share!.servers(), enabled: share !== null, retry: false });
-  const cloudDisabled = servers.data?.cloudDisabled === true || account.data?.cloudDisabled === true;
-  const destinations = servers.data?.servers.filter((s) => !(cloudDisabled && s.kind === "cloud"));
-  return { servers, cloudDisabled, destinations };
+  const cloud = cloudPolicy(servers.data, account);
+  const destinations = servers.data && listedServers(servers.data, cloud);
+  return { servers, cloud, cloudDisabled: cloud === "off", destinations };
 }
 
-/** Step 4: where the sealed bundle goes. A server is usable once you are signed in to it. A team hub takes the sessions directly; any other server gives a share code. */
+/** Step 4: where the sealed draft goes. rh says how each server takes it: pushed into a hub, or uploaded for a share code. */
 export function Destination({ server, signed, onServer, onSigned, onContinue, onBack }: { server: ShareServer | undefined; signed: boolean; onServer: (server: ShareServer) => void; onSigned: (signed: boolean) => void; onContinue: () => void; onBack: () => void }) {
   const share = useShareClient()!;
   const client = useQueryClient();
   const { servers, destinations } = useShareServers();
   const key = useQuery({ queryKey: ["share", "key"], queryFn: () => share.key(), retry: false });
   const [failure, setFailure] = useState<Failure | null>(null);
-  const [signingIn, setSigningIn] = useState<ShareServer | null>(null);
+  const [signingIn, setSigningIn] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState<string | null>(null);
   const refresh = () => client.invalidateQueries({ queryKey: SERVERS_KEY });
   const selectSignedIn = (origin: string) =>
     client.fetchQuery({ queryKey: SERVERS_KEY, queryFn: () => share.servers(), staleTime: 0 }).then((fresh) => {
       const found = fresh.servers.find((s) => sameServer(s.origin, origin));
-      if (found) onServer(found);
+      if (found && usable(found)) onServer(found);
     }, fail);
-  const usable = destinations?.find((s) => s.signedIn && s.default);
+  const fallback = destinations?.find((s) => usable(s) && s.default);
   useEffect(() => {
-    if (server === undefined && usable) onServer(usable);
-  }, [server, usable, onServer]);
-  const chosen = destinations?.find((s) => s.origin === server?.origin);
+    if (server === undefined && fallback) onServer(fallback);
+  }, [server, fallback, onServer]);
+  const chosen = destinations?.find((s) => server !== undefined && sameDestination(s, server) && usable(s));
+  // A device sign-in runs only while its server is still offered: a policy that turns cloud off ends it.
+  const signingInto = destinations?.find((s) => s.origin === signingIn);
   const fail = (error: unknown) => setFailure(describeFailure(error, "send"));
   return (
     <div className="flex flex-col gap-4">
@@ -66,15 +99,18 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
           <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
             <legend className="sr-only">Share server</legend>
             {destinations.map((s) => (
-              <div key={s.origin} className={cx("flex flex-wrap items-center gap-3 rounded-lg border p-3", server?.origin === s.origin ? "border-primary" : "border-border")}>
-                <label className={cx("flex min-w-0 flex-1 items-center gap-3", s.signedIn ? "cursor-pointer" : "opacity-80")}>
-                  <input type="radio" name="share-server" disabled={!s.signedIn} checked={server?.origin === s.origin} onChange={() => onServer(s)} className="accent-primary" />
+              <div key={s.origin} className={cx("flex flex-wrap items-center gap-3 rounded-lg border p-3", chosen?.origin === s.origin ? "border-primary" : "border-border")}>
+                <label className={cx("flex min-w-0 flex-1 items-center gap-3", usable(s) ? "cursor-pointer" : "opacity-80")}>
+                  <input type="radio" name="share-server" disabled={!usable(s)} checked={chosen?.origin === s.origin} onChange={() => onServer(s)} className="accent-primary" />
                   <span className="flex min-w-0 flex-col">
                     <span className="font-medium">{shareServerTitle(s)}</span>
                     <span className="text-[12px] text-muted-foreground">{shareServerStatus(s)}</span>
                   </span>
                 </label>
-                {!s.signedIn && s.kind === "cloud" && <Button size="sm" aria-label={`Sign in to ${hostOf(s.origin)}`} onClick={() => setSigningIn(s)}>Sign in</Button>}
+                {!s.signedIn && s.kind === "cloud" && <Button size="sm" aria-label={`Sign in to ${hostOf(s.origin)}`} onClick={() => setSigningIn(s.origin)}>Sign in</Button>}
+                {s.signedIn && s.needsReauth && (
+                  <Button size="sm" aria-label={`Sign in again to ${hostOf(s.origin)}`} onClick={() => (s.kind === "cloud" ? setSigningIn(s.origin) : setRenewing(s.origin))}>Sign in again</Button>
+                )}
                 {s.signedIn && (
                   <Button size="xs" variant="ghost" aria-label={`Sign out of ${hostOf(s.origin)}`} onClick={() => void share.logout(s.origin).then(refresh, fail)}>Sign out</Button>
                 )}
@@ -82,9 +118,9 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
             ))}
           </fieldset>
         )}
-        {signingIn && (
+        {signingInto && (
           <DeviceLogin
-            origin={signingIn.origin}
+            origin={signingInto.origin}
             onSignedIn={(origin) => {
               setSigningIn(null);
               void selectSignedIn(origin);
@@ -97,12 +133,17 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
           />
         )}
         <TeamForm
-          onSignedIn={(origin) => void selectSignedIn(origin)}
+          key={renewing ?? "add"}
+          {...(renewing === null ? {} : { renew: renewing })}
+          onSignedIn={(origin) => {
+            setRenewing(null);
+            void selectSignedIn(origin);
+          }}
           onFail={fail}
         />
       </Card>
 
-      {chosen?.hub === undefined && (
+      {chosen?.delivery === "code" && (
         <Card title="Signing">
           <label className="flex items-start gap-2.5">
             <input type="checkbox" checked={signed} onChange={(e) => onSigned(e.target.checked)} className="mt-1 accent-primary" />
@@ -118,8 +159,8 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
 
       <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5">
         <Button variant="ghost" size="md" onClick={onBack}>Back</Button>
-        <span className="flex-1 text-[13px] text-muted-foreground">{!chosen ? "Choose a server you are signed in to." : chosen.hub !== undefined ? `Adding the sessions to ${chosen.hub}.` : `Sending to ${hostOf(chosen.origin)}.`}</span>
-        <Button variant="primary" size="md" disabled={!chosen?.signedIn} onClick={onContinue}>Continue</Button>
+        <span className="flex-1 text-[13px] text-muted-foreground">{chosen ? `${deliveryLabel(chosen)}.` : "Choose a server you are signed in to."}</span>
+        <Button variant="primary" size="md" disabled={!chosen} onClick={onContinue}>Continue</Button>
       </div>
     </div>
   );
@@ -177,10 +218,10 @@ function DeviceLogin({ origin, onSignedIn, onCancel, onFail }: { origin: string;
 }
 
 /** A team server takes a token that its admin made for you. It is sent once, kept by rh, and cleared from this form. */
-export function TeamForm({ onSignedIn, onFail }: { onSignedIn: (origin: string) => void; onFail: (error: unknown) => void }) {
+export function TeamForm({ renew, onSignedIn, onFail }: { renew?: string; onSignedIn: (origin: string) => void; onFail: (error: unknown) => void }) {
   const share = useShareClient()!;
-  const [open, setOpen] = useState(false);
-  const [origin, setOrigin] = useState("");
+  const [open, setOpen] = useState(renew !== undefined);
+  const [origin, setOrigin] = useState(renew ?? "");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const valid = /^https?:\/\/[^\s/]+/.test(origin.trim()) && token.trim() !== "";
@@ -205,6 +246,7 @@ export function TeamForm({ onSignedIn, onFail }: { onSignedIn: (origin: string) 
           .finally(() => setBusy(false));
       }}
     >
+      {renew !== undefined && <p className="m-0 text-[12px] text-muted-foreground">Your login on {hostOf(renew)} can't push sessions. Paste a new token from its admin that includes memory:import.</p>}
       <label className="flex flex-col gap-1 text-[12px]">
         Server address
         <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="https://rivet.example.org" inputMode="url" autoComplete="off" className={field} />

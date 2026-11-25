@@ -31,6 +31,10 @@ export interface SendState {
   /** Ask the decision model to flag what it finds suspicious. On unless rh has none configured. */
   decide: boolean;
   report?: DraftReport | undefined;
+  /** The ready bundle the draft was opened from. rh reports no scan totals for such a draft: the bundle was scanned when it was exported. */
+  bundle?: string | undefined;
+  /** What rh said after flag choices were applied. It belongs to this draft only. */
+  notice?: string | undefined;
   server?: ShareServer | undefined;
   signed: boolean;
   delivered?: Delivery | undefined;
@@ -46,9 +50,9 @@ export type SendAction =
   | { type: "decide-model"; on: boolean }
   | { type: "sanitize" }
   | { type: "open-bundle" }
-  | { type: "drafted"; report: DraftReport }
-  | { type: "resumed"; report: DraftReport }
-  | { type: "report"; report: DraftReport }
+  | { type: "drafted"; report: DraftReport; bundle?: string | undefined }
+  | { type: "resumed"; report: DraftReport; bundle?: string | undefined }
+  | { type: "report"; report: DraftReport; notice?: string | undefined }
   | { type: "to-destination" }
   | { type: "server"; server: ShareServer }
   | { type: "signed"; signed: boolean }
@@ -83,9 +87,16 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
       return state.step === "choose" ? { ...state, step: "opening", rows: [], failure: undefined } : state;
     case "drafted":
     case "resumed":
-      return { ...state, report: action.report, step: action.type === "resumed" || action.report.flags.length > 0 ? "review" : "destination", failure: undefined };
+      return {
+        ...state,
+        report: action.report,
+        bundle: action.bundle,
+        notice: undefined,
+        step: action.type === "resumed" || action.report.flags.length > 0 ? "review" : "destination",
+        failure: undefined,
+      };
     case "report":
-      return { ...state, report: action.report };
+      return { ...state, report: action.report, notice: action.notice };
     case "to-destination":
       return openFlags(state.report) === 0 ? { ...state, step: "destination", failure: undefined } : state;
     case "server":
@@ -97,7 +108,7 @@ export function sendReducer(state: SendState, action: SendAction): SendState {
     case "sending":
       return { ...state, step: "sending", failure: undefined };
     case "delivered":
-      return { ...state, step: "shared", delivered: action.delivery, report: undefined, failure: undefined };
+      return { ...state, step: "shared", delivered: action.delivery, report: undefined, bundle: undefined, notice: undefined, failure: undefined };
     case "fail":
       return { ...state, step: recoverStep(state, action.failure), failure: action.failure, decide: action.failure.code === "decide_unconfigured" ? false : state.decide };
     case "dismiss":

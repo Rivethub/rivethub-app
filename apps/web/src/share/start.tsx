@@ -11,9 +11,11 @@ import { describeFailure, type Failure } from "./failure";
 import { sameHost, sizeLabel } from "./format";
 import { Card, FailureNote } from "./ui";
 
+export const BUNDLES_KEY = ["share", "bundles"] as const;
+
 /** The hub in `/api/hubs` that a share server is, matched on its host or on the hub name rh gave it. */
 function hubOf(server: ShareServer, hubs: Hub[]): Hub | undefined {
-  return hubs.find((hub) => !hub.current && (sameHost(hub.url, server.origin) || (server.hub !== undefined && hub.name === server.hub)));
+  return hubs.find((hub) => !hub.current && (sameHost(hub.url, server.origin) || (server.delivery === "push" && hub.name === server.hub)));
 }
 
 function Online({ online }: { online: boolean }) {
@@ -76,10 +78,10 @@ export function Connected() {
   );
 }
 
-/** Bundles exported and sanitized on this machine. Sending one opens it as a draft, so its flags are still confirmed before it leaves. */
+/** Bundles exported and sanitized on this machine. Sending one opens it as a draft, so its open flags are reviewed before it leaves. */
 export function ReadyBundles({ opening, onSend }: { opening: string | null; onSend: (name: string) => void }) {
   const share = useShareClient()!;
-  const bundles = useQuery({ queryKey: ["share", "bundles"], queryFn: () => share.bundles(), retry: false });
+  const bundles = useQuery({ queryKey: BUNDLES_KEY, queryFn: () => share.bundles(), retry: false });
   // An rh without the bundles route has nothing exported to offer.
   if (bundles.error instanceof RouteMissingError) return null;
   return (

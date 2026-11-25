@@ -104,12 +104,15 @@ describe("share client", () => {
     expect(seen).toEqual(["csrf-2"]);
   });
 
-  it("reads each server's hub and the cloud policy, and treats an rh without the policy as cloud on", async () => {
+  it("routes each server by rh's delivery, keeps a hub only for a push, and reads the cloud policy", async () => {
     const { share } = client({
       "GET /api/share/servers": {
         servers: [
-          { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signed_in: true, default: true },
-          { origin: "https://drop.example.org", kind: "team", signed_in: false, default: false },
+          { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signed_in: true, default: true, delivery: "push" },
+          { origin: "https://memory.example.net", kind: "cloud", hub: "home", user: "phil", signed_in: true, default: false, delivery: "push", needs_reauth: true },
+          { origin: "https://drop.example.org", kind: "team", hub: "drops", signed_in: false, default: false, delivery: "code" },
+          { origin: "https://odd.example.org", kind: "team", signed_in: true, default: false, delivery: "push" },
+          { origin: "https://new.example.org", kind: "team", hub: "x", signed_in: true, default: false, delivery: "carrier-pigeon" },
         ],
         logins_file: "logins.json",
         token_store: "keyring",
@@ -120,12 +123,45 @@ describe("share client", () => {
       tokenStore: "keyring",
       cloudDisabled: true,
       servers: [
-        { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signedIn: true, default: true },
-        { origin: "https://drop.example.org", kind: "team", signedIn: false, default: false },
+        { origin: "https://hub.example.org", kind: "team", delivery: "push", hub: "acme", user: "phil", signedIn: true, default: true, needsReauth: false },
+        { origin: "https://memory.example.net", kind: "cloud", delivery: "push", hub: "home", user: "phil", signedIn: true, default: false, needsReauth: true },
+        { origin: "https://drop.example.org", kind: "team", delivery: "code", signedIn: false, default: false, needsReauth: false },
       ],
     });
-    const older = client({ "GET /api/share/servers": { servers: [], token_store: "file" } });
-    expect((await older.share.servers()).cloudDisabled).toBe(false);
+  });
+
+  it("derives delivery for an rh older than it: push only to a team server that names a hub", async () => {
+    const older = client({
+      "GET /api/share/servers": {
+        servers: [
+          { origin: "https://hub.example.org", kind: "team", hub: "acme", signed_in: true, default: true },
+          { origin: "https://rivethub.cloud", kind: "cloud", hub: "cloud", signed_in: true, default: false },
+          { origin: "https://drop.example.org", kind: "team", signed_in: true, default: false },
+        ],
+        token_store: "file",
+      },
+    });
+    const read = await older.share.servers();
+    expect(read.cloudDisabled).toBe(false);
+    expect(read.servers.map((s) => [s.origin, s.delivery, s.delivery === "push" ? s.hub : undefined])).toEqual([
+      ["https://hub.example.org", "push", "acme"],
+      ["https://rivethub.cloud", "code", undefined],
+      ["https://drop.example.org", "code", undefined],
+    ]);
+  });
+
+  it("passes on what the remote server answered, and leaves this window's session alone on a refusal with a reason", async () => {
+    const onUnauthorized = vi.fn();
+    const { share } = client(
+      {
+        "POST /api/share/drafts/d-1/push": { status: 401, body: { error: "signed out of acme", reason: "signed_out" } },
+        "POST /api/share/drafts/d-1/send": { status: 502, body: { error: "lacks the memory:import scope", reason: "drop_box", upstream_status: 403 } },
+      },
+      { headers: () => ({}), onUnauthorized },
+    );
+    await expect(share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ status: 401, code: "signed_out" });
+    await expect(share.send("d-1", { server: "https://drop.example.org", signed: true, confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ code: "drop_box", upstreamStatus: 403 });
+    expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
   it("lists ready bundles and drops a row it cannot read", async () => {

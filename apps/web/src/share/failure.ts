@@ -21,7 +21,7 @@ const SEND: Record<string, Failure> = {
   counts: { title: "The draft changed since you confirmed it.", detail: "Review the flags again, then confirm.", backTo: "review" },
   invalid: { title: "rh refused that request.", detail: "Check the terms and placeholders you entered." },
   unknown_sessions: { title: "A session you chose is no longer in memory.", backTo: "choose" },
-  signed_out: { title: "You're signed out of that server.", detail: "Sign in to it again, then share.", backTo: "destination" },
+  signed_out: { title: "You're signed out of that server.", detail: "Sign in to it again, then share. Your draft is kept.", backTo: "destination" },
   login_expired: { title: "That sign-in expired.", detail: "Start it again.", backTo: "destination" },
   login_denied: { title: "The sign-in was denied or timed out.", detail: "Start it again and approve it in your browser.", backTo: "destination" },
   unknown_login: { title: "That sign-in is no longer open.", detail: "Start it again.", backTo: "destination" },
@@ -30,6 +30,32 @@ const SEND: Record<string, Failure> = {
   drop_box: { title: "The drop box refused the bundle.", detail: "Your draft is kept. Try again, or choose another server.", backTo: "confirm" },
   unreachable: { title: "Couldn't reach the server.", detail: "Your draft is kept. Check your connection and try again.", backTo: "confirm" },
   failed: { title: "rh couldn't finish that.", detail: "The rh log has the cause." },
+};
+
+/** Opening a ready bundle refuses for its own reasons, and every one goes back to choosing. */
+const OPEN_BUNDLE: Record<string, Failure> = {
+  ...SEND,
+  unknown_bundle: { title: "That bundle is no longer here.", detail: "It was sent or removed since the list loaded. The list is up to date now.", backTo: "choose" },
+  open_flags: {
+    title: "This bundle's flags can't be shown here.",
+    detail: "Its local review files are missing, so its open flags can't be reviewed in the app. Settle them with rh memory sanitize --resolve, then send it.",
+    backTo: "choose",
+  },
+  invalid: { title: "rh can't open a bundle by that name.", backTo: "choose" },
+};
+
+/** The destination server refused this rh's login there, such as a token without the scope a push needs. */
+const LOGIN_REFUSED: Failure = {
+  title: "That server refused your login there.",
+  detail: "Your login may lack the scope this needs. Sign in to it again, or choose another server. Your draft is kept.",
+  backTo: "destination",
+};
+
+/** The chosen server changed or left the list between Confirm and Share. */
+export const DESTINATION_GONE: Failure = {
+  title: "That server is no longer available as you confirmed it.",
+  detail: "It was signed out, changed, or turned off by this hub's policy. Choose a server again. Your draft is kept.",
+  backTo: "destination",
 };
 
 const RECEIVE: Record<string, Failure> = {
@@ -63,19 +89,21 @@ const REAUTH: Failure = {
 };
 
 /** Turns anything a share call throws into a Failure the screen can show. The server's own message is shown only when no sentence is known. */
-export function describeFailure(error: unknown, flow: "send" | "receive"): Failure {
+export function describeFailure(error: unknown, flow: "send" | "open-bundle" | "receive"): Failure {
   if (error instanceof ReauthRequiredError) return REAUTH;
   if (error instanceof RouteMissingError) {
     return { title: "This rh is too old for sharing.", detail: "Update RivetHub to a version that includes the share routes." };
   }
   if (error instanceof NetworkError) return { title: "RivetHub couldn't reach rh.", detail: "Check that your rh node is running." };
   if (error instanceof HttpError) {
-    if (error.status === 401) return { ...REAUTH, title: "You're signed out.", detail: "Sign in again to continue." };
-    const known = error.code === undefined ? undefined : (flow === "send" ? SEND : RECEIVE)[error.code];
+    // A refusal that names its reason is about the share server, so it is read before a bare 401 ends this window's session.
+    if (flow === "send" && error.code === "drop_box" && (error.upstreamStatus === 401 || error.upstreamStatus === 403)) return { ...LOGIN_REFUSED, code: error.code };
+    const known = error.code === undefined ? undefined : { send: SEND, "open-bundle": OPEN_BUNDLE, receive: RECEIVE }[flow][error.code];
     if (known) {
       const detail = error.code === "undecided" || error.code === "secret_import" ? `${known.detail ?? ""}${sessionsNote(error.sessions)}`.trim() : known.detail;
       return { ...known, code: error.code!, ...(detail === undefined ? {} : { detail }) };
     }
+    if (error.status === 401) return { ...REAUTH, title: "You're signed out.", detail: "Sign in again to continue." };
     return { title: "rh refused that.", detail: error.message.replace(/^\d+ \S+: /, "") };
   }
   return error instanceof Error ? { title: "Something went wrong.", detail: error.message } : { title: "Something went wrong." };

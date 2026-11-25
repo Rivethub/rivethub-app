@@ -79,15 +79,21 @@ export interface MarksResult {
 
 export type ShareServerKind = "cloud" | "team" | (string & {});
 
-export interface ShareServer {
+interface ShareServerBase {
   origin: string;
   kind: ShareServerKind;
-  /** The team hub this server is, by name. A server with a hub takes pushed sessions straight into that hub instead of making a share code. */
-  hub?: string;
   user?: string;
   signedIn: boolean;
   default: boolean;
+  /** The stored login can't push (its token lacks `memory:import`), so the person signs in again first. */
+  needsReauth: boolean;
 }
+
+/**
+ * How a draft reaches a server, as rh decides it: `push` adds the sessions to `hub` as the signed-in user,
+ * `code` uploads a sealed bundle and gives a share code. Only a push server has a hub to push to.
+ */
+export type ShareServer = ShareServerBase & ({ delivery: "push"; hub: string } | { delivery: "code" });
 
 export interface ShareServers {
   servers: ShareServer[];
@@ -263,7 +269,7 @@ export interface ShareClient {
   push(id: string, request: SharePush): Promise<PushedBundle>;
   /** Bundles exported on this machine that are ready to send. */
   bundles(): Promise<ReadyBundle[]>;
-  /** Opens an exported bundle as a draft, so its flags are confirmed like any other draft's. */
+  /** Opens an exported bundle as a draft, so its open flags are reviewed like any other draft's. */
   draftFromBundle(name: string): Promise<DraftReport>;
 
   servers(): Promise<ShareServers>;

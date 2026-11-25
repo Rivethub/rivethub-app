@@ -96,7 +96,7 @@ describe("reviewing and sending", () => {
 });
 
 describe("sending a ready bundle", () => {
-  const hub = { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signedIn: true, default: true } as const;
+  const hub = { origin: "https://hub.example.org", kind: "team", delivery: "push", hub: "acme", user: "phil", signedIn: true, default: true, needsReauth: false } as const;
 
   it("skips deciding: a flagged bundle opens on the review, a clean one on the destination", () => {
     const opening = run([{ type: "open-bundle" }]);
@@ -116,6 +116,21 @@ describe("sending a ready bundle", () => {
     const sanitizing = { ...picked("a"), step: "sanitizing" as const };
     const confirming = run([{ type: "drafted", report: report([]) }, { type: "server", server: hub }, { type: "to-confirm" }, { type: "sending" }], sanitizing);
     expect(run([{ type: "fail", failure: { title: "Expired", code: "unknown_draft", backTo: "decide" } }], confirming).step).toBe("decide");
+  });
+
+  it("returns to the destination with the draft kept when the server refuses the login there", () => {
+    const sending = run([{ type: "drafted", report: report([]) }, { type: "server", server: hub }, { type: "to-confirm" }, { type: "sending" }], run([{ type: "open-bundle" }]));
+    const refused = run([{ type: "fail", failure: { title: "Signed out", code: "signed_out", backTo: "destination" } }], sending);
+    expect(refused).toMatchObject({ step: "destination", report: { draft: "d-1" }, failure: { code: "signed_out" } });
+  });
+
+  it("keeps the flag notice to the draft it was about", () => {
+    const flagged = report([flag(1, { kind: "open" })]);
+    const noticed = run([{ type: "drafted", report: flagged }, { type: "report", report: flagged, notice: "Learned alex → PERSON_1." }]);
+    expect(noticed.notice).toBe("Learned alex → PERSON_1.");
+    expect(run([{ type: "drafted", report: flagged, bundle: "retention-nov" }], noticed)).toMatchObject({ notice: undefined, bundle: "retention-nov" });
+    expect(run([{ type: "resumed", report: flagged }], noticed).notice).toBeUndefined();
+    expect(run([{ type: "reset" }], noticed).notice).toBeUndefined();
   });
 
   it("ends on the hub's counts for a push, and forgets them on reset", () => {

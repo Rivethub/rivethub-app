@@ -28,7 +28,7 @@ function toPick(edit: Edit | undefined): FlagPick | undefined {
 }
 
 /** Step 3: the report, then every flag the scan could not settle. Each needs a choice before the bundle can leave. */
-export function Review({ report, busy, onApply, onContinue, onDiscard }: { report: DraftReport; busy: boolean; onApply: (marks: ReturnType<typeof pendingMarks>) => void; onContinue: () => void; onDiscard: () => void }) {
+export function Review({ report, bundle, busy, onApply, onContinue, onDiscard }: { report: DraftReport; bundle?: string | undefined; busy: boolean; onApply: (marks: ReturnType<typeof pendingMarks>) => void; onContinue: () => void; onDiscard: () => void }) {
   const [edits, setEdits] = useState<Record<number, Edit | undefined>>({});
   const flags = [...report.flags].sort((a, b) => b.score - a.score);
   const picks = Object.fromEntries(Object.entries(edits).map(([n, e]) => [Number(n), toPick(e)]));
@@ -38,7 +38,7 @@ export function Review({ report, busy, onApply, onContinue, onDiscard }: { repor
     setEdits((prev) => ({ ...prev, [n]: { ...startingEdit(from), ...prev[n], ...patch } }));
   return (
     <div className="flex flex-col gap-4">
-      <ReportSummary report={report} />
+      <ReportSummary report={report} bundle={bundle} />
 
       <Card title={report.flags.length === 0 ? "No flags" : `Flags (${report.flags.length}, highest score first)`}>
         {report.flags.length === 0 ? (
@@ -79,13 +79,18 @@ function startingEdit(flag: DraftFlag): Edit {
   };
 }
 
-function ReportSummary({ report }: { report: DraftReport }) {
+/** A draft opened from a bundle has no totals or rules to show: rh scanned it when it was exported and keeps those counts in the bundle's local report. */
+function ReportSummary({ report, bundle }: { report: DraftReport; bundle: string | undefined }) {
   const t = report.totals;
   const parts = [`${t.secrets} secrets removed`, `${t.redacted} redactions`, `${t.mapped} terms mapped`, `${t.escaped} characters escaped`];
   return (
     <Card title="What the scan did">
-      <p className="m-0">{parts.join(" · ")}</p>
-      {report.rules.length > 0 && (
+      {bundle === undefined ? (
+        <p className="m-0">{parts.join(" · ")}</p>
+      ) : (
+        <p className="m-0">{bundle} was sanitized when it was exported. Its counts are in the bundle's local report.</p>
+      )}
+      {bundle === undefined && report.rules.length > 0 && (
         <ul aria-label="Changes by rule" className="m-0 flex list-none flex-wrap gap-1.5 p-0">
           {report.rules.map((r) => (
             <li key={r.rule} className="rounded-md border border-border px-2 py-0.5 font-mono text-[12px]">{r.rule} ×{r.count}</li>

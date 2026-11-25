@@ -7,7 +7,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export interface AuthSeam {
   /** Headers every request carries, such as `X-RH-CSRF`. Read on each request. */
   headers(): Record<string, string>;
-  /** Called on a plain 401. A 401 that asks for a fresh sign-in (`ReauthRequiredError`) does not call it. */
+  /** Called on a plain 401. A 401 that asks for a fresh sign-in (`ReauthRequiredError`) or names a reason does not call it. */
   onUnauthorized?(): void;
 }
 
@@ -48,6 +48,7 @@ interface Failure {
   message: string;
   code?: string;
   sessions?: number[];
+  upstreamStatus?: number;
 }
 
 async function errorBody(response: Response): Promise<Failure> {
@@ -61,6 +62,7 @@ async function errorBody(response: Response): Promise<Failure> {
       if (code !== undefined) failure.code = code as string;
       const sessions = record["sessions"];
       if (Array.isArray(sessions) && sessions.every((n) => typeof n === "number")) failure.sessions = sessions as number[];
+      if (typeof record["upstream_status"] === "number") failure.upstreamStatus = record["upstream_status"];
       return failure;
     }
   } catch {
@@ -113,9 +115,10 @@ export function createHttp(options: HttpOptions): Http {
     }
     if (response.status === 401) {
       if (failure.message === REAUTH_REQUIRED) throw new ReauthRequiredError(path);
-      options.auth?.onUnauthorized?.();
+      // A 401 with a reason is a remote server refusing this rh's login there, not this window's session ending.
+      if (failure.code === undefined) options.auth?.onUnauthorized?.();
     }
-    throw new HttpError(response.status, path, failure.message, failure.code, failure.sessions);
+    throw new HttpError(response.status, path, failure.message, failure.code, failure.sessions, failure.upstreamStatus);
   }
 
   async function parse<T>(response: Response, path: string, schema: ZodType<T>): Promise<T> {
