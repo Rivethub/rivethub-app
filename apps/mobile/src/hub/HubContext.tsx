@@ -1,7 +1,7 @@
 import type { SubjectRef } from "@rivethub/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Linking from "expo-linking";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { MemoryCache, type ResponseCache } from "../data/cache";
 import { createPhoneClient, type PhoneClient } from "../data/phoneClient";
@@ -11,7 +11,7 @@ import type { RequestTrack } from "../data/hubFetch";
 import { loadSeed, type Seed } from "../data/seed";
 import { useTheme } from "../theme/Theme";
 import { normalizeHubUrl, type PairPayload } from "./pair";
-import { resolvePairDeepLink } from "./pendingPair";
+import { CLOSED_HUB_SHEET, hubSheet } from "./pendingPair";
 import { togglePin } from "./pins";
 import { hubIdFor, loadHubState, saveHubState, upsertHub, type HubRecord } from "./records";
 import { secureKv } from "./secureKv";
@@ -56,9 +56,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
   const [seed, setSeed] = useState<Seed | null>(null);
   const [hubs, setHubs] = useState<HubRecord[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [pairError, setPairError] = useState<string | null>(null);
-  const [pendingPair, setPendingPair] = useState<PairPayload | null>(null);
+  const [sheet, dispatchSheet] = useReducer(hubSheet, CLOSED_HUB_SHEET);
   const [pins, setPins] = useState<SubjectRef[]>([]);
   const hubsRef = useRef(hubs);
   const currentRef = useRef(currentId);
@@ -116,8 +114,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
       notices.clear();
       setHubs(next);
       setCurrentId(record.id);
-      setPairError(null);
-      setOpen(false);
+      dispatchSheet({ type: "close" });
     },
     [notices],
   );
@@ -128,7 +125,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
       await saveHubState(secureKv, hubsRef.current, id);
       notices.clear();
       setCurrentId(id);
-      setOpen(false);
+      dispatchSheet({ type: "close" });
     },
     [notices],
   );
@@ -154,31 +151,23 @@ export function HubProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const cancelPendingPair = useCallback(() => {
-    setPendingPair(null);
-    setPairError(null);
-  }, []);
+  const setOpen = useCallback((open: boolean) => dispatchSheet({ type: open ? "open" : "close" }), []);
+  const cancelPendingPair = useCallback(() => dispatchSheet({ type: "cancel-pair" }), []);
 
+  const { open, pairError, pendingPair } = sheet;
   const confirmPendingPair = useCallback(async () => {
     if (!pendingPair) return;
     try {
+      // Closes the sheet, which drops the link.
       await addHub(pendingPair);
-      setPendingPair(null);
     } catch (error: unknown) {
-      setPairError(error instanceof Error ? error.message : "Could not save that hub.");
+      dispatchSheet({ type: "pair-failed", message: error instanceof Error ? error.message : "Could not save that hub." });
     }
   }, [addHub, pendingPair]);
 
   useEffect(() => {
-    const apply = (url: string | null) => {
-      const outcome = resolvePairDeepLink(url);
-      if (!outcome) return;
-      setPairError(outcome.pairError);
-      setPendingPair(outcome.pendingPair);
-      setOpen(outcome.open);
-    };
-    const subscription = Linking.addEventListener("url", ({ url }) => apply(url));
-    void Linking.getInitialURL().then((url) => apply(url));
+    const subscription = Linking.addEventListener("url", ({ url }) => dispatchSheet({ type: "link", url }));
+    void Linking.getInitialURL().then((url) => dispatchSheet({ type: "link", url }));
     return () => subscription.remove();
   }, []);
 
@@ -202,7 +191,7 @@ export function HubProvider({ children }: { children: ReactNode }) {
       removeHub,
       togglePin: onTogglePin,
     };
-  }, [ready, hubs, current, client, seed, pins, open, pairError, pendingPair, addHub, confirmPendingPair, cancelPendingPair, selectHub, removeHub, onTogglePin]);
+  }, [ready, hubs, current, client, seed, pins, open, pairError, pendingPair, setOpen, addHub, confirmPendingPair, cancelPendingPair, selectHub, removeHub, onTogglePin]);
 
   if (!api) return <View style={{ flex: 1, backgroundColor: palette.background }} />;
   return <HubContext.Provider value={api}>{children}</HubContext.Provider>;
