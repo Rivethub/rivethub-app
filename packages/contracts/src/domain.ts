@@ -424,6 +424,8 @@ export interface Account {
   pendingUpdate?: { version: string; notesUrl: string };
   crashReports: boolean;
   usageCounts: boolean;
+  /** This hub's policy turns RivetHub Cloud off for this person, so the app offers no cloud sign-in. */
+  cloudDisabled?: boolean;
 }
 
 /** A space the signed-in person belongs to, as `/api/me` names it. */

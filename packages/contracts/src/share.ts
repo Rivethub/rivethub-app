@@ -79,18 +79,28 @@ export interface MarksResult {
 
 export type ShareServerKind = "cloud" | "team" | (string & {});
 
-export interface ShareServer {
+interface ShareServerBase {
   origin: string;
   kind: ShareServerKind;
   user?: string;
   signedIn: boolean;
   default: boolean;
+  /** The stored login can't push (its token lacks `memory:import`), so the person signs in again first. */
+  needsReauth: boolean;
 }
+
+/**
+ * How a draft reaches a server, as rh decides it: `push` adds the sessions to `hub` as the signed-in user,
+ * `code` uploads a sealed bundle and gives a share code. Only a push server has a hub to push to.
+ */
+export type ShareServer = ShareServerBase & ({ delivery: "push"; hub: string } | { delivery: "code" });
 
 export interface ShareServers {
   servers: ShareServer[];
   /** `keyring` or `file`: where this rh keeps share tokens. */
   tokenStore: "keyring" | "file" | (string & {});
+  /** This hub's policy turns RivetHub Cloud off for this person: no cloud server, no cloud sign-in. */
+  cloudDisabled: boolean;
 }
 
 export type ShareLoginRequest = { kind: "cloud"; origin: string } | { kind: "team"; origin: string; token: string };
@@ -114,6 +124,33 @@ export interface SharedBundle {
   bytes: number;
   /** The fingerprint the bundle was signed as, when it was signed. */
   signed?: string;
+}
+
+/** Pushes a sealed draft into a connected team hub. */
+export interface SharePush {
+  hub: string;
+  /** The counts the sender saw. rh refuses the push when they differ from the draft's. */
+  confirm: { sessions: number; keptFlags: number };
+}
+
+export interface PushedBundle {
+  hub: string;
+  /** Who the sessions belong to on that hub. */
+  user: string;
+  sessions: number;
+  inserted: number;
+  skipped: number;
+}
+
+/** A bundle already exported and sanitized on this machine, waiting to be sent. */
+export interface ReadyBundle {
+  name: string;
+  sessions: number;
+  bytes: number;
+  /** Flags the sender still has to keep, redact or map before it can leave. */
+  openFlags: number;
+  createdAt: IsoTime;
+  sanitized: boolean;
 }
 
 export interface ShareKey {
@@ -228,6 +265,12 @@ export interface ShareClient {
   discard(id: string): Promise<void>;
   /** Seals the draft and uploads it. Needs a fresh login. */
   send(id: string, request: ShareSend): Promise<SharedBundle>;
+  /** Seals the draft and pushes its sessions into a connected team hub. Needs a fresh login. */
+  push(id: string, request: SharePush): Promise<PushedBundle>;
+  /** Bundles exported on this machine that are ready to send. */
+  bundles(): Promise<ReadyBundle[]>;
+  /** Opens an exported bundle as a draft, so its open flags are reviewed like any other draft's. */
+  draftFromBundle(name: string): Promise<DraftReport>;
 
   servers(): Promise<ShareServers>;
   /** Needs a fresh login. */

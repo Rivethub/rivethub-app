@@ -45,6 +45,13 @@ export function createShareClient(options: ShareClientOptions): ShareClient {
         signed,
         confirm: { sessions: confirm.sessions, kept_flags: confirm.keptFlags },
       }),
+    push: (id, { hub, confirm }) =>
+      http.sendFor("POST", `${draftPath(id)}/push`, wire.pushedReply, {
+        hub,
+        confirm: { sessions: confirm.sessions, kept_flags: confirm.keptFlags },
+      }),
+    bundles: () => http.get("/api/share/bundles", wire.bundlesReply),
+    draftFromBundle: (name) => http.sendFor("POST", "/api/share/drafts/from-bundle", wire.draftCreated, { name }),
 
     servers: () => http.get("/api/share/servers", wire.serversReply),
     login: (request) => http.sendFor("POST", "/api/share/servers/login", wire.loginStep, request),

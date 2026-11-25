@@ -85,11 +85,15 @@ export function WelcomePage() {
 
 function Choices({ onNext }: { onNext: () => void }) {
   const update = useUpdateAccount();
-  const signedInAs = useAccount().data?.email;
-  const [source, setSource] = useState<Account["updateSource"]>("rivethub-cloud");
+  const account = useAccount();
+  const signedInAs = account.data?.email;
+  // Until the account says cloud is on there is no account to sign in to, so updates come from GitHub.
+  const cloudOff = !account.isSuccess || account.data.cloudDisabled === true;
+  const [picked, setSource] = useState<Account["updateSource"]>("rivethub-cloud");
+  const source = cloudOff ? "github" : picked;
   const [reports, setReports] = useState(true);
   const needsEmail = source === "rivethub-cloud" && !signedInAs;
-  const canContinue = true;
+  const canContinue = !account.isPending;
 
   function finish() {
     update.mutate({ updateSource: source, crashReports: reports, usageCounts: reports });
@@ -109,20 +113,22 @@ function Choices({ onNext }: { onNext: () => void }) {
         <section aria-labelledby="updates-q" className="flex flex-col gap-3.5 rounded-[14px] border border-border bg-card p-5">
           <div className="flex flex-col gap-1">
             <h2 id="updates-q" className="m-0 text-[16px] font-semibold">How do you want updates?</h2>
-            <span className="text-[13px] text-muted-foreground">Both are free and get every feature.</span>
+            <span className="text-[13px] text-muted-foreground">{cloudOff ? "Free, with every feature." : "Both are free and get every feature."}</span>
           </div>
-          <label
-            className={cx("flex cursor-pointer gap-3 rounded-[10px] p-3", source === "rivethub-cloud" ? "border-2 border-primary" : "border border-border")}
-            style={source === "rivethub-cloud" ? { background: "color-mix(in srgb, var(--primary) 8%, transparent)" } : undefined}
-          >
-            <input type="radio" name="updates" disabled={waiting} checked={source === "rivethub-cloud"} onChange={() => setSource("rivethub-cloud")} className="mt-[3px] accent-primary" />
-            <span className="flex flex-1 flex-col gap-2">
-              <span className="font-medium">From the RivetHub server, with an account</span>
-              <span className="text-[13px] leading-[1.45] text-muted-foreground">Approve this node in your browser using your RivetHub account. You get signed updates as we release them, and Beta if you want it.</span>
-              {source === "rivethub-cloud" && signedInAs && <span className="text-[13px]">Signed in as {signedInAs}.</span>}
+          {!cloudOff && (
+            <label
+              className={cx("flex cursor-pointer gap-3 rounded-[10px] p-3", source === "rivethub-cloud" ? "border-2 border-primary" : "border border-border")}
+              style={source === "rivethub-cloud" ? { background: "color-mix(in srgb, var(--primary) 8%, transparent)" } : undefined}
+            >
+              <input type="radio" name="updates" disabled={waiting} checked={source === "rivethub-cloud"} onChange={() => setSource("rivethub-cloud")} className="mt-[3px] accent-primary" />
+              <span className="flex flex-1 flex-col gap-2">
+                <span className="font-medium">From the RivetHub server, with an account</span>
+                <span className="text-[13px] leading-[1.45] text-muted-foreground">Approve this node in your browser using your RivetHub account. You get signed updates as we release them, and Beta if you want it.</span>
+                {source === "rivethub-cloud" && signedInAs && <span className="text-[13px]">Signed in as {signedInAs}.</span>}
 
-            </span>
-          </label>
+              </span>
+            </label>
+          )}
           <label className={cx("flex cursor-pointer gap-3 rounded-[10px] p-3", source === "github" ? "border-2 border-primary" : "border border-border")}>
             <input type="radio" name="updates" checked={source === "github"} onChange={() => { signIn.cancel(); setSource("github"); }} className="mt-[3px] accent-primary" />
             <span className="flex flex-1 flex-col gap-1">
