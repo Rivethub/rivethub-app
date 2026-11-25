@@ -20,11 +20,13 @@ type Reply = string | { status: 404 };
 /** A feed whose manifest answers each request with the next reply in `manifests` (the last repeats). */
 function feed(manifests: Reply[], sig: Reply) {
   const requests: string[] = [];
+  const headers: Record<string, unknown>[] = [];
   let manifestReads = 0;
   const executor = {
     request: async (options: RequestOptions) => {
       const path = options.path ?? "";
       requests.push(path);
+      headers.push({ ...options.headers });
       const reply = path.endsWith(".yml.sig") ? sig : manifests[Math.min(manifestReads++, manifests.length - 1)]!;
       if (typeof reply !== "string") throw Object.assign(new Error("404"), { statusCode: reply.status });
       return reply;
@@ -35,7 +37,7 @@ function feed(manifests: Reply[], sig: Reply) {
     const Provider = signedFeedProvider({ url: FEED, requireSignature, keyring });
     return new Provider(null, null, runtime).getLatestVersion();
   };
-  return { latest, requests };
+  return { latest, requests, headers };
 }
 
 describe("signedFeedProvider", () => {
@@ -45,6 +47,13 @@ describe("signedFeedProvider", () => {
     expect(info.version).toBe("0.2.0");
     expect(info.files).toEqual([{ url: "RivetHub-0.2.0.AppImage", sha512: "c2lnbmVk", size: 10 }]);
     expect(requests.filter((p) => p.endsWith(".yml"))).toHaveLength(1);
+  });
+
+  it("asks caches to revalidate both the manifest and its .sig", async () => {
+    const { latest, requests, headers } = feed([SIGNED], signatureOf(SIGNED));
+    await latest(true);
+    expect(requests).toHaveLength(2);
+    for (const sent of headers) expect(sent).toMatchObject({ "cache-control": "no-cache" });
   });
 
   it("refuses a valid signature served beside tampered metadata from another response", async () => {

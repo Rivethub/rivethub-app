@@ -11,9 +11,11 @@ export interface SignedFeedOptions {
   keyring?: readonly TrustedReleaseKey[];
 }
 
+const NO_CACHE = { "cache-control": "no-cache" };
+
 /**
  * electron-updater's generic provider, except that the manifest is fetched once with its .sig and
- * verified before it is parsed. Every update decision (version, files, sha512, the .deb link) reads
+ * verified before it is parsed. Both requests send `cache-control: no-cache`, so a CDN can't serve a manifest and a .sig from different releases. Every update decision (version, files, sha512, the .deb link) reads
  * the UpdateInfo parsed from those verified bytes. Pass the result as a custom `updateProvider`.
  */
 export function signedFeedProvider(options: SignedFeedOptions) {
@@ -27,8 +29,8 @@ export function signedFeedProvider(options: SignedFeedOptions) {
       const manifestName = `${this.getDefaultChannelName()}.yml`;
       const manifestUrl = new URL(manifestName, baseUrl);
       const [manifest, signature] = await Promise.all([
-        this.httpRequest(manifestUrl),
-        this.httpRequest(new URL(`${manifestName}.sig`, baseUrl)).then(
+        this.httpRequest(manifestUrl, NO_CACHE),
+        this.httpRequest(new URL(`${manifestName}.sig`, baseUrl), NO_CACHE).then(
           (body) => body ?? "",
           (error: unknown) => {
             if ((error as { statusCode?: unknown }).statusCode === 404) return null;

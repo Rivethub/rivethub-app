@@ -332,6 +332,18 @@ jobs:
           printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > "${RUNNER_TEMP}/known_hosts"
           echo "SSH_CMD=ssh -i ${KEY} -o UserKnownHostsFile=${RUNNER_TEMP}/known_hosts -o StrictHostKeyChecking=yes" >> "$GITHUB_ENV"
 
+      # rrsync can't delete files, so a .sig left by an earlier signed publish would sit beside this
+      # unsigned manifest and fail verification for every client that requires signatures.
+      - name: Refuse a stale signature
+        if: needs.sign.outputs.signed != 'true'
+        run: |
+          set -euo pipefail
+          for manifest in latest-linux.yml latest-linux-arm64.yml; do
+            url="https://get.rivethub.io/desktop/${CHANNEL}/${manifest}.sig"
+            status=$(curl -sS -o /dev/null -w '%{http_code}' -H 'cache-control: no-cache' "${url}")
+            [[ "${status}" == 404 ]] || { echo "::error::unsigned publish, but GET ${url} returned ${status} instead of 404; remove the stale .sig on the host first"; exit 1; }
+          done
+
       # Packages first, manifests last, so a client never reads a manifest whose files aren't there
       # yet. No --delete: older packages stay for rollback. The key's rrsync forced command roots
       # these paths at /var/www/get.rivethub.io/desktop, and the channel directory must already exist.
