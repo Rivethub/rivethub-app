@@ -21,6 +21,16 @@ export function sameHost(a: string, b: string): boolean {
   return host !== "" && host === bareHost(b);
 }
 
+/** rh's own name for RivetHub Cloud (`DEFAULT_SERVER`). It matches the host alone, so a port or letter case doesn't change it and a subdomain isn't it. */
+const CLOUD_HOST = "rivethub.cloud";
+
+/** Whether an origin, with or without its scheme, names rivethub.cloud. A drop box that rh only labels `kind: "cloud"` is not. */
+export function isRivetHubCloud(origin: string): boolean {
+  const authority = bareHost(origin);
+  const host = authority.slice(authority.lastIndexOf("@") + 1).replace(/:\d*$/, "").replace(/\.$/, "");
+  return host === CLOUD_HOST;
+}
+
 export function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;

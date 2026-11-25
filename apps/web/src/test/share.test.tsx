@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
 import type { AppClient } from "../client/context";
 import { createSampleClient } from "../dev/sample-client";
+import { listedServers } from "../share/destination";
 
 const at = (iso: string) => iso as IsoTime;
 const found = (id: string, title: string): ShareableSession => ({ id, title, agent: "claude-code", first: at("2026-11-01T10:00:00Z"), last: at("2026-11-01T11:00:00Z"), messages: 6, excerpts: [`about ${title}`] });
@@ -432,6 +433,45 @@ describe("Share destinations and ready bundles", () => {
     expect(await screen.findByRole("radio", { name: /studio/ })).toBeInTheDocument();
     expect(screen.queryByRole("radio", { name: /rivethub\.cloud/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign in to rivethub.cloud" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a private drop box that rh labels cloud when cloud is off, and hides only rivethub.cloud", async () => {
+    const privateBox: ShareServer = { origin: "https://drops.example.org", kind: "cloud", delivery: "code", user: "phil", signedIn: true, default: true, needsReauth: false };
+    const share = fakeShare({ servers: serving([cloud, privateBox, studio], true), bundles: vi.fn(async () => [{ ...ready, openFlags: 0 }]), draftFromBundle: vi.fn(async () => clean()) });
+    const { user } = renderAt("/share", share, { account: signedOutCloudOff });
+    await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
+    expect(await screen.findByRole("radio", { name: /drops\.example\.org/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /studio/ })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: /rivethub\.cloud/ })).not.toBeInTheDocument();
+  });
+
+  it("lists by rivethub.cloud's host, as the runtime names it, whatever its port, case or scheme", () => {
+    const withOrigin = (origin: string): ShareServer => ({ ...cloud, origin });
+    const listed = (origin: string) => listedServers({ tokenStore: "file", cloudDisabled: true, servers: [withOrigin(origin)] }, "off").length === 1;
+    for (const hidden of ["https://rivethub.cloud", "rivethub.cloud", "https://RivetHub.Cloud:443", "rivethub.cloud:8443", "https://rivethub.cloud./"]) expect(listed(hidden), hidden).toBe(false);
+    for (const shown of ["https://drops.rivethub.cloud", "https://rivethub.cloud.evil.example", "https://evil.example/rivethub.cloud", "https://rivethub.cloud@evil.example"]) expect(listed(shown), shown).toBe(true);
+  });
+
+  it("does not let the first server's late sign-in reply replace the second server's code", async () => {
+    const other: ShareServer = { origin: "https://drops.example.org", kind: "cloud", delivery: "code", signedIn: false, default: false, needsReauth: false };
+    const started = (origin: string, userCode: string) => ({ state: "started" as const, login: `l-${userCode}`, userCode, verificationUrl: `${origin}/device`, interval: 60, expiresAt: at("2026-11-25T12:00:00Z") });
+    let releaseFirst: () => void = () => {};
+    const login = vi.fn(async (request: { origin: string }) => {
+      if (request.origin === cloud.origin) await new Promise<void>((resolve) => (releaseFirst = resolve));
+      return started(request.origin, request.origin === cloud.origin ? "AAAA-AAAA" : "BBBB-BBBB");
+    });
+    const share = fakeShare({ servers: serving([cloud, other]), bundles: vi.fn(async () => [{ ...ready, openFlags: 0 }]), draftFromBundle: vi.fn(async () => clean()), login });
+    const { user } = renderAt("/share", share);
+    await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
+    await user.click(await screen.findByRole("button", { name: "Sign in to rivethub.cloud" }));
+    await waitFor(() => expect(login).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("button", { name: "Sign in to drops.example.org" }));
+    expect(await screen.findByLabelText("Sign-in code BBBB-BBBB")).toBeInTheDocument();
+
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByLabelText("Sign-in code BBBB-BBBB")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Sign-in code AAAA-AAAA")).not.toBeInTheDocument();
   });
 
   it("stops a cloud sign-in in progress when the policy turns cloud off", async () => {

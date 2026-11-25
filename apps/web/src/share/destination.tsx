@@ -1,13 +1,13 @@
 import type { ShareLoginStep, ShareServer, ShareServers } from "@rivethub/contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { withFreshLogin } from "../client/auth";
 import { useShareClient } from "../client/context";
 import { useAccount } from "../client/queries";
 import { Button, cx, Loading } from "../components/ui";
 import { describeFailure, type Failure } from "./failure";
 import { Card, FailureNote, field } from "./ui";
-import { hostOf, sameServer } from "./format";
+import { hostOf, isRivetHubCloud, sameServer } from "./format";
 
 export const SERVERS_KEY = ["share", "servers"] as const;
 
@@ -47,9 +47,9 @@ export function cloudPolicy(servers: ShareServers | undefined, account: { isPend
   return servers === undefined || account.isPending ? "pending" : "on";
 }
 
-/** A RivetHub Cloud drop box is offered only once the policy has resolved to on. */
+/** rivethub.cloud is offered only once the policy has resolved to on. Any other server stays, whatever kind rh labels it. */
 export function listedServers(servers: ShareServers, cloud: CloudPolicy): ShareServer[] {
-  return servers.servers.filter((s) => cloud === "on" || !(s.kind === "cloud" && s.delivery === "code"));
+  return servers.servers.filter((s) => cloud === "on" || !isRivetHubCloud(s.origin));
 }
 
 /**
@@ -170,33 +170,33 @@ export function Destination({ server, signed, onServer, onSigned, onContinue, on
 function DeviceLogin({ origin, onSignedIn, onCancel, onFail }: { origin: string; onSignedIn: (origin: string) => void; onCancel: () => void; onFail: (error: unknown) => void }) {
   const share = useShareClient()!;
   const [step, setStep] = useState<Extract<ShareLoginStep, { state: "started" }> | null>(null);
-  const live = useRef(true);
   useEffect(() => {
-    live.current = true;
+    // Local to the attempt: a ref shared across attempts is reset by the next one and lets the first's late reply through.
+    let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async (login: string, seconds: number) => {
       timer = setTimeout(async () => {
         try {
           const next = await share.pollLogin(login);
-          if (!live.current) return;
+          if (!live) return;
           if (next.state === "signed-in") onSignedIn(next.origin);
           else await poll(login, next.state === "pending" ? next.interval : seconds);
         } catch (error) {
-          if (live.current) onFail(error);
+          if (live) onFail(error);
         }
       }, seconds * 1000);
     };
     share
       .login({ kind: "cloud", origin })
       .then((started) => {
-        if (!live.current) return;
+        if (!live) return;
         if (started.state !== "started") return onFail(new Error("rh did not start a sign-in"));
         setStep(started);
         return poll(started.login, started.interval);
       })
-      .catch((error: unknown) => live.current && onFail(error));
+      .catch((error: unknown) => live && onFail(error));
     return () => {
-      live.current = false;
+      live = false;
       clearTimeout(timer);
     };
   }, [origin]);
