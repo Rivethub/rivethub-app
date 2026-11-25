@@ -5,6 +5,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../app";
+import type { AppClient } from "../client/context";
 import { createSampleClient } from "../dev/sample-client";
 
 const at = (iso: string) => iso as IsoTime;
@@ -58,8 +59,8 @@ function fakeShare(overrides: Partial<ShareClient> = {}): ShareClient {
   };
 }
 
-function renderAt(path: string, share?: ShareClient) {
-  const client = { ...createSampleClient(), ...(share ? { share } : {}) };
+function renderAt(path: string, share?: ShareClient, extra: Partial<AppClient> = {}) {
+  const client = { ...createSampleClient(), ...(share ? { share } : {}), ...extra };
   const user = userEvent.setup();
   render(<App client={client} history={createMemoryHistory({ initialEntries: [path] })} />);
   return { user };
@@ -242,6 +243,10 @@ describe("Share destinations and ready bundles", () => {
   const cloud: ShareServer = { origin: "https://rivethub.cloud", kind: "cloud", signedIn: false, default: false };
   const ready: ReadyBundle = { name: "retention-nov", sessions: 2, bytes: 18432, openFlags: 2, createdAt: at("2026-11-20T09:30:00Z"), sanitized: true };
   const clean = (): DraftReport => ({ ...flagged(), flags: [] });
+  const signedOutCloudOff = async () => {
+    const { email: _, ...rest } = await createSampleClient().account();
+    return { ...rest, cloudDisabled: true };
+  };
   const serving = (servers: ShareServer[], cloudDisabled = false) => vi.fn(async () => ({ tokenStore: "file" as const, cloudDisabled, servers }));
 
   it("lists each connected server by its hub name with the hub's online state, and other hubs not set up for sharing", async () => {
@@ -336,6 +341,25 @@ describe("Share destinations and ready bundles", () => {
     await user.click(await screen.findByRole("button", { name: "Send retention-nov" }));
     expect(await screen.findByRole("radio", { name: /rivethub\.cloud/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in to rivethub.cloud" })).toBeInTheDocument();
+  });
+
+  it("leaves cloud out of Settings' team servers when the account says cloud is off", async () => {
+    renderAt("/settings/server", fakeShare({ servers: serving([cloud, studio]) }), { account: signedOutCloudOff });
+    const team = await screen.findByRole("region", { name: "Team servers" });
+    expect(await within(team).findByText("studio")).toBeInTheDocument();
+    await waitFor(() => expect(within(team).queryByText("rivethub.cloud")).not.toBeInTheDocument());
+  });
+
+  it("offers no cloud account sign-in when cloud is off", async () => {
+    renderAt("/settings/account", undefined, { account: signedOutCloudOff });
+    expect(await screen.findByText(/RivetHub Cloud is turned off on this hub/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in with your RivetHub account" })).not.toBeInTheDocument();
+  });
+
+  it("describes sending to a team server on Shared when cloud is off", async () => {
+    renderAt("/shared", fakeShare(), { account: signedOutCloudOff });
+    expect(await screen.findByText(/For a team server you are connected to/)).toBeInTheDocument();
+    expect(screen.queryByText(/For a friend, your family/)).not.toBeInTheDocument();
   });
 });
 

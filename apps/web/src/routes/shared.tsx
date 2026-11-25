@@ -6,6 +6,7 @@ import { useMe, useSessions } from "../client/queries";
 import { MobileBack } from "../components/article";
 import { Frame, MainSidebar } from "../components/shell";
 import { SampleBadge } from "../components/ui";
+import { useShareServers } from "../share/destination";
 import { useIsPhone } from "../lib/media";
 
 function bySpace(rows: SessionSummaryRow[]): { space: string; items: SessionSummaryRow[] }[] {
@@ -29,6 +30,7 @@ export function SharedPage() {
   const share = useShareClient();
   const list = useSessions({ view: "all" });
   const me = useMe();
+  const { cloudDisabled } = useShareServers();
   const grouped = bySpace(list.data?.items ?? []);
   const spaces = (me.data?.spaces ?? []).map((space) => ({ id: space.id, space: space.name, items: grouped.find((g) => g.space === space.id)?.items ?? [] }));
   return (
@@ -81,13 +83,17 @@ export function SharedPage() {
             <div className="flex flex-col gap-0.5">
               <h2 id="with-hub" className="m-0 text-[15px] font-semibold">With another RivetHub</h2>
               <span className="text-[13px] leading-[1.5] text-muted-foreground">
-                For a friend, your family or a team that runs its own. You choose the sessions, secrets are scrubbed on this machine, and you send a one-time code.
+                {cloudDisabled
+                  ? "For a team server you are connected to. You choose the sessions, secrets are scrubbed on this machine, and they go to that server."
+                  : "For a friend, your family or a team that runs its own. You choose the sessions, secrets are scrubbed on this machine, and you send a one-time code."}
               </span>
             </div>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-3">
               <div className={card}>
                 <span className="font-semibold">Send sessions</span>
-                <span className="flex-1 text-[13px] leading-[1.5] text-muted-foreground">Approve, redact or leave out each session, check what the scrubber flagged, then get a code to pass on privately.</span>
+                <span className="flex-1 text-[13px] leading-[1.5] text-muted-foreground">{cloudDisabled
+                    ? "Approve, redact or leave out each session, check what the scrubber flagged, then send it to a connected team server."
+                    : "Approve, redact or leave out each session, check what the scrubber flagged, then get a code to pass on privately."}</span>
                 {share ? <Link to="/share" className="w-fit rounded-lg bg-primary px-3 py-1.5 text-[13px] font-medium text-primary-foreground hover:no-underline">Share sessions</Link> : null}
               </div>
               <div className={card}>

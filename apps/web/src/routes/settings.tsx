@@ -1,7 +1,7 @@
 import { DeviceApproval } from "../components/device-login";
 import { ago, shortDate, time } from "@rivethub/client-runtime/format";
 import type { Account, HarnessStatus, ModelJob } from "@rivethub/contracts";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { getRouteApi, Link, Navigate } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { useMe, useAccount, useConnectHarness, useDeleteAccount, useHarnesses, useHubs, useLastCrashReport, useModelJobs, useSignOut, useUpdateAccount } from "../client/queries";
@@ -15,7 +15,7 @@ import { listSentence } from "../lib/format";
 import { describeMemoryRole, memoryRoleStatus } from "../lib/memoryRole";
 import { useIsPhone } from "../lib/media";
 import { useShareClient } from "../client/context";
-import { SERVERS_KEY, shareServerStatus, shareServerTitle, TeamForm } from "../share/destination";
+import { SERVERS_KEY, shareServerStatus, shareServerTitle, TeamForm, useShareServers } from "../share/destination";
 import { ShareKeys } from "../share/keys";
 import { useDeviceSignIn } from "../lib/signin";
 import type { SettingsSection } from "../router";
@@ -432,7 +432,8 @@ function AccountCard({ account }: { account: Account }) {
           <Button disabled={signOut.isPending} onClick={() => signOut.mutate()}>Sign out</Button>
         )}
       </div>
-      {!account.email && (
+      {!account.email && account.cloudDisabled && <p className="m-0 text-[13px] text-muted-foreground">RivetHub Cloud is turned off on this hub, so there is no account to sign in to.</p>}
+      {!account.email && !account.cloudDisabled && (
         <div className="flex flex-col items-start gap-3">
           <DeviceApproval state={signIn.state} />
           {waiting ? <Button onClick={signIn.cancel}>Cancel</Button> : <Button variant="primary" onClick={() => void signIn.start()}>Sign in with your RivetHub account</Button>}
@@ -579,7 +580,7 @@ function Server() {
   const share = useShareClient();
   const qc = useQueryClient();
   const [teamFailure, setTeamFailure] = useState<string | null>(null);
-  const servers = useQuery({ queryKey: SERVERS_KEY, queryFn: () => share!.servers(), enabled: share !== null, retry: false });
+  const { servers, destinations } = useShareServers();
   if (hubs.isPending) return <Loading />;
   if (hubs.isError) return <ErrorNote error={hubs.error} />;
   const current = hubs.data.find((hub) => hub.current);
@@ -607,15 +608,15 @@ function Server() {
           <>
             {servers.isPending && <Loading label="Loading servers" />}
             {servers.isError && <ErrorNote error={servers.error} />}
-            {servers.data && (
+            {destinations && (
               <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                {servers.data.servers.map((server) => (
+                {destinations.map((server) => (
                   <li key={server.origin} className="flex flex-col rounded-lg border border-border px-3 py-2">
                     <span className="font-medium">{shareServerTitle(server)}</span>
                     <span className="text-[12px] text-muted-foreground">{shareServerStatus(server)}</span>
                   </li>
                 ))}
-                {servers.data.servers.length === 0 && <li className="text-muted-foreground">No share servers are set up.</li>}
+                {destinations.length === 0 && <li className="text-muted-foreground">No share servers are set up.</li>}
               </ul>
             )}
             {teamFailure && <p role="alert" className="m-0 text-error">{teamFailure}</p>}
