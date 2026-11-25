@@ -7,7 +7,8 @@ import { AppImageUpdater, DebUpdater, type BaseUpdater } from "electron-updater"
 import { readUpdateChannel, writeUpdateChannel } from "../settings/updateChannel";
 import { installWithLockHandoff } from "./lockHandoff";
 import { channelFeedUrl, debDownloadUrl, detectInstall, UPDATE_FEED_BASE, updateChannelFor, type UpdateInstall } from "./updateFeed";
-import { manifestFilenameForArch, manifestMatchesUpdateInfo, verifyEd25519Envelope } from "./verifySignature";
+import { signedFeedProvider } from "./signedFeedProvider";
+import { REQUIRE_SIGNED_UPDATE_MANIFESTS } from "./verifySignature";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** electron-updater makes all its requests on this session (its NET_SESSION_NAME). */
@@ -70,33 +71,6 @@ function createUpdater(install: Exclude<UpdateInstall, { kind: "unsupported" }>,
 
 const now = () => new Date().toISOString() as IsoTime;
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
-
-async function verifyManifestSignature(
-  feedUrl: string,
-  info: { version: string; files: readonly { sha512?: string }[] },
-): Promise<void> {
-  const updaterSession = session.fromPartition(UPDATER_PARTITION, { cache: false });
-  const manifestName = manifestFilenameForArch();
-  const sigRes = await updaterSession.fetch(`${feedUrl}${manifestName}.sig`);
-  if (sigRes.status === 404) {
-    if (process.env["RIVETHUB_REQUIRE_UPDATE_SIG"] === "1") {
-      throw new Error(`Update manifest signature (${manifestName}.sig) is missing.`);
-    }
-    return;
-  }
-  if (!sigRes.ok) {
-    throw new Error(`Failed to fetch ${manifestName}.sig (${sigRes.status}).`);
-  }
-  const manifestRes = await updaterSession.fetch(`${feedUrl}${manifestName}`);
-  if (!manifestRes.ok) {
-    throw new Error(`Failed to fetch ${manifestName} (${manifestRes.status}).`);
-  }
-  const manifestBytes = Buffer.from(await manifestRes.arrayBuffer());
-  verifyEd25519Envelope(manifestBytes, await sigRes.text());
-  if (!manifestMatchesUpdateInfo(manifestBytes.toString("utf8"), info)) {
-    throw new Error(`Signed ${manifestName} does not match the advertised update metadata.`);
-  }
-}
 
 export function createDesktopUpdates(options: {
   settingsFile: string;
@@ -167,15 +141,16 @@ export function createDesktopUpdates(options: {
     try {
       const feedUrl = channelFeedUrl(feedBase, checked);
       setState({ state: "checking", channel: checked });
-      updater.setFeedURL({ provider: "generic", url: feedUrl });
+      updater.setFeedURL({
+        provider: "custom",
+        updateProvider: signedFeedProvider({ url: feedUrl, requireSignature: REQUIRE_SIGNED_UPDATE_MANIFESTS }),
+      });
       const result = await updater.checkForUpdates();
       if (stale()) return;
       if (!result?.isUpdateAvailable) {
         setState({ state: "idle", channel: checked, checkedAt: now() });
         return;
       }
-      await verifyManifestSignature(feedUrl, result.updateInfo);
-      if (stale()) return;
       const { version, files } = result.updateInfo;
       if (install.kind === "deb") {
         const downloadUrl = debDownloadUrl(feedUrl, files);

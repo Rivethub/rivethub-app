@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { manifestFilenameForArch, manifestMatchesUpdateInfo, RELEASE_KEYRING, verifyEd25519Envelope } from "./verifySignature";
+import { RELEASE_KEYRING, verifyEd25519Envelope } from "./verifySignature";
 
 function generateTestPair() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -35,15 +35,5 @@ describe("verifyEd25519Envelope", () => {
     expect(() => verifyEd25519Envelope(payload, "", keyring)).toThrow(/empty/);
     expect(() => verifyEd25519Envelope(payload, "not-v1", keyring)).toThrow(/format/);
     expect(() => verifyEd25519Envelope(payload, "v1:test-key:AAAA", keyring)).toThrow(/length/);
-  });
-
-  it("matches JSON and YAML manifests against advertised updateInfo", () => {
-    const info = { version: "0.2.0", files: [{ sha512: "abc123==" }] };
-    expect(manifestMatchesUpdateInfo("version: 0.2.0\nfiles:\n  - url: a.AppImage\n    sha512: abc123==\n", info)).toBe(true);
-    expect(manifestMatchesUpdateInfo(JSON.stringify(info), info)).toBe(true);
-    expect(manifestMatchesUpdateInfo("version: 0.2.0\nfiles:\n  - url: a.AppImage\n    sha512: other==\n", info)).toBe(false);
-    expect(manifestMatchesUpdateInfo("version: 0.2.1\nfiles:\n  - url: a.AppImage\n    sha512: abc123==\n", info)).toBe(false);
-    expect(manifestFilenameForArch("arm64")).toBe("latest-linux-arm64.yml");
-    expect(manifestFilenameForArch("x64")).toBe("latest-linux.yml");
   });
 });

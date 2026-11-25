@@ -1,20 +1,19 @@
 import { createPublicKey, verify } from "node:crypto";
+import releaseKeys from "./release-keys.json";
 
 export interface TrustedReleaseKey {
   readonly id: string;
   readonly publicKeyPem: string;
 }
 
-export const RELEASE_KEYRING: readonly TrustedReleaseKey[] = [
-  {
-    id: "2026-main",
-    publicKeyPem: [
-      "-----BEGIN PUBLIC KEY-----",
-      "MCowBQYDK2VwAyEAsKleiEFDp736iCYw4miADCaPdIoEia4rJSh6/bDMLVs=",
-      "-----END PUBLIC KEY-----",
-    ].join("\n"),
-  },
-];
+/** The signer (.github/scripts/sign-release-manifest.mjs) refuses any key not listed here. */
+export const RELEASE_KEYRING: readonly TrustedReleaseKey[] = releaseKeys;
+
+/**
+ * Off: a feed without a .sig is still accepted, as every release before signing was. Turn it on
+ * once every channel has published a signed manifest; the app then refuses unsigned updates.
+ */
+export const REQUIRE_SIGNED_UPDATE_MANIFESTS = false;
 
 export interface ParsedSignature {
   readonly keyId: string;
@@ -58,34 +57,19 @@ export function verifyEd25519Envelope(
   return keyId;
 }
 
-export function manifestFilenameForArch(arch = process.arch): string {
-  return arch === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export function manifestMatchesUpdateInfo(
-  manifestText: string,
-  info: { version: string; files: readonly { sha512?: string }[] },
-): boolean {
-  const trimmed = manifestText.trimStart();
-  if (trimmed.startsWith("{")) {
-    try {
-      const parsed = JSON.parse(manifestText) as { version?: unknown; files?: { sha512?: unknown }[] };
-      if (parsed.version !== info.version) return false;
-      const shaSet = new Set((parsed.files ?? []).map((f) => f.sha512).filter((s): s is string => typeof s === "string"));
-      return info.files.every((f) => !f.sha512 || shaSet.has(f.sha512));
-    } catch {
-      return false;
-    }
+/**
+ * Returns the manifest to act on, which is `manifest` itself once `signature` verifies it.
+ * `signature` is null when the feed has no .sig, which passes only while signatures aren't required.
+ */
+export function acceptManifest(
+  manifest: string,
+  signature: string | null,
+  options: { requireSignature: boolean; keyring?: readonly TrustedReleaseKey[] },
+): string {
+  if (signature === null) {
+    if (options.requireSignature) throw new Error("The update manifest is not signed.");
+    return manifest;
   }
-  const verRe = new RegExp(`^version:\\s*['"]?${escapeRegExp(info.version)}['"]?\\s*$`, "m");
-  if (!verRe.test(manifestText)) return false;
-  return info.files.every((f) => {
-    if (!f.sha512) return true;
-    const shaRe = new RegExp(`sha512:\\s*['"]?${escapeRegExp(f.sha512)}['"]?\\s*$`, "m");
-    return shaRe.test(manifestText);
-  });
+  verifyEd25519Envelope(Buffer.from(manifest, "utf8"), signature, options.keyring);
+  return manifest;
 }
