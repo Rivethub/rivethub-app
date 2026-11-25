@@ -104,6 +104,66 @@ describe("share client", () => {
     expect(seen).toEqual(["csrf-2"]);
   });
 
+  it("reads each server's hub and the cloud policy, and treats an rh without the policy as cloud on", async () => {
+    const { share } = client({
+      "GET /api/share/servers": {
+        servers: [
+          { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signed_in: true, default: true },
+          { origin: "https://drop.example.org", kind: "team", signed_in: false, default: false },
+        ],
+        logins_file: "logins.json",
+        token_store: "keyring",
+        cloud_disabled: true,
+      },
+    });
+    expect(await share.servers()).toEqual({
+      tokenStore: "keyring",
+      cloudDisabled: true,
+      servers: [
+        { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signedIn: true, default: true },
+        { origin: "https://drop.example.org", kind: "team", signedIn: false, default: false },
+      ],
+    });
+    const older = client({ "GET /api/share/servers": { servers: [], token_store: "file" } });
+    expect((await older.share.servers()).cloudDisabled).toBe(false);
+  });
+
+  it("lists ready bundles and drops a row it cannot read", async () => {
+    const { share } = client({
+      "GET /api/share/bundles": {
+        bundles: [
+          { name: "retention-2026-11", sessions: 3, bytes: 18432, open_flags: 2, created_at: "2026-11-20T09:30:00Z", sanitized: true },
+          { name: "broken", sessions: "three" },
+        ],
+      },
+    });
+    expect(await share.bundles()).toEqual([{ name: "retention-2026-11", sessions: 3, bytes: 18432, openFlags: 2, createdAt: "2026-11-20T09:30:00.000Z", sanitized: true }]);
+  });
+
+  it("opens a bundle as a draft and pushes the draft to a hub with the confirmed counts", async () => {
+    const { share, calls } = client({
+      "POST /api/share/drafts/from-bundle": { status: 201, body: report },
+      "POST /api/share/drafts/d-1/push": { hub: "acme", user: "phil", sessions: 1, inserted: 40, skipped: 2 },
+    });
+    const draft = await share.draftFromBundle("retention-2026-11");
+    expect(draft.draft).toBe("d-1");
+    expect(draft.flags).toHaveLength(2);
+    const pushed = await share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } });
+    expect(pushed).toEqual({ hub: "acme", user: "phil", sessions: 1, inserted: 40, skipped: 2 });
+    expect(calls.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+      { method: "POST", path: "/api/share/drafts/from-bundle", body: { name: "retention-2026-11" } },
+      { method: "POST", path: "/api/share/drafts/d-1/push", body: { hub: "acme", confirm: { sessions: 1, kept_flags: 0 } } },
+    ]);
+  });
+
+  it("reads the account's cloud policy", async () => {
+    const account = { updateSource: "github", channel: "stable", autoDownload: true, version: "0.8.19", crashReports: false, usageCounts: false };
+    const off = createRhClient({ baseUrl: "http://127.0.0.1:5174", fetch: fakeRh({ "GET /api/account": { ...account, cloudDisabled: true } }).fetch });
+    expect((await off.methods.account!()).cloudDisabled).toBe(true);
+    const older = createRhClient({ baseUrl: "http://127.0.0.1:5174", fetch: fakeRh({ "GET /api/account": account }).fetch });
+    expect((await older.methods.account!()).cloudDisabled).toBeUndefined();
+  });
+
   it("discards a draft with DELETE and reads no body", async () => {
     const { share, calls } = client({ "DELETE /api/share/drafts/d-1": noContent });
     await share.discard("d-1");

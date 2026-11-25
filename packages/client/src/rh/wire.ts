@@ -490,6 +490,7 @@ export const account = z.object({
   pendingUpdate: nullish(z.object({ version: z.string(), notesUrl: z.string() })),
   crashReports: z.boolean(),
   usageCounts: z.boolean(),
+  cloudDisabled: nullish(z.boolean()),
 });
 
 // Zod 4's URL schema rewrites whitespace. Keep the hub's original string on success.

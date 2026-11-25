@@ -41,7 +41,10 @@ function fakeShare(overrides: Partial<ShareClient> = {}): ShareClient {
     }),
     discard: vi.fn(async () => {}),
     send: vi.fn(async () => ({ code: CODE, expiresAt: at("2026-11-19T10:00:00Z"), bytes: 2048, signed: "SHA256:abc" })),
-    servers: vi.fn(async () => ({ tokenStore: "file" as const, servers: [{ origin: "http://127.0.0.1:61522", kind: "team" as const, user: "phil", signedIn: true, default: true }] })),
+    push: vi.fn(),
+    bundles: vi.fn(async () => []),
+    draftFromBundle: vi.fn(),
+    servers: vi.fn(async () => ({ tokenStore: "file" as const, cloudDisabled: false, servers: [{ origin: "http://127.0.0.1:61522", kind: "team" as const, user: "phil", signedIn: true, default: true }] })),
     login: vi.fn(),
     pollLogin: vi.fn(),
     logout: vi.fn(async () => {}),
@@ -91,6 +94,7 @@ describe("Settings server", () => {
     const { user } = renderAt("/settings/server", fakeShare({
       servers: vi.fn(async () => ({
         tokenStore: "file" as const,
+        cloudDisabled: false,
         servers: [
           { origin: "https://192.0.2.14:5174", kind: "team" as const, user: "phil", signedIn: true, default: true },
           { origin: "https://rivethub.cloud", kind: "cloud" as const, signedIn: false, default: false },

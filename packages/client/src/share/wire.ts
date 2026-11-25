@@ -8,6 +8,8 @@ import type {
   ImportResult,
   InboundSession,
   IsoTime,
+  PushedBundle,
+  ReadyBundle,
   ReceiveReport,
   ShareableSession,
   ShareLoginStep,
@@ -92,15 +94,35 @@ export const sentReply = z
 
 export const serversReply = z
   .object({
-    servers: z.array(z.object({ origin: z.string(), kind: descriptive(["cloud", "team"]), user: opt(z.string()), signed_in: z.boolean(), default: z.boolean() })),
+    servers: z.array(
+      z.object({ origin: z.string(), kind: descriptive(["cloud", "team"]), hub: opt(z.string()), user: opt(z.string()), signed_in: z.boolean(), default: z.boolean() }),
+    ),
     token_store: descriptive(["keyring", "file"]),
+    // An rh older than the cloud policy leaves it out, and its cloud is on.
+    cloud_disabled: z.boolean().default(false),
   })
   .transform(
-    ({ servers, token_store }): ShareServers => ({
+    ({ servers, token_store, cloud_disabled }): ShareServers => ({
       tokenStore: token_store,
-      servers: servers.map(({ signed_in, user, ...rest }) => ({ ...rest, signedIn: signed_in, ...(user === undefined ? {} : { user }) })),
+      cloudDisabled: cloud_disabled,
+      servers: servers.map(({ signed_in, user, hub, ...rest }) => ({
+        ...rest,
+        signedIn: signed_in,
+        ...(hub === undefined ? {} : { hub }),
+        ...(user === undefined ? {} : { user }),
+      })),
     }),
   );
+
+export const pushedReply = z
+  .object({ hub: z.string(), user: z.string(), sessions: z.number(), inserted: z.number(), skipped: z.number() })
+  .transform((pushed): PushedBundle => pushed);
+
+const readyBundle = z
+  .object({ name: z.string(), sessions: z.number(), bytes: z.number(), open_flags: z.number(), created_at: time, sanitized: z.boolean() })
+  .transform(({ open_flags, created_at, ...rest }): ReadyBundle => ({ ...rest, openFlags: open_flags, createdAt: created_at }));
+
+export const bundlesReply = z.object({ bundles: rows(readyBundle) }).transform(({ bundles }) => bundles);
 
 export const loginStep = z
   .discriminatedUnion("state", [
