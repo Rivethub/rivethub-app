@@ -85,12 +85,57 @@ describe("reviewing and sending", () => {
   });
 
   it("drops the share code when the flow resets, and a failed send returns to confirm", () => {
-    const sharedState = run([{ type: "sent", sent: { code: "rivethub:x#key", expiresAt: "2026-11-19T00:00:00Z" as never, bytes: 10 } }]);
-    expect(sharedState.sent?.code).toBe("rivethub:x#key");
+    const sharedState = run([{ type: "delivered", delivery: { kind: "code", sent: { code: "rivethub:x#key", expiresAt: "2026-11-19T00:00:00Z" as never, bytes: 10 } } }]);
+    expect(sharedState).toMatchObject({ step: "shared", delivered: { kind: "code", sent: { code: "rivethub:x#key" } } });
     expect(run([{ type: "reset" }], sharedState)).toEqual(initialSend);
 
     const sending = { ...initialSend, step: "sending" as const };
     const failed = run([{ type: "fail", failure: { title: "No" } }], sending);
     expect(failed.step).toBe("confirm");
+  });
+});
+
+describe("sending a ready bundle", () => {
+  const hub = { origin: "https://hub.example.org", kind: "team", delivery: "push", hub: "acme", user: "phil", signedIn: true, default: true, needsReauth: false } as const;
+
+  it("skips deciding: a flagged bundle opens on the review, a clean one on the destination", () => {
+    const opening = run([{ type: "open-bundle" }]);
+    expect(opening.step).toBe("opening");
+    expect(run([{ type: "drafted", report: report([flag(1, { kind: "open" })]) }], opening).step).toBe("review");
+    expect(run([{ type: "drafted", report: report([]) }], opening).step).toBe("destination");
+  });
+
+  it("goes back to choosing when the bundle cannot be opened or its draft expires, since there is nothing to decide", () => {
+    const opening = run([{ type: "open-bundle" }]);
+    expect(run([{ type: "fail", failure: { title: "No" } }], opening).step).toBe("choose");
+    const confirming = run([{ type: "drafted", report: report([]) }, { type: "server", server: hub }, { type: "to-confirm" }, { type: "sending" }], opening);
+    expect(run([{ type: "fail", failure: { title: "Expired", code: "unknown_draft", backTo: "decide" } }], confirming).step).toBe("choose");
+  });
+
+  it("keeps a sessions draft's way back to deciding when it expires", () => {
+    const sanitizing = { ...picked("a"), step: "sanitizing" as const };
+    const confirming = run([{ type: "drafted", report: report([]) }, { type: "server", server: hub }, { type: "to-confirm" }, { type: "sending" }], sanitizing);
+    expect(run([{ type: "fail", failure: { title: "Expired", code: "unknown_draft", backTo: "decide" } }], confirming).step).toBe("decide");
+  });
+
+  it("returns to the destination with the draft kept when the server refuses the login there", () => {
+    const sending = run([{ type: "drafted", report: report([]) }, { type: "server", server: hub }, { type: "to-confirm" }, { type: "sending" }], run([{ type: "open-bundle" }]));
+    const refused = run([{ type: "fail", failure: { title: "Signed out", code: "signed_out", backTo: "destination" } }], sending);
+    expect(refused).toMatchObject({ step: "destination", report: { draft: "d-1" }, failure: { code: "signed_out" } });
+  });
+
+  it("keeps the flag notice to the draft it was about", () => {
+    const flagged = report([flag(1, { kind: "open" })]);
+    const noticed = run([{ type: "drafted", report: flagged }, { type: "report", report: flagged, notice: "Learned alex → PERSON_1." }]);
+    expect(noticed.notice).toBe("Learned alex → PERSON_1.");
+    expect(run([{ type: "drafted", report: flagged, bundle: "retention-nov" }], noticed)).toMatchObject({ notice: undefined, bundle: "retention-nov" });
+    expect(run([{ type: "resumed", report: flagged }], noticed).notice).toBeUndefined();
+    expect(run([{ type: "reset" }], noticed).notice).toBeUndefined();
+  });
+
+  it("ends on the hub's counts for a push, and forgets them on reset", () => {
+    const pushed = run([{ type: "delivered", delivery: { kind: "pushed", pushed: { hub: "acme", user: "phil", sessions: 3, inserted: 41, skipped: 2 } } }]);
+    expect(pushed).toMatchObject({ step: "shared", report: undefined, delivered: { kind: "pushed", pushed: { inserted: 41, skipped: 2 } } });
+    expect(run([{ type: "reset" }], pushed)).toEqual(initialSend);
   });
 });

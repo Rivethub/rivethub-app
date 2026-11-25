@@ -15,7 +15,13 @@ export function currentHubSummary(hubs: Hub[] | undefined, harnessCount: number 
   return { name: current.name, meta, online: current.online };
 }
 
-/** A hub can be switched to when it is another hub, it answers, and it has a real address. */
+/** A hub can be switched to when it is another hub, it answers, and it uses an http/https URL. */
 export function canSwitchTo(hub: Hub): boolean {
-  return !hub.current && hub.online && hub.url !== "#";
+  if (hub.current || !hub.online || hub.url === "#") return false;
+  try {
+    const parsed = new URL(hub.url);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }

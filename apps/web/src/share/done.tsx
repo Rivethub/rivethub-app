@@ -1,4 +1,4 @@
-import type { SharedBundle } from "@rivethub/contracts";
+import type { PushedBundle, SharedBundle } from "@rivethub/contracts";
 import { useState } from "react";
 import { Button } from "../components/ui";
 import { Card } from "./ui";
@@ -40,6 +40,28 @@ export function Done({ sent, onDone }: { sent: SharedBundle; onDone: () => void 
       </Card>
       <div>
         <Button size="md" onClick={onDone}>Done, remove the code from this screen</Button>
+      </div>
+    </div>
+  );
+}
+
+/** The last step after a push: what the team hub took in. There is no code to pass on. */
+export function Pushed({ pushed, onDone }: { pushed: PushedBundle; onDone: () => void }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Card title={`Added to ${pushed.hub}`}>
+        <p className="m-0 text-[13px] text-muted-foreground">The sessions are in that hub as {pushed.user}. No share code was made.</p>
+        <dl aria-label="Push result" className="m-0 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2">
+          <dt className="text-muted-foreground">Sessions</dt>
+          <dd className="m-0">{pushed.sessions.toLocaleString()}</dd>
+          <dt className="text-muted-foreground">Inserted</dt>
+          <dd className="m-0">{pushed.inserted.toLocaleString()}</dd>
+          <dt className="text-muted-foreground">Skipped</dt>
+          <dd className="m-0">{pushed.skipped.toLocaleString()}</dd>
+        </dl>
+      </Card>
+      <div>
+        <Button size="md" onClick={onDone}>Done</Button>
       </div>
     </div>
   );

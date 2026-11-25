@@ -232,6 +232,25 @@ test("a download whose sha512 doesn't match the feed is refused", async () => {
   expect(readFileSync(appImage, "utf8")).toBe("#!/bin/sh\nexit 0\n");
 });
 
+test("a forged manifest signature is rejected before downloading or opening anything", async () => {
+  const forgedSig = `v1:2026-main:${Buffer.alloc(64, 0).toString("base64")}\n`;
+  publishRelease(feedRoot, { channel: "stable", version: "0.1.1", appImage: NEW_APPIMAGE, manifestSig: forgedSig });
+  feed = await serveUpdateFeed(feedRoot, { protocol: "https" });
+  const appImage = installAppImage();
+  const app = await launch({ RIVETHUB_DESKTOP_UPDATE_FEED: feed.feedBase, APPIMAGE: appImage });
+  const page = await app.firstWindow();
+  await stubPrompts(app, 0);
+  feed.release();
+
+  const state = await settledState(page, ["ready", "error"]);
+  expect(state).toMatchObject({ state: "error", channel: "stable" });
+  expect(state.state === "error" && state.message).toMatch(/Signature verification failed/i);
+  expect(feed.requests.filter((p) => !/\.yml(\.sig)?$/.test(p))).toEqual([]);
+  expect(existsSync(path.join(work, "opened-externally.log"))).toBe(false);
+  expect(readFileSync(appImage, "utf8")).toBe("#!/bin/sh\nexit 0\n");
+  await app.close();
+});
+
 test("an http:// feed is refused before any request", async () => {
   publishRelease(feedRoot, { channel: "stable", version: "0.1.1", appImage: NEW_APPIMAGE });
   feed = await serveUpdateFeed(feedRoot, { protocol: "http" });
@@ -276,7 +295,7 @@ test("a .deb install is told about 0.1.1 and sent to the download, never downloa
   expect(await settledState(page, ["manual", "error"])).toEqual({ state: "manual", channel: "stable", version: "0.1.1", downloadUrl });
   expect(await prompts(app)).toEqual(["RivetHub 0.1.1 is available"]);
   await expect.poll(() => (existsSync(path.join(work, "opened-externally.log")) ? readFileSync(path.join(work, "opened-externally.log"), "utf8") : "")).toBe(`${downloadUrl}\n`);
-  expect(feed.requests.filter((p) => !p.endsWith(".yml"))).toEqual([]);
+  expect(feed.requests.filter((p) => !/\.yml(\.sig)?$/.test(p))).toEqual([]);
   await app.close();
 });
 

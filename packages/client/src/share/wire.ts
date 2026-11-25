@@ -8,9 +8,12 @@ import type {
   ImportResult,
   InboundSession,
   IsoTime,
+  PushedBundle,
+  ReadyBundle,
   ReceiveReport,
   ShareableSession,
   ShareLoginStep,
+  ShareServer,
   ShareServers,
 } from "@rivethub/contracts";
 import { timeSchema } from "../rh/wire.js";
@@ -90,17 +93,49 @@ export const sentReply = z
   .object({ code: z.string(), expires_at: time, bytes: z.number(), signed: opt(z.string()) })
   .transform(({ expires_at, signed, ...rest }) => ({ ...rest, expiresAt: expires_at, ...(signed === undefined ? {} : { signed }) }));
 
+/**
+ * rh decides how each server is reached. An rh older than `delivery` gets the old rule: push only to a
+ * team server that names a hub, and a share code otherwise. A push row without a hub, or a delivery this
+ * app does not know, can't be routed, so it is dropped rather than guessed.
+ */
+const shareServer = z
+  .object({
+    origin: z.string(),
+    kind: descriptive(["cloud", "team"]),
+    hub: opt(z.string()),
+    user: opt(z.string()),
+    signed_in: z.boolean(),
+    default: z.boolean(),
+    delivery: opt(z.enum(["push", "code"])),
+    needs_reauth: opt(z.boolean()),
+  })
+  .transform(({ origin, kind, hub, user, signed_in, default: isDefault, delivery, needs_reauth }) => {
+    const base = { origin, kind, signedIn: signed_in, default: isDefault, needsReauth: needs_reauth === true, ...(user === undefined ? {} : { user }) };
+    const route = delivery ?? (kind === "team" && hub !== undefined ? "push" : "code");
+    if (route === "code") return { ...base, delivery: "code" } satisfies ShareServer;
+    return hub === undefined ? undefined : ({ ...base, delivery: "push", hub } satisfies ShareServer);
+  })
+  .refine((server) => server !== undefined)
+  .transform((server): ShareServer => server!);
+
 export const serversReply = z
   .object({
-    servers: z.array(z.object({ origin: z.string(), kind: descriptive(["cloud", "team"]), user: opt(z.string()), signed_in: z.boolean(), default: z.boolean() })),
+    servers: rows(shareServer),
     token_store: descriptive(["keyring", "file"]),
+    // An rh older than the cloud policy leaves it out, and its cloud is on.
+    cloud_disabled: z.boolean().default(false),
   })
-  .transform(
-    ({ servers, token_store }): ShareServers => ({
-      tokenStore: token_store,
-      servers: servers.map(({ signed_in, user, ...rest }) => ({ ...rest, signedIn: signed_in, ...(user === undefined ? {} : { user }) })),
-    }),
-  );
+  .transform(({ servers, token_store, cloud_disabled }): ShareServers => ({ tokenStore: token_store, cloudDisabled: cloud_disabled, servers }));
+
+export const pushedReply = z
+  .object({ hub: z.string(), user: z.string(), sessions: z.number(), inserted: z.number(), skipped: z.number() })
+  .transform((pushed): PushedBundle => pushed);
+
+const readyBundle = z
+  .object({ name: z.string(), sessions: z.number(), bytes: z.number(), open_flags: z.number(), created_at: time, sanitized: z.boolean() })
+  .transform(({ open_flags, created_at, ...rest }): ReadyBundle => ({ ...rest, openFlags: open_flags, createdAt: created_at }));
+
+export const bundlesReply = z.object({ bundles: rows(readyBundle) }).transform(({ bundles }) => bundles);
 
 export const loginStep = z
   .discriminatedUnion("state", [

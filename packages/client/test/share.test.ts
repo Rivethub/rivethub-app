@@ -104,6 +104,130 @@ describe("share client", () => {
     expect(seen).toEqual(["csrf-2"]);
   });
 
+  it("routes each server by rh's delivery, keeps a hub only for a push, and reads the cloud policy", async () => {
+    const { share } = client({
+      "GET /api/share/servers": {
+        servers: [
+          { origin: "https://hub.example.org", kind: "team", hub: "acme", user: "phil", signed_in: true, default: true, delivery: "push" },
+          { origin: "https://memory.example.net", kind: "cloud", hub: "home", user: "phil", signed_in: true, default: false, delivery: "push", needs_reauth: true },
+          { origin: "https://drop.example.org", kind: "team", hub: "drops", signed_in: false, default: false, delivery: "code" },
+          { origin: "https://odd.example.org", kind: "team", signed_in: true, default: false, delivery: "push" },
+          { origin: "https://new.example.org", kind: "team", hub: "x", signed_in: true, default: false, delivery: "carrier-pigeon" },
+        ],
+        logins_file: "logins.json",
+        token_store: "keyring",
+        cloud_disabled: true,
+      },
+    });
+    expect(await share.servers()).toEqual({
+      tokenStore: "keyring",
+      cloudDisabled: true,
+      servers: [
+        { origin: "https://hub.example.org", kind: "team", delivery: "push", hub: "acme", user: "phil", signedIn: true, default: true, needsReauth: false },
+        { origin: "https://memory.example.net", kind: "cloud", delivery: "push", hub: "home", user: "phil", signedIn: true, default: false, needsReauth: true },
+        { origin: "https://drop.example.org", kind: "team", delivery: "code", signedIn: false, default: false, needsReauth: false },
+      ],
+    });
+  });
+
+  it("derives delivery for an rh older than it: push only to a team server that names a hub", async () => {
+    const older = client({
+      "GET /api/share/servers": {
+        servers: [
+          { origin: "https://hub.example.org", kind: "team", hub: "acme", signed_in: true, default: true },
+          { origin: "https://rivethub.cloud", kind: "cloud", hub: "cloud", signed_in: true, default: false },
+          { origin: "https://drop.example.org", kind: "team", signed_in: true, default: false },
+        ],
+        token_store: "file",
+      },
+    });
+    const read = await older.share.servers();
+    expect(read.cloudDisabled).toBe(false);
+    expect(read.servers.map((s) => [s.origin, s.delivery, s.delivery === "push" ? s.hub : undefined])).toEqual([
+      ["https://hub.example.org", "push", "acme"],
+      ["https://rivethub.cloud", "code", undefined],
+      ["https://drop.example.org", "code", undefined],
+    ]);
+  });
+
+  it("passes on what the remote server answered, and leaves this window's session alone on a refusal with a reason", async () => {
+    const onUnauthorized = vi.fn();
+    const { share } = client(
+      {
+        "POST /api/share/drafts/d-1/push": { status: 401, body: { error: "signed out of acme", reason: "signed_out" } },
+        "POST /api/share/drafts/d-1/send": { status: 502, body: { error: "lacks the memory:import scope", reason: "drop_box", upstream_status: 403 } },
+        "POST /api/share/servers/login/poll": { status: 401, body: { error: "the sign-in expired", reason: "login_expired" } },
+      },
+      { headers: () => ({}), onUnauthorized },
+    );
+    await expect(share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ status: 401, code: "signed_out" });
+    await expect(share.send("d-1", { server: "https://drop.example.org", signed: true, confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ code: "drop_box", upstreamStatus: 403 });
+    await expect(share.pollLogin("l-1")).rejects.toMatchObject({ status: 401, code: "login_expired" });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("still calls onUnauthorized for a coded 401 that is not a share destination refusal", async () => {
+    const onUnauthorized = vi.fn();
+    const { share } = client(
+      {
+        "GET /api/share/servers": { status: 401, body: { error: "invalid token", code: "invalid_token" } },
+        "POST /api/share/drafts/d-1/push": { status: 401, body: { error: "invalid token", code: "invalid_token" } },
+      },
+      { headers: () => ({}), onUnauthorized },
+    );
+    await expect(share.servers()).rejects.toMatchObject({ status: 401, code: "invalid_token" });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    await expect(share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } })).rejects.toMatchObject({ code: "invalid_token" });
+    expect(onUnauthorized).toHaveBeenCalledTimes(2);
+  });
+
+  it("calls onUnauthorized when signed_out comes from outside the share routes", async () => {
+    const onUnauthorized = vi.fn();
+    const rh = createRhClient({
+      baseUrl: "http://127.0.0.1:5174",
+      auth: { headers: () => ({}), onUnauthorized },
+      fetch: async () => new Response(JSON.stringify({ error: "signed out", code: "signed_out" }), { status: 401, headers: { "content-type": "application/json" } }),
+    });
+    await expect(rh.methods.topicTree!()).rejects.toMatchObject({ status: 401 });
+    expect(onUnauthorized).toHaveBeenCalledOnce();
+  });
+
+  it("lists ready bundles and drops a row it cannot read", async () => {
+    const { share } = client({
+      "GET /api/share/bundles": {
+        bundles: [
+          { name: "retention-2026-11", sessions: 3, bytes: 18432, open_flags: 2, created_at: "2026-11-20T09:30:00Z", sanitized: true },
+          { name: "broken", sessions: "three" },
+        ],
+      },
+    });
+    expect(await share.bundles()).toEqual([{ name: "retention-2026-11", sessions: 3, bytes: 18432, openFlags: 2, createdAt: "2026-11-20T09:30:00.000Z", sanitized: true }]);
+  });
+
+  it("opens a bundle as a draft and pushes the draft to a hub with the confirmed counts", async () => {
+    const { share, calls } = client({
+      "POST /api/share/drafts/from-bundle": { status: 201, body: report },
+      "POST /api/share/drafts/d-1/push": { hub: "acme", user: "phil", sessions: 1, inserted: 40, skipped: 2 },
+    });
+    const draft = await share.draftFromBundle("retention-2026-11");
+    expect(draft.draft).toBe("d-1");
+    expect(draft.flags).toHaveLength(2);
+    const pushed = await share.push("d-1", { hub: "acme", confirm: { sessions: 1, keptFlags: 0 } });
+    expect(pushed).toEqual({ hub: "acme", user: "phil", sessions: 1, inserted: 40, skipped: 2 });
+    expect(calls.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+      { method: "POST", path: "/api/share/drafts/from-bundle", body: { name: "retention-2026-11" } },
+      { method: "POST", path: "/api/share/drafts/d-1/push", body: { hub: "acme", confirm: { sessions: 1, kept_flags: 0 } } },
+    ]);
+  });
+
+  it("reads the account's cloud policy", async () => {
+    const account = { updateSource: "github", channel: "stable", autoDownload: true, version: "0.8.19", crashReports: false, usageCounts: false };
+    const off = createRhClient({ baseUrl: "http://127.0.0.1:5174", fetch: fakeRh({ "GET /api/account": { ...account, cloudDisabled: true } }).fetch });
+    expect((await off.methods.account!()).cloudDisabled).toBe(true);
+    const older = createRhClient({ baseUrl: "http://127.0.0.1:5174", fetch: fakeRh({ "GET /api/account": account }).fetch });
+    expect((await older.methods.account!()).cloudDisabled).toBeUndefined();
+  });
+
   it("discards a draft with DELETE and reads no body", async () => {
     const { share, calls } = client({ "DELETE /api/share/drafts/d-1": noContent });
     await share.discard("d-1");

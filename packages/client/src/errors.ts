@@ -12,6 +12,8 @@ export class HttpError extends ClientError {
     readonly code?: string,
     /** The 1-based session numbers a receive refusal names. */
     readonly sessions?: number[],
+    /** What a remote server answered rh, when a share refusal passes it on. */
+    readonly upstreamStatus?: number,
   ) {
     super(`${status} ${path}: ${message}`);
   }
