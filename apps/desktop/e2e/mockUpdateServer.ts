@@ -75,7 +75,7 @@ const sha512 = (data: Buffer | string) => createHash("sha512").update(data).dige
  */
 export function publishRelease(
   root: string,
-  release: { channel: string; version: string; appImage: string; tamper?: boolean; appImageUrl?: string },
+  release: { channel: string; version: string; appImage: string; tamper?: boolean; appImageUrl?: string; manifestSig?: string },
 ): { appImageName: string; debName: string } {
   const dir = path.join(root, release.channel);
   mkdirSync(dir, { recursive: true });
@@ -95,7 +95,11 @@ export function publishRelease(
     sha512: appImageSha,
     releaseDate: "2026-11-11T00:00:00.000Z",
   };
+  const manifestName = process.arch === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml";
   // YAML is a superset of JSON.
-  writeFileSync(path.join(dir, process.arch === "arm64" ? "latest-linux-arm64.yml" : "latest-linux.yml"), JSON.stringify(manifest, null, 2));
+  writeFileSync(path.join(dir, manifestName), JSON.stringify(manifest, null, 2));
+  if (release.manifestSig !== undefined) {
+    writeFileSync(path.join(dir, `${manifestName}.sig`), release.manifestSig);
+  }
   return { appImageName, debName };
 }

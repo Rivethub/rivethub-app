@@ -7,6 +7,8 @@ import { AppImageUpdater, DebUpdater, type BaseUpdater } from "electron-updater"
 import { readUpdateChannel, writeUpdateChannel } from "../settings/updateChannel";
 import { installWithLockHandoff } from "./lockHandoff";
 import { channelFeedUrl, debDownloadUrl, detectInstall, UPDATE_FEED_BASE, updateChannelFor, type UpdateInstall } from "./updateFeed";
+import { signedFeedProvider } from "./signedFeedProvider";
+import { REQUIRE_SIGNED_UPDATE_MANIFESTS } from "./verifySignature";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** electron-updater makes all its requests on this session (its NET_SESSION_NAME). */
@@ -139,7 +141,10 @@ export function createDesktopUpdates(options: {
     try {
       const feedUrl = channelFeedUrl(feedBase, checked);
       setState({ state: "checking", channel: checked });
-      updater.setFeedURL({ provider: "generic", url: feedUrl });
+      updater.setFeedURL({
+        provider: "custom",
+        updateProvider: signedFeedProvider({ url: feedUrl, requireSignature: REQUIRE_SIGNED_UPDATE_MANIFESTS }),
+      });
       const result = await updater.checkForUpdates();
       if (stale()) return;
       if (!result?.isUpdateAvailable) {

@@ -20,10 +20,15 @@ describe("currentHubSummary", () => {
 });
 
 describe("canSwitchTo", () => {
-  it("allows only another hub that answers and has an address", () => {
+  it("allows only another hub that answers and uses an http or https URL", () => {
     expect(canSwitchTo(hub({}))).toBe(true);
+    expect(canSwitchTo(hub({ url: "https://hub.example:5174" }))).toBe(true);
     expect(canSwitchTo(hub({ current: true }))).toBe(false);
     expect(canSwitchTo(hub({ online: false }))).toBe(false);
     expect(canSwitchTo(hub({ url: "#" }))).toBe(false);
+    expect(canSwitchTo(hub({ url: "javascript:alert(1)" }))).toBe(false);
+    expect(canSwitchTo(hub({ url: "data:text/html,<script>alert(1)</script>" }))).toBe(false);
+    expect(canSwitchTo(hub({ url: "file:///etc/passwd" }))).toBe(false);
+    expect(canSwitchTo(hub({ url: "not a url" }))).toBe(false);
   });
 });

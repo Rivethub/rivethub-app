@@ -149,6 +149,60 @@ jobs:
           compression-level: 0
           retention-days: 7
 
+  sign:
+    name: Attest & sign manifests
+    needs: [version, linux]
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish }}
+    runs-on: ubuntu-22.04
+    environment: release-signing
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The signer checks the key against the keyring the app pins.
+          sparse-checkout: |
+            .github/scripts/sign-release-manifest.mjs
+            apps/desktop/src/updates/release-keys.json
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: rivethub-desktop-linux-*
+          path: dist
+          merge-multiple: true
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/latest-linux*.yml
+      # With no RELEASE_SIGNING_KEY the signer warns and writes no .sig, and `signed` is false.
+      - name: Sign update manifests (Ed25519)
+        id: sign
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          node .github/scripts/sign-release-manifest.mjs dist/latest-linux.yml dist/latest-linux-arm64.yml
+          if [[ -f dist/latest-linux.yml.sig ]]; then signed=true; else signed=false; fi
+          echo "signed=${signed}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.sign.outputs.signed == 'true'
+        with:
+          name: rivethub-desktop-signatures
+          path: dist/latest-linux*.yml.sig
+          if-no-files-found: error
+          retention-days: 7
+
   # Copies both arches' packages and latest-linux*.yml to the channel's directory on the
   # get.rivethub.io host, the way Rivethub/rivethub-io's ci.yml deploys: rsync over SSH as rivet@
   # from the self-hosted deploy runner. The channel comes from the version: x.y.z-nightly.YYYYMMDD.N
@@ -160,7 +214,7 @@ jobs:
   # repo variables DEPLOY_KNOWN_HOSTS (pinned host key) and DESKTOP_PUBLISH_ENABLED=true.
   publish:
     name: Publish to get.rivethub.io
-    needs: [version, linux]
+    needs: [version, linux, sign]
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && vars.DESKTOP_PUBLISH_ENABLED == 'true' }}
     runs-on: [self-hosted, linux, x64, rivethub-io]
     # The environment releases the deploy key only to runs on main, so a PR's workflow edit can't use it.
@@ -172,11 +226,18 @@ jobs:
     env:
       DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
     steps:
+      - name: Start from an empty dist
+        run: rm -rf dist
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: rivethub-desktop-linux-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.sign.outputs.signed == 'true'
+        with:
+          name: rivethub-desktop-signatures
+          path: dist
 
       - name: Pick the channel
         env:
@@ -186,6 +247,10 @@ jobs:
           set -euo pipefail
           ls -l dist
           test -f dist/latest-linux.yml && test -f dist/latest-linux-arm64.yml
+          if [ "${{ needs.sign.outputs.signed }}" != 'true' ] && compgen -G 'dist/*.sig' > /dev/null; then
+            echo "::error::an unsigned publish found .sig files in dist"
+            exit 1
+          fi
           version=$(sed -n 's/^version: //p' dist/latest-linux.yml)
           test "${version}" = "$(sed -n 's/^version: //p' dist/latest-linux-arm64.yml)"
           # Same rule as updateChannelFor in apps/desktop/src/updates/updateFeed.ts. A version that mentions
@@ -273,8 +338,12 @@ jobs:
       - name: Upload
         run: |
           set -euo pipefail
+          manifests=(dist/latest-linux.yml dist/latest-linux-arm64.yml)
+          for sig in dist/latest-linux*.yml.sig; do
+            [[ -f "${sig}" ]] && manifests+=("${sig}")
+          done
           rsync -z --chmod=F644 -e "${SSH_CMD}" dist/*.AppImage dist/*.deb rivet@"${DEPLOY_HOST}":"${CHANNEL}/"
-          rsync -z --chmod=F644 -e "${SSH_CMD}" dist/latest-linux.yml dist/latest-linux-arm64.yml rivet@"${DEPLOY_HOST}":"${CHANNEL}/"
+          rsync -z --chmod=F644 -e "${SSH_CMD}" "${manifests[@]}" rivet@"${DEPLOY_HOST}":"${CHANNEL}/"
 
       - name: Verify
         run: |
@@ -282,6 +351,10 @@ jobs:
           for manifest in latest-linux.yml latest-linux-arm64.yml; do
             curl -fsS "https://get.rivethub.io/desktop/${CHANNEL}/${manifest}" | cmp -s - "dist/${manifest}" \
               || { echo "::error::live ${CHANNEL}/${manifest} does not match this build"; exit 1; }
+            if [[ -f "dist/${manifest}.sig" ]]; then
+              curl -fsS "https://get.rivethub.io/desktop/${CHANNEL}/${manifest}.sig" | cmp -s - "dist/${manifest}.sig" \
+                || { echo "::error::live ${CHANNEL}/${manifest}.sig does not match this build"; exit 1; }
+            fi
           done
 
       - name: Remove deploy key
